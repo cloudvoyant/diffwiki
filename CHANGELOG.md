@@ -1,3 +1,10 @@
+# [0.2.0](https://github.com/cloudvoyant/diffwiki/compare/v0.1.0...v0.2.0) (2026-07-21)
+
+
+### Features
+
+* scaffolded repo ([7ed3709](https://github.com/cloudvoyant/diffwiki/commit/7ed3709b94eadafa542bc573b981b1a0c4a97b23))
+
 ## [2.15.0](https://github.com/cloudvoyant/diffwiki/compare/v2.14.0...v2.15.0) (2026-07-15)
 * emit placeholder docs during scaffold
 
