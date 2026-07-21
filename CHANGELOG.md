@@ -1,3 +1,10 @@
+# [0.3.0](https://github.com/cloudvoyant/diffwiki/compare/v0.2.0...v0.3.0) (2026-07-21)
+
+
+### Features
+
+* scaffold diffwiki CLI monorepo (core lib + commander CLI) ([2b1e263](https://github.com/cloudvoyant/diffwiki/commit/2b1e263ffbcecdebe4d44a8a8daacc92e947f78c))
+
 # [0.2.0](https://github.com/cloudvoyant/diffwiki/compare/v0.1.0...v0.2.0) (2026-07-21)
 
 
