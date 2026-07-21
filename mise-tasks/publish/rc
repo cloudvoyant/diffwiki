@@ -1,35 +1,32 @@
 #!/usr/bin/env bash
-#MISE description="Publish RC package to npm with 'next' tag"
+#MISE description="Publish all workspace packages to npm at a shared RC version on the 'next' tag"
+#MISE depends=["build"]
 set -euo pipefail
-cd "${MISE_PROJECT_ROOT:-$PWD}"
 source "${MISE_PROJECT_ROOT:-$PWD}/mise-tasks/utils"
+
+# Derive the base version from version.txt (single source of truth).
+VERSION="$(get_version)"
 
 SHORT_SHA=$(git rev-parse --short HEAD 2>/dev/null || echo "dev")
 TIMESTAMP=$(date -u +%Y%m%d%H%M)
-# Human-readable UTC timestamp (yyyymmddhhmm) prefixes the sha so each commit gets a
-# unique, time-sortable RC version. semver: 2.2.0-rc.202607091142.abc1234
+# A UTC minute-timestamp prefixes the sha so two publish-rc runs for the *same* SHA at
+# attempt 1 mint distinct, time-sortable versions instead of colliding on an immutable
+# npm record. semver: 0.2.0-rc.202607211142.abc1234
 RC_VERSION="${VERSION}-rc.${TIMESTAMP}.${SHORT_SHA}"
 # Re-runs reuse the SHA/minute but bump GITHUB_RUN_ATTEMPT; fold it in so a re-run mints a
 # fresh version instead of colliding with the immutable one already on npm.
 [ "${GITHUB_RUN_ATTEMPT:-1}" != "1" ] && RC_VERSION="${RC_VERSION}.${GITHUB_RUN_ATTEMPT}"
 
-log_info "Setting RC version $RC_VERSION in package.json..."
-node -e "
-const fs = require('fs');
-const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
-pkg.version = '$RC_VERSION';
-fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
-"
+log_info "Setting lockstep RC version $RC_VERSION across packages/*..."
+"${MISE_PROJECT_ROOT:-$PWD}/mise-tasks/set-version" "$RC_VERSION"
 
-log_info "Publishing $PROJECT $RC_VERSION to npm with tag 'next'..."
-pnpm publish --access public --no-git-checks --tag next
+log_info "Publishing all packages/* @ $RC_VERSION to npm with tag 'next'..."
+# --filter './packages/*' excludes the private root; every publishable package goes at
+# the same version -> true lockstep. --no-git-checks: the working tree is dirty (version
+# bump) and this runs off a branch, not a clean release commit.
+pnpm -r --filter './packages/*' publish --access public --no-git-checks --tag next
 
-log_info "Restoring original version $VERSION in package.json..."
-node -e "
-const fs = require('fs');
-const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
-pkg.version = '$VERSION';
-fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
-"
+log_info "Restoring lockstep version $VERSION across packages/*..."
+"${MISE_PROJECT_ROOT:-$PWD}/mise-tasks/set-version" "$VERSION"
 
-log_success "Published $PROJECT@$RC_VERSION to npm (tag: next)"
+log_success "Published ${PROJECT} packages @ $RC_VERSION to npm (tag: next)"

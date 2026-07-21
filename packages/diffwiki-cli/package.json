@@ -1,0 +1,29 @@
+{
+  "name": "diffwiki",
+  "version": "0.2.0",
+  "description": "diffwiki command-line interface",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "diffwiki": "./dist/bin.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest run --passWithNoTests",
+    "lint": "eslint src tests --no-error-on-unmatched-pattern && tsc --noEmit",
+    "lint:fix": "eslint src tests --no-error-on-unmatched-pattern --fix"
+  },
+  "dependencies": {
+    "diffwiki-core": "workspace:*",
+    "commander": "^13.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0"
+  }
+}

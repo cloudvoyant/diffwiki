@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+#MISE description="Run unit tests only (excludes *.e2e.test.ts)"
+#MISE depends=["install"]
+set -euo pipefail
+cd "${MISE_PROJECT_ROOT:-$PWD}"
+pnpm -r exec vitest run --passWithNoTests --exclude '**/*.e2e.test.ts'

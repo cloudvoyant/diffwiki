@@ -1,0 +1,36 @@
+{
+  "name": "diffwiki-core",
+  "version": "0.2.0",
+  "description": "Core configuration, registry, and article management for diffwiki",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest run --passWithNoTests",
+    "lint": "eslint src tests --no-error-on-unmatched-pattern && tsc --noEmit",
+    "lint:fix": "eslint src tests --no-error-on-unmatched-pattern --fix"
+  },
+  "dependencies": {
+    "gray-matter": "^4.0.3",
+    "yaml": "^2.5.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0"
+  }
+}

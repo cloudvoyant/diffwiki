@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-#MISE description="Run the compiled project"
+#MISE description="Run the compiled diffwiki CLI"
 #MISE depends=["build"]
 set -euo pipefail
 cd "${MISE_PROJECT_ROOT:-$PWD}"
-node dist/index.js
+node packages/diffwiki-cli/dist/bin.js "$@"
