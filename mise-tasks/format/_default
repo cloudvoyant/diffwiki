@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
-#MISE description="Format code"
+#MISE description="Format code with Prettier"
+#MISE depends=["install"]
 set -euo pipefail
-echo "TODO: Implement formatting"
+cd "${MISE_PROJECT_ROOT:-$PWD}"
+pnpm run format
