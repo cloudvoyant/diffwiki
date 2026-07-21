@@ -1,6 +1,27 @@
 #!/usr/bin/env bash
-#MISE description="Publish package to npm"
+#MISE description="Publish diffwiki workspace packages to npm"
 #MISE depends=["build"]
 set -euo pipefail
 cd "${MISE_PROJECT_ROOT:-$PWD}"
-pnpm publish --access public --no-git-checks
+source "${MISE_PROJECT_ROOT:-$PWD}/mise-tasks/utils"
+
+# Publish each package independently and idempotently. `pnpm -r publish` is non-atomic:
+# if an earlier package publishes and a later one fails, a naive retry re-hits the now
+# immutable earlier version and errors. Instead, skip any package whose exact version is
+# already on the registry so retries only publish what is genuinely missing.
+for pkg_json in packages/*/package.json; do
+  name="$(node -p "require('./${pkg_json}').name")"
+  version="$(node -p "require('./${pkg_json}').version")"
+  is_private="$(node -p "require('./${pkg_json}').private === true")"
+  if [ "$is_private" = "true" ]; then
+    continue
+  fi
+
+  if npm view "${name}@${version}" version >/dev/null 2>&1; then
+    log_info "Skipping ${name}@${version} — already published."
+    continue
+  fi
+
+  log_info "Publishing ${name}@${version} to npm..."
+  pnpm --filter "${name}" publish --access public --no-git-checks
+done

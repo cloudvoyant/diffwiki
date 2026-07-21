@@ -21,11 +21,19 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup python symlink for gcloud installer
-        run: sudo ln -sf /usr/bin/python3 /usr/local/bin/python
-
       - name: Setup mise
         uses: jdx/mise-action@v4
+
+      - name: Locate pnpm store
+        run: echo "PNPM_STORE_PATH=$(pnpm store path --silent)" >> "$GITHUB_ENV"
+
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.PNPM_STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
 
       - name: Install dependencies
         run: mise run install
@@ -40,32 +48,26 @@ jobs:
           CI: true
         run: mise run upversion -- --ci
 
-      - name: Build production artifacts
+      - name: Build packages
         if: steps.upversion.outputs.new_release_published == 'true'
-        run: mise run build:prod
+        run: mise run build
 
-      - name: Authenticate with registry
-        if: steps.upversion.outputs.new_release_published == 'true' && env.GCP_SA_KEY != ''
-        uses: google-github-actions/auth@v2
+      - name: Publish packages to npm
+        if: steps.upversion.outputs.new_release_published == 'true'
         env:
-          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
-        with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
-
-      - name: Setup gcloud
-        if: steps.upversion.outputs.new_release_published == 'true' && env.GCP_SA_KEY != ''
-        uses: google-github-actions/setup-gcloud@v2
-        env:
-          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
-
-      - name: Publish package
-        if: steps.upversion.outputs.new_release_published == 'true' && env.GCP_SA_KEY != ''
-        env:
-          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
-          GCP_REGISTRY_PROJECT_ID: ${{ secrets.GCP_REGISTRY_PROJECT_ID }}
-          GCP_REGISTRY_REGION: ${{ secrets.GCP_REGISTRY_REGION }}
-          GCP_REGISTRY_NAME: ${{ secrets.GCP_REGISTRY_NAME }}
-        run: mise run publish
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        # Retry transient registry conflicts (e.g. E409 while npm settles a record).
+        run: |
+          for attempt in 1 2 3; do
+            if mise run publish; then
+              echo "npm publish succeeded on attempt $attempt"
+              exit 0
+            fi
+            echo "::warning::npm publish attempt $attempt failed (transient conflict?); retrying in 30s"
+            sleep 30
+          done
+          echo "::error::npm publish failed after 3 attempts"
+          exit 1
 
       - name: Create GitHub Release
         if: steps.upversion.outputs.new_release_published == 'true'
@@ -73,9 +75,5 @@ jobs:
         with:
           tag_name: v${{ steps.upversion.outputs.new_release_version }}
           generate_release_notes: true
-          files: |
-            dist/**/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}

@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+#MISE description="Set one shared version into version.txt and every packages/* package.json (lockstep)"
+set -euo pipefail
+
+source "$(dirname "$0")/utils"
+
+NEW_VERSION="${1:-}"
+if [ -z "$NEW_VERSION" ]; then
+    log_error "usage: set-version <version>"
+    exit 1
+fi
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+
+log_info "Setting lockstep version $NEW_VERSION"
+
+# Single source of truth.
+printf '%s\n' "$NEW_VERSION" > "$ROOT/version.txt"
+
+# Fan out into every publishable package (never the private root).
+for pkg in "$ROOT"/packages/*/package.json; do
+    [ -f "$pkg" ] || continue
+    node -e "
+const fs = require('fs');
+const p = process.argv[1];
+const pkg = JSON.parse(fs.readFileSync(p, 'utf8'));
+pkg.version = process.argv[2];
+fs.writeFileSync(p, JSON.stringify(pkg, null, 2) + '\n');
+" "$pkg" "$NEW_VERSION"
+    log_info "  -> $pkg"
+done
+
+log_success "Lockstep version set to $NEW_VERSION"

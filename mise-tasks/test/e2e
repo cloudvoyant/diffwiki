@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+#MISE description="Run e2e tests only (*.e2e.test.ts). Builds first so the spawn smoke test runs."
+#MISE depends=["build"]
+set -euo pipefail
+cd "${MISE_PROJECT_ROOT:-$PWD}"
+pnpm -r exec vitest run --passWithNoTests e2e
