@@ -190,7 +190,17 @@ function SearchComponent() {
                       params={{ coll: r.coll, _splat: r.slug }}
                       className={cn('group block focus:outline-none')}
                     >
-                      <span className="text-base font-medium text-foreground group-hover:underline">{r.title}</span>
+                      <span className="flex items-baseline gap-2">
+                        <span className="text-base font-medium text-foreground group-hover:underline">{r.title}</span>
+                        {typeof r.score === 'number' && (
+                          <span
+                            className="shrink-0 font-mono text-xs text-muted-foreground/70 tabular-nums"
+                            title="Relevance score (scale is mode-dependent)"
+                          >
+                            {r.score.toFixed(2)}
+                          </span>
+                        )}
+                      </span>
                       <span className="mt-0.5 block text-xs text-muted-foreground">
                         {r.coll}/{r.slug}
                       </span>

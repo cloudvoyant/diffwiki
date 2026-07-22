@@ -55,4 +55,11 @@ export interface SearchResultItem {
   slug: string;
   title: string;
   snippet?: string;
+  /**
+   * Relevance score from the search engine, when it provides one (plugins do;
+   * native BM25 does too). Scale is engine/mode-dependent — keyword, semantic,
+   * and hybrid are not directly comparable — so it's shown as a raw value to
+   * help judge a per-mode cutoff, not as an absolute quality bar.
+   */
+  score?: number;
 }

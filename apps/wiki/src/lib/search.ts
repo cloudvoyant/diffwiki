@@ -34,6 +34,7 @@ export function hitToResult(hit: QueryHit, collections: CollectionEntry[]): Sear
       slug: toSlug(path.relative(coll.path, hit.path)),
       title: hit.title,
       snippet: hit.snippet,
+      score: hit.score,
     };
   }
 
@@ -45,5 +46,6 @@ export function hitToResult(hit: QueryHit, collections: CollectionEntry[]): Sear
     slug: toSlug(path.basename(hit.path)),
     title: hit.title,
     snippet: hit.snippet,
+    score: hit.score,
   };
 }
