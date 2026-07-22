@@ -2,6 +2,7 @@ import { createFileRoute, Link } from '@tanstack/react-router';
 import { getCollections } from '../server/collections';
 import { Logo } from '../components/logo';
 import { PageLayout } from '../components/page-layout';
+import { SearchBox } from '../components/search-box';
 
 export const Route = createFileRoute('/')({
   loader: () => getCollections(),
@@ -20,13 +21,7 @@ function HomeComponent() {
         </div>
 
         <div className="w-full max-w-md">
-          <input
-            type="search"
-            placeholder="Search… (coming soon)"
-            disabled
-            className="w-full rounded-lg border border-input bg-background px-4 py-2.5 text-sm text-foreground shadow-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-            aria-label="Search (not yet functional)"
-          />
+          <SearchBox className="w-full" placeholder="Search…" autoFocus />
         </div>
 
         {collections.length > 0 ? (

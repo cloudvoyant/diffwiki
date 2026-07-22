@@ -48,3 +48,11 @@ export interface ListingEntry {
  */
 export type PageData =
   ({ kind: 'doc' } & DocData) | { kind: 'listing'; coll: string; slug: string; title: string; entries: ListingEntry[] };
+
+/** One ranked search result, already mapped to route-link params. */
+export interface SearchResultItem {
+  coll: string;
+  slug: string;
+  title: string;
+  snippet?: string;
+}
