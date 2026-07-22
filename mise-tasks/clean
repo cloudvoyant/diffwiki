@@ -1,5 +1,18 @@
 #!/usr/bin/env bash
-#MISE description="Remove build artifacts"
+#MISE description="Remove build artifacts, caches, and dependencies"
 set -euo pipefail
 cd "${MISE_PROJECT_ROOT:-$PWD}"
-rm -rf dist/ node_modules/
+
+# Build outputs — root + every workspace package/app.
+rm -rf dist/ packages/*/dist apps/*/dist
+
+# Dev/build tool caches. The vite dep-optimizer cache (per app, under
+# node_modules/.vite) is the usual "I reverted the code but the browser still
+# serves a stale bundle" culprit — always clear it here.
+rm -rf node_modules/.vite apps/*/node_modules/.vite packages/*/node_modules/.vite
+rm -rf apps/*/.output apps/*/.tanstack apps/*/.nitro
+find . -name '*.tsbuildinfo' -not -path '*/node_modules/*' -delete 2>/dev/null || true
+
+# Dependencies — every workspace node_modules, not just the root (reinstall
+# with `mise run install`).
+rm -rf node_modules apps/*/node_modules packages/*/node_modules

@@ -18,6 +18,7 @@ import {
 } from 'diffwiki-core';
 import { version } from './version';
 import { collect, splitTags, withErrors } from './runtime';
+import { openBrowser, readState, isAlive, startUi, stopUi, waitForServer } from './ui-server';
 
 const icon = (level: DiagnosticLevel): string => (level === 'ok' ? '✓' : level === 'warn' ? '!' : '✖');
 
@@ -181,6 +182,67 @@ export function createProgram(): Command {
         if (diagnostics.some((d) => d.level === 'error')) {
           process.exitCode = 1;
         }
+      }),
+    );
+
+  program
+    .command('up')
+    .description('Start the diffwiki UI (latest published diffwiki-app)')
+    .option('-p, --port <port>', 'port to serve on', '4321')
+    .action(
+      withErrors(async (opts: { port: string }) => {
+        const existing = await readState();
+        if (existing && isAlive(existing.pid)) {
+          console.log(`UI already running at ${existing.url} (pid ${existing.pid})`);
+          return;
+        }
+        const state = await startUi(Number(opts.port));
+        const ok = await waitForServer(state.url);
+        console.log(
+          ok
+            ? `UI started at ${state.url} (pid ${state.pid})`
+            : `Launched (pid ${state.pid}) but ${state.url} did not respond yet — check \`diffwiki status\``,
+        );
+      }),
+    );
+
+  program
+    .command('down')
+    .description('Stop the running diffwiki UI')
+    .action(
+      withErrors(async () => {
+        const stopped = await stopUi();
+        console.log(stopped ? `Stopped UI (pid ${stopped.pid})` : 'UI is not running.');
+      }),
+    );
+
+  program
+    .command('status')
+    .description('Show whether the diffwiki UI is running')
+    .action(
+      withErrors(async () => {
+        const state = await readState();
+        if (state && isAlive(state.pid)) {
+          console.log(`running · ${state.url} · pid ${state.pid} · since ${state.startedAt}`);
+        } else {
+          console.log('stopped');
+        }
+      }),
+    );
+
+  program
+    .command('open')
+    .description('Open the diffwiki UI in the browser (starting it if needed)')
+    .option('-p, --port <port>', 'port to serve on', '4321')
+    .action(
+      withErrors(async (opts: { port: string }) => {
+        let state = await readState();
+        if (!state || !isAlive(state.pid)) {
+          state = await startUi(Number(opts.port));
+          await waitForServer(state.url);
+        }
+        openBrowser(state.url);
+        console.log(`Opening ${state.url}`);
       }),
     );
 

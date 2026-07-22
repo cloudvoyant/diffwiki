@@ -1,0 +1,59 @@
+/* AnyCloud — DESIGNED (no verifiable brand: anycloud.io/.dev are dead, .co parked).
+   Clean modern developer cloud: crisp near-white surface, cool sky/azure accent,
+   cyan highlight, generous radius. All-sans (Inter/Geist). Serif headings: NO.
+   Revisit tokens if a real anycloud brand/URL is confirmed. */
+.theme-anycloud {
+  --background: oklch(0.995 0.002 240);
+  --foreground: oklch(0.22 0.02 250); /* cool slate ink */
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.22 0.02 250);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.22 0.02 250);
+  --primary: oklch(0.6 0.16 245); /* sky/azure blue */
+  --primary-foreground: oklch(0.99 0.002 240);
+  --secondary: oklch(0.965 0.008 240);
+  --secondary-foreground: oklch(0.3 0.02 250);
+  --muted: oklch(0.965 0.008 240);
+  --muted-foreground: oklch(0.53 0.02 248);
+  --accent: oklch(0.9 0.05 210); /* cyan tint */
+  --accent-foreground: oklch(0.3 0.02 250);
+  --destructive: oklch(0.577 0.245 27.325);
+  --destructive-foreground: oklch(0.99 0.002 240);
+  --border: oklch(0.91 0.01 240);
+  --input: oklch(0.91 0.01 240);
+  --ring: oklch(0.6 0.16 245);
+  --sidebar: oklch(0.98 0.005 240);
+  --sidebar-foreground: oklch(0.22 0.02 250);
+  --sidebar-accent: oklch(0.9 0.05 210);
+  --sidebar-accent-foreground: oklch(0.3 0.02 250);
+  --radius: 0.75rem; /* softer, modern-cloud rounding */
+  --font-sans: 'Inter', 'Geist', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-serif: 'Source Serif 4', Georgia, Cambria, serif;
+  --font-mono: 'JetBrains Mono', 'Geist Mono', ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+}
+
+.theme-anycloud.dark {
+  --background: oklch(0.2 0.02 250); /* cool deep slate */
+  --foreground: oklch(0.96 0.004 240);
+  --card: oklch(0.245 0.022 250);
+  --card-foreground: oklch(0.96 0.004 240);
+  --popover: oklch(0.245 0.022 250);
+  --popover-foreground: oklch(0.96 0.004 240);
+  --primary: oklch(0.7 0.15 245); /* brighter azure for dark */
+  --primary-foreground: oklch(0.16 0.02 250);
+  --secondary: oklch(0.29 0.022 250);
+  --secondary-foreground: oklch(0.96 0.004 240);
+  --muted: oklch(0.29 0.022 250);
+  --muted-foreground: oklch(0.72 0.02 246);
+  --accent: oklch(0.55 0.1 210); /* cyan accent */
+  --accent-foreground: oklch(0.98 0.004 240);
+  --destructive: oklch(0.704 0.191 22.216);
+  --destructive-foreground: oklch(0.99 0.002 240);
+  --border: oklch(1 0 0 / 11%);
+  --input: oklch(1 0 0 / 14%);
+  --ring: oklch(0.7 0.15 245);
+  --sidebar: oklch(0.225 0.02 250);
+  --sidebar-foreground: oklch(0.96 0.004 240);
+  --sidebar-accent: oklch(0.55 0.1 210);
+  --sidebar-accent-foreground: oklch(0.98 0.004 240);
+}

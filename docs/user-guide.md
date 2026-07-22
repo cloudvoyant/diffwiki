@@ -119,12 +119,131 @@ validity. Exits non-zero if any error-level issue is found.
 - **`~/.diffwiki/config.json`** — `{ defaultCollection?: string }`.
 - **`diffwiki.yaml`** (in-repo) — `{ collection, path }`.
 
+## Local Web UI (`apps/wiki`)
+
+The `apps/wiki` package ships a browser UI for browsing your diffwiki collections. It is a
+TanStack Start (SSR) app that reads `~/.diffwiki` at request time — no separate sync step
+needed.
+
+### Starting the UI
+
+```bash
+# Install dependencies (first time or after pulling)
+mise run install
+
+# Start the development server (defaults to http://localhost:3000)
+mise run dev
+```
+
+`mise run dev` runs `pnpm --filter "diffwiki-app" dev` and starts a local Vite dev server.
+Open `http://localhost:3000` in your browser.
+
+### Routes
+
+| URL | What you see |
+|---|---|
+| `/` | The diffwiki logo, a search bar (non-functional — coming later), and a pill for each registered collection |
+| `/<collection>` | The collection's index page — an authored `index.md`/`README.md` at the collection root if present, otherwise an auto-generated listing of its top-level folders and articles |
+| `/<collection>/<folder>` | A folder's index page — the folder's authored `index.md`/`README.md`, otherwise an auto-generated listing of its children |
+| `/<collection>/<path>` | The rendered article; e.g. `/notes/guide/setup` renders `~/.diffwiki/collections/notes/guide/setup.md` |
+
+Any collection or folder is navigable: it resolves to an authored index file (`index.md`, `index.mdx`, or `README.md`, matched case-insensitively) when one exists, and falls back to a generated directory listing otherwise.
+
+### Theme and Dark Mode
+
+The top bar holds a stateful sidebar toggle and breadcrumbs on the left, and the theme and GitHub controls on the right:
+- **Light/Dark toggle** — switches `.dark` on `<html>`, persisted to `localStorage`.
+- **Theme picker** — choose from 52 built-in diffbook themes. The
+  selection is persisted to `localStorage` as `diffwiki:theme`.
+- **Breadcrumbs** — the current collection → folder → page trail; the collection crumb links back to its index.
+
+### Left Navigation
+
+The sidebar holds the logo and search in its header and the collection nav below; it starts below the full-width top bar. Every collection is a single collapsible menu item, collapsed by default. Click the chevron to expand a collection/folder and reveal its children; click the label to navigate to that collection's or folder's index page. Nested directories (unlimited depth) nest as collapsible items. On mobile the sidebar overlays as a sheet.
+
+### Table of Contents
+
+On content pages a TOC panel appears on the right (on screens wider than 1152 px). It lists
+`h2` and `h3` headings extracted from the rendered article and highlights the currently
+visible heading as you scroll.
+
+### Running the UI from the Published Package
+
+The `diffwiki` CLI can run the published `diffwiki-app` package locally so you can view
+your wiki in the browser without setting up the development environment. The commands fetch
+the latest published version automatically via `npx -y diffwiki-app@latest`.
+
+```bash
+# Start the UI on the default port (4321)
+diffwiki up
+
+# Start on a custom port
+diffwiki up --port 8080
+
+# Open the UI in the browser (starts it first if not already running)
+diffwiki open
+
+# Check whether the UI is running
+diffwiki status
+# → running · http://127.0.0.1:4321 · pid 12345 · since 2026-07-21T10:00:00.000Z
+# (or "stopped" if not running)
+
+# Stop the running UI
+diffwiki down
+```
+
+The running state (PID, port, URL, start time) is stored in `~/.diffwiki/ui.json`.
+
+> **Note:** `diffwiki up` and `diffwiki open` require the `diffwiki-app` package to be
+> published on npm. During local development, use `mise run dev` instead.
+
+### Building for Production Preview
+
+```bash
+mise run build      # compiles the app
+# then open apps/wiki and: pnpm preview
+```
+
+### Running Tests
+
+```bash
+# Unit tests (vitest, scoped to tests/unit/**)
+mise run test
+
+# Playwright e2e (boots the dev server against a sandboxed DIFFWIKI_HOME)
+# Install Playwright browsers first (once per machine):
+pnpm --filter diffwiki-app exec playwright install --with-deps chromium
+
+mise run test:e2e
+```
+
+`mise run test:e2e` seeds a temporary `DIFFWIKI_HOME` at `/tmp/diffwiki-e2e-home` with a
+fixture `notes` collection, starts the dev server against it, and runs the Playwright specs.
+The home route and the content route (including code blocks and mermaid diagrams) are
+verified.
+
+### Live Reload
+
+When the dev server is running (`mise run dev`), any `.md` or `.mdx` file you edit on disk
+is automatically reflected in open browser tabs within about one second — no manual refresh
+needed. The app watches your collection directories (including out-of-tree collections
+registered via `diffwiki init`) via a server-side `chokidar` singleton that streams change
+events to the browser over SSE at `/api/watch`. The client calls `router.invalidate()` on
+each event to re-run the active route's loaders and re-render with fresh content.
+
+As a dependency-free baseline, the browser also revalidates loaders whenever the tab
+regains focus (switching back to it after editing in your editor), which works even without
+the SSE connection.
+
+> **Note:** Live reload is a dev-server feature. The production build (`mise run build` +
+> `pnpm preview`) does not watch the filesystem. Use `mise run dev` during active writing.
+
 ## Future Work / Troubleshooting
 
 ### Known Limitations
 
 - `query` is a placeholder (no semantic/QMD search).
-- No MDX compilation; `.mdx` is stored but not validated.
+- Content is rendered as **Markdown** (GFM), highlighted server-side with Shiki. A `.mdx` extension is accepted but treated as plain Markdown — embedded JSX/components are not executed.
 - Publishing/CI wiring for the new packages is a follow-up (see plan Future Work).
 
 ### Common Issues

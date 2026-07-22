@@ -1,0 +1,140 @@
+import { useEffect, useRef } from 'react';
+
+/**
+ * Renders an article whose body was turned into Shiki-highlighted HTML on the
+ * server (diffwiki-core `renderArticle`). The HTML is mounted directly — no
+ * `run()`/`eval`, so it works under a strict CSP. A client effect progressively
+ * enhances it: a copy button per code block, and mermaid rendering for
+ * `pre.mermaid` blocks (mermaid itself still uses eval, so diagrams are the one
+ * piece that a strict CSP can block — code and prose are unaffected).
+ */
+export function ArticleBody({ html }: { html: string }) {
+  const ref = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    const root = ref.current;
+    if (!root) return;
+
+    addCopyButtons(root);
+
+    let cancelled = false;
+    const isCancelled = () => cancelled;
+    const paint = () => {
+      if (!cancelled) void renderMermaid(root, document.documentElement.classList.contains('dark'), isCancelled);
+    };
+    paint();
+
+    // Re-render mermaid when the .dark class toggles on <html>. The observer is
+    // already filtered to the `class` attribute, so any record means repaint.
+    const observer = new MutationObserver(() => paint());
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+
+    return () => {
+      cancelled = true;
+      observer.disconnect();
+    };
+  }, [html]);
+
+  return (
+    <article ref={ref} className="prose dark:prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: html }} />
+  );
+}
+
+/** Wrap each Shiki code block and add a copy-to-clipboard button (DOM only, no eval). */
+function addCopyButtons(root: HTMLElement): void {
+  root.querySelectorAll<HTMLPreElement>('pre.shiki').forEach((pre) => {
+    if (pre.parentElement?.classList.contains('code-wrap')) return; // already enhanced
+    const wrap = document.createElement('div');
+    wrap.className = 'code-wrap not-prose';
+    pre.replaceWith(wrap);
+    wrap.appendChild(pre);
+
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'code-copy';
+    btn.textContent = 'Copy';
+    btn.setAttribute('aria-label', 'Copy code');
+    btn.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(pre.textContent ?? '');
+        btn.textContent = 'Copied';
+        setTimeout(() => (btn.textContent = 'Copy'), 1500);
+      } catch {
+        /* clipboard unavailable — ignore */
+      }
+    });
+    wrap.appendChild(btn);
+  });
+}
+
+const MERMAID_VARS_DARK = {
+  primaryColor: '#2d2d2d',
+  primaryTextColor: '#f5f5f5',
+  primaryBorderColor: '#555555',
+  lineColor: '#aaaaaa',
+  secondaryColor: '#1a1a1a',
+  tertiaryColor: '#3a3a3a',
+  background: '#1e1e1e',
+  mainBkg: '#2d2d2d',
+  nodeBorder: '#555555',
+};
+const MERMAID_VARS_LIGHT = {
+  primaryColor: '#f4f4f4',
+  primaryTextColor: '#111111',
+  primaryBorderColor: '#cccccc',
+  lineColor: '#777777',
+  secondaryColor: '#eeeeee',
+  tertiaryColor: '#ffffff',
+  background: '#ffffff',
+  mainBkg: '#f4f4f4',
+  nodeBorder: '#cccccc',
+};
+
+let mermaidSeq = 0;
+
+/** Render (and re-render on theme toggle) mermaid blocks. mermaid is dynamically
+ *  imported so it never touches the SSR/initial bundle. `isCancelled` lets an
+ *  unmount/navigation abort mid-flight so we don't mutate a detached tree. */
+async function renderMermaid(root: HTMLElement, dark: boolean, isCancelled: () => boolean): Promise<void> {
+  // First pass: raw `pre.mermaid`. Subsequent passes: already-rendered wrappers
+  // that carry their source in `data-mermaid-src`.
+  const fresh = [...root.querySelectorAll<HTMLElement>('pre.mermaid')].map((el) => ({
+    el,
+    src: el.textContent ?? '',
+    rendered: false,
+  }));
+  const existing = [...root.querySelectorAll<HTMLElement>('[data-mermaid-src]')].map((el) => ({
+    el,
+    src: el.getAttribute('data-mermaid-src') ?? '',
+    rendered: true,
+  }));
+  const targets = [...fresh, ...existing];
+  if (targets.length === 0) return;
+
+  const mermaid = (await import('mermaid')).default;
+  if (isCancelled()) return;
+  mermaid.initialize({
+    startOnLoad: false,
+    securityLevel: 'loose',
+    theme: dark ? 'dark' : 'default',
+    themeVariables: dark ? MERMAID_VARS_DARK : MERMAID_VARS_LIGHT,
+  });
+
+  for (const t of targets) {
+    try {
+      const { svg } = await mermaid.render(`wiki-mmd-${Date.now()}-${mermaidSeq++}`, t.src);
+      if (isCancelled()) return;
+      if (t.rendered) {
+        t.el.innerHTML = svg;
+      } else {
+        const div = document.createElement('div');
+        div.className = 'not-prose my-4 flex justify-center overflow-x-auto [&>svg]:max-w-full';
+        div.setAttribute('data-mermaid-src', t.src);
+        div.innerHTML = svg;
+        t.el.replaceWith(div);
+      }
+    } catch {
+      /* invalid diagram — leave the source block as-is */
+    }
+  }
+}

@@ -20,13 +20,13 @@ RC_VERSION="${VERSION}-rc.${TIMESTAMP}.${SHORT_SHA}"
 log_info "Setting lockstep RC version $RC_VERSION across packages/*..."
 "${MISE_PROJECT_ROOT:-$PWD}/mise-tasks/set-version" "$RC_VERSION"
 
-log_info "Publishing all packages/* @ $RC_VERSION to npm with tag 'next'..."
-# --filter './packages/*' excludes the private root; every publishable package goes at
-# the same version -> true lockstep. --no-git-checks: the working tree is dirty (version
-# bump) and this runs off a branch, not a clean release commit.
-pnpm -r --filter './packages/*' publish --access public --no-git-checks --tag next
+log_info "Publishing all packages/* and apps/* @ $RC_VERSION to npm with tag 'next'..."
+# --filter './packages/*' --filter './apps/*' excludes the private root; every publishable
+# package and app goes at the same version -> true lockstep. --no-git-checks: the working
+# tree is dirty (version bump) and this runs off a branch, not a clean release commit.
+pnpm -r --filter './packages/*' --filter './apps/*' publish --access public --no-git-checks --tag next
 
-log_info "Restoring lockstep version $VERSION across packages/*..."
+log_info "Restoring lockstep version $VERSION across packages/* and apps/*..."
 "${MISE_PROJECT_ROOT:-$PWD}/mise-tasks/set-version" "$VERSION"
 
 log_success "Published ${PROJECT} packages @ $RC_VERSION to npm (tag: next)"

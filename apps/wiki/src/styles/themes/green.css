@@ -1,0 +1,57 @@
+/* green — shadcn "green" base color: green-600 primary (light) / green-500 (dark)
+   on a neutral slate scaffold. Exact Tailwind v4 green OKLCH values. */
+.theme-green {
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.208 0.04 265.75); /* slate-900 ink */
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.208 0.04 265.75);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.208 0.04 265.75);
+  --primary: oklch(0.627 0.17 149.21); /* green-600 */
+  --primary-foreground: oklch(0.982 0.018 155.83); /* green-50 */
+  --secondary: oklch(0.968 0.007 247.9); /* slate-100 */
+  --secondary-foreground: oklch(0.208 0.04 265.75);
+  --muted: oklch(0.968 0.007 247.9);
+  --muted-foreground: oklch(0.554 0.041 257.42);
+  --accent: oklch(0.962 0.043 156.74); /* green-100 tinted accent */
+  --accent-foreground: oklch(0.393 0.09 152.54); /* green-900 */
+  --destructive: oklch(0.577 0.245 27.325);
+  --destructive-foreground: oklch(0.984 0.003 247.86);
+  --border: oklch(0.929 0.013 255.51); /* slate-200 */
+  --input: oklch(0.929 0.013 255.51);
+  --ring: oklch(0.627 0.17 149.21); /* green-600 */
+  --sidebar: oklch(0.984 0.003 247.86);
+  --sidebar-foreground: oklch(0.208 0.04 265.75);
+  --sidebar-accent: oklch(0.962 0.043 156.74);
+  --sidebar-accent-foreground: oklch(0.393 0.09 152.54);
+  --radius: 0.625rem;
+  --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-serif: ui-serif, Georgia, Cambria, serif;
+  --font-mono: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+}
+
+.theme-green.dark {
+  --background: oklch(0.208 0.04 265.75); /* slate-900 */
+  --foreground: oklch(0.984 0.003 247.86);
+  --card: oklch(0.208 0.04 265.75);
+  --card-foreground: oklch(0.984 0.003 247.86);
+  --popover: oklch(0.208 0.04 265.75);
+  --popover-foreground: oklch(0.984 0.003 247.86);
+  --primary: oklch(0.723 0.192 149.58); /* green-500 (brighter for dark) */
+  --primary-foreground: oklch(0.266 0.063 152.93); /* green-950 */
+  --secondary: oklch(0.279 0.037 260.03); /* slate-800 */
+  --secondary-foreground: oklch(0.984 0.003 247.86);
+  --muted: oklch(0.279 0.037 260.03);
+  --muted-foreground: oklch(0.711 0.035 256.79);
+  --accent: oklch(0.266 0.063 152.93); /* green-950 tinted accent */
+  --accent-foreground: oklch(0.962 0.043 156.74);
+  --destructive: oklch(0.704 0.191 22.216);
+  --destructive-foreground: oklch(0.984 0.003 247.86);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.723 0.192 149.58);
+  --sidebar: oklch(0.279 0.037 260.03);
+  --sidebar-foreground: oklch(0.984 0.003 247.86);
+  --sidebar-accent: oklch(0.266 0.063 152.93);
+  --sidebar-accent-foreground: oklch(0.962 0.043 156.74);
+}

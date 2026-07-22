@@ -1,0 +1,11 @@
+{
+  "version": "1",
+  "collections": [
+    {
+      "name": "notes",
+      "type": "global",
+      "path": "/tmp/diffwiki-e2e-home/collections/notes",
+      "createdAt": "2026-01-01T00:00:00.000Z"
+    }
+  ]
+}

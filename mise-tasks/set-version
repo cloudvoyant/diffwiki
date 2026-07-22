@@ -17,8 +17,8 @@ log_info "Setting lockstep version $NEW_VERSION"
 # Single source of truth.
 printf '%s\n' "$NEW_VERSION" > "$ROOT/version.txt"
 
-# Fan out into every publishable package (never the private root).
-for pkg in "$ROOT"/packages/*/package.json; do
+# Fan out into every publishable package AND app (never the private root).
+for pkg in "$ROOT"/packages/*/package.json "$ROOT"/apps/*/package.json; do
     [ -f "$pkg" ] || continue
     node -e "
 const fs = require('fs');

@@ -1,0 +1,63 @@
+/* Lambda (lambda.ai) — dark-first "Superintelligence Cloud" terminal aesthetic:
+   near-black warm-neutral canvas (#0b0b0b), bone text (#e7e6d9), warm olive-tinted
+   greys, and an electric ULTRAVIOLET brand accent (#6236f4). Type is Suisse Intl
+   (sans) + Suisse Intl Mono (proprietary) — substituted with Inter + JetBrains Mono.
+   Verified from the live site's design-token CSS. Serif headings: NO. */
+.theme-lambda {
+  /* light counterpart (docs light mode): white canvas, ultraviolet accent */
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.15 0.002 105); /* #0b0b0b warm near-black */
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.15 0.002 105);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.15 0.002 105);
+  --primary: oklch(0.48 0.26 285); /* ultraviolet #6236f4 */
+  --primary-foreground: oklch(0.99 0.005 105);
+  --secondary: oklch(0.95 0.006 105); /* warm light grey */
+  --secondary-foreground: oklch(0.24 0.004 105);
+  --muted: oklch(0.95 0.006 105);
+  --muted-foreground: oklch(0.52 0.008 105); /* #797872 */
+  --accent: oklch(0.94 0.04 288); /* faint uv tint */
+  --accent-foreground: oklch(0.35 0.12 285);
+  --destructive: oklch(0.577 0.245 27.325);
+  --destructive-foreground: oklch(0.99 0.005 105);
+  --border: oklch(0.9 0.006 105);
+  --input: oklch(0.9 0.006 105);
+  --ring: oklch(0.48 0.26 285);
+  --sidebar: oklch(0.985 0.004 105);
+  --sidebar-foreground: oklch(0.15 0.002 105);
+  --sidebar-accent: oklch(0.94 0.04 288);
+  --sidebar-accent-foreground: oklch(0.35 0.12 285);
+  --radius: 0.5rem;
+  --font-sans: 'Inter', 'Helvetica Neue', Helvetica, Arial, sans-serif; /* Suisse Intl */
+  --font-serif: 'Source Serif 4', Georgia, Cambria, serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace; /* Suisse Intl Mono */
+  --font-heading: var(--font-sans);
+}
+
+.theme-lambda.dark {
+  /* dark-first — Lambda's native look: near-black #0b0b0b, bone text, ultraviolet */
+  --background: oklch(0.15 0.002 105); /* #0b0b0b */
+  --foreground: oklch(0.921 0.014 105); /* #e7e6d9 bone */
+  --card: oklch(0.23 0.002 105);
+  --card-foreground: oklch(0.921 0.014 105);
+  --popover: oklch(0.23 0.002 105);
+  --popover-foreground: oklch(0.921 0.014 105);
+  --primary: oklch(0.57 0.24 285); /* electric ultraviolet, lifted for dark (#815ef6) */
+  --primary-foreground: oklch(0.97 0.01 105);
+  --secondary: oklch(0.28 0.002 105); /* surface #262625 */
+  --secondary-foreground: oklch(0.921 0.014 105);
+  --muted: oklch(0.28 0.002 105);
+  --muted-foreground: oklch(0.73 0.009 105); /* #b0afa6 warm grey */
+  --accent: oklch(0.32 0.08 285); /* subtle uv */
+  --accent-foreground: oklch(0.921 0.014 105);
+  --destructive: oklch(0.58 0.23 27);
+  --destructive-foreground: oklch(0.97 0.01 105);
+  --border: oklch(0.36 0.004 105); /* #42413e */
+  --input: oklch(0.36 0.004 105);
+  --ring: oklch(0.57 0.24 285);
+  --sidebar: oklch(0.19 0.002 105);
+  --sidebar-foreground: oklch(0.921 0.014 105);
+  --sidebar-accent: oklch(0.32 0.08 285);
+  --sidebar-accent-foreground: oklch(0.921 0.014 105);
+}

@@ -1,0 +1,59 @@
+/* OpenAI — minimal/editorial: white page, near-black warm-neutral ink (#0d0d0d),
+   monochrome-first with a restrained teal accent (#10a37f). All-sans grotesk.
+   Brand fonts Söhne / OpenAI Sans are proprietary; substituted with Inter/Geist.
+   Serif headings: NO. */
+.theme-openai {
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.18 0.002 165); /* #0d0d0d near-black */
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.18 0.002 165);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.18 0.002 165);
+  --primary: oklch(0.18 0.002 165); /* ink primary (monochrome-first) */
+  --primary-foreground: oklch(0.99 0 0);
+  --secondary: oklch(0.968 0 0);
+  --secondary-foreground: oklch(0.22 0.002 165);
+  --muted: oklch(0.968 0 0);
+  --muted-foreground: oklch(0.55 0.003 170);
+  --accent: oklch(0.62 0.11 172); /* teal #10a37f restrained accent */
+  --accent-foreground: oklch(0.99 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --destructive-foreground: oklch(0.99 0 0);
+  --border: oklch(0.915 0.002 170);
+  --input: oklch(0.915 0.002 170);
+  --ring: oklch(0.62 0.11 172);
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.18 0.002 165);
+  --sidebar-accent: oklch(0.968 0 0);
+  --sidebar-accent-foreground: oklch(0.22 0.002 165);
+  --radius: 0.5rem;
+  --font-sans: 'Inter', 'Geist', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif;
+  --font-serif: 'Source Serif 4', Georgia, Cambria, 'Times New Roman', serif;
+  --font-mono: 'Geist Mono', 'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+}
+
+.theme-openai.dark {
+  --background: oklch(0.16 0.002 165); /* near-black */
+  --foreground: oklch(0.97 0 0);
+  --card: oklch(0.205 0.002 165);
+  --card-foreground: oklch(0.97 0 0);
+  --popover: oklch(0.205 0.002 165);
+  --popover-foreground: oklch(0.97 0 0);
+  --primary: oklch(0.97 0 0); /* inverts: near-white primary */
+  --primary-foreground: oklch(0.18 0.002 165);
+  --secondary: oklch(0.27 0.002 165);
+  --secondary-foreground: oklch(0.97 0 0);
+  --muted: oklch(0.27 0.002 165);
+  --muted-foreground: oklch(0.7 0.003 170);
+  --accent: oklch(0.68 0.115 172); /* teal, brightened for dark */
+  --accent-foreground: oklch(0.16 0.002 165);
+  --destructive: oklch(0.704 0.191 22.216);
+  --destructive-foreground: oklch(0.99 0 0);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 14%);
+  --ring: oklch(0.68 0.115 172);
+  --sidebar: oklch(0.205 0.002 165);
+  --sidebar-foreground: oklch(0.97 0 0);
+  --sidebar-accent: oklch(0.27 0.002 165);
+  --sidebar-accent-foreground: oklch(0.97 0 0);
+}
