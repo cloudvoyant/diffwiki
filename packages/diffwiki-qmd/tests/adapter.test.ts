@@ -70,6 +70,18 @@ describe('splitQmdPath', () => {
   it('handles a bare collection with no relPath', () => {
     expect(splitQmdPath({ file: 'qmd://docs' })).toEqual({ collection: 'docs', relPath: '' });
   });
+
+  it('strips the ?index=<name> query qmd adds for a named index', () => {
+    expect(splitQmdPath({ file: 'qmd://devtools/helix/splits.md?index=diffwiki' })).toEqual({
+      collection: 'devtools',
+      relPath: 'helix/splits.md',
+    });
+    // also on displayPath, and with a #fragment
+    expect(splitQmdPath({ displayPath: 'notes/todo.md?index=diffwiki#frag' })).toEqual({
+      collection: 'notes',
+      relPath: 'todo.md',
+    });
+  });
 });
 
 describe('searchSubcommand', () => {

@@ -112,6 +112,9 @@ export function splitQmdPath(row: QmdRow): { collection: string; relPath: string
   } else if (typeof row.displayPath === 'string') {
     raw = row.displayPath;
   }
+  // qmd appends a `?index=<name>` query (and may add a `#fragment`) to the URI
+  // when a named index is used — strip it so the relPath is a clean file path.
+  raw = raw.replace(/[?#].*$/, '');
   raw = raw.replace(/^\/+/, '');
   const slash = raw.indexOf('/');
   if (slash === -1) return { collection: raw, relPath: '' };
