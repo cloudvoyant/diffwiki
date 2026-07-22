@@ -10,6 +10,7 @@ import {
   loadSearchProvider,
   query,
   registerCollection,
+  search,
   upsertPlugin,
 } from '../src/index';
 import type { CollectionEntry } from '../src/types';
@@ -94,6 +95,53 @@ async function registerStubPlugin(): Promise<void> {
   });
 }
 
+/**
+ * A protocol plugin whose `search` handler throws — the SDK writes
+ * `{ ok:false, error }`, the host's invoke rejects, and `search()` must capture
+ * the message and fall back to native.
+ */
+const THROWING_PLUGIN = `
+let buffer = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => { buffer += chunk; });
+process.stdin.on('end', () => {
+  const line = buffer.trim();
+  if (!line) { process.exit(1); return; }
+  const req = JSON.parse(line);
+  const { op } = req;
+  if (op === 'describe') {
+    process.stdout.write(JSON.stringify({ ok: true, result: {
+      name: 'boom-plugin', kind: 'search', version: '0.0.0',
+      capabilities: { searchTypes: ['boom'], collectionFilter: true, events: false },
+    } }) + '\\n');
+    process.exit(0);
+    return;
+  }
+  if (op === 'search') {
+    process.stdout.write(JSON.stringify({ ok: false, error: { message: 'engine exploded' } }) + '\\n');
+    process.exit(1);
+    return;
+  }
+  process.stdout.write(JSON.stringify({ ok: true, result: {} }) + '\\n');
+  process.exit(0);
+});
+`;
+
+async function registerThrowingPlugin(): Promise<void> {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'diffwiki-plugin-'));
+  scratch.push(dir);
+  const file = path.join(dir, 'boom-plugin.mjs');
+  await fs.writeFile(file, THROWING_PLUGIN, 'utf8');
+  await upsertPlugin({
+    name: 'boom-plugin',
+    kind: 'search',
+    command: [process.execPath, file],
+    capabilities: { searchTypes: ['boom'], collectionFilter: true, events: false },
+    enabled: true,
+    managed: false,
+  });
+}
+
 beforeEach(async () => {
   home = await fs.mkdtemp(path.join(os.tmpdir(), 'diffwiki-'));
   process.env.DIFFWIKI_HOME = home;
@@ -138,6 +186,34 @@ describe('one-shot protocol client + loader', () => {
   it('lists only native when no plugin is registered', async () => {
     const modes = await listSearchModes();
     expect(modes).toEqual([{ plugin: 'native', type: 'basic', label: 'native · bm25' }]);
+  });
+});
+
+describe('search() surfaces engine outcome', () => {
+  it('reports fellBackToNative + error when the engine throws', async () => {
+    await createCollection('notes');
+    await createArticle({ target: 'notes:Kubernetes Guide', tags: [], body: '# k8s' });
+    await registerThrowingPlugin();
+
+    const outcome = await search('kubernetes', { engine: 'boom-plugin' });
+    expect(outcome.engine).toBe('boom-plugin');
+    expect(outcome.fellBackToNative).toBe(true);
+    expect(outcome.error).toMatch(/engine exploded/);
+    // Native fallback still returned the matching article.
+    expect(outcome.hits.map((h) => h.title)).toEqual(['Kubernetes Guide']);
+  });
+
+  it('reports fellBackToNative:false with no error on engine success', async () => {
+    const entry = await createCollection('notes');
+    await registerStubPlugin();
+
+    const outcome = await search('anything', { engine: 'stub-plugin' });
+    expect(outcome.engine).toBe('stub-plugin');
+    expect(outcome.fellBackToNative).toBe(false);
+    expect(outcome.error).toBeUndefined();
+    expect(outcome.hits).toHaveLength(1);
+    expect(outcome.hits[0].title).toBe('Alpha');
+    expect(outcome.hits[0].path).toBe(path.join(entry.path, 'a.md'));
   });
 });
 

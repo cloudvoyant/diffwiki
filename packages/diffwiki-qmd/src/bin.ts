@@ -223,8 +223,14 @@ export function makePluginDefinition(
   /**
    * Best-effort staleness check: if the newest md/mdx file is newer than the
    * qmd index, run `qmd update` before searching. For semantic/hybrid, also
-   * run `qmd embed` when pending. Runs regardless of warm/cold mode -- the
-   * daemon reads the same on-disk index, so it picks up the update.
+   * run `qmd embed` when pending.
+   *
+   * Concurrency safety: if the long-lived `qmd mcp` daemon is holding the
+   * sqlite index (a `/health` probe answers OK), we SKIP the CLI
+   * `qmd update`/`embed` — a concurrent CLI writer racing the daemon's open DB
+   * handle can corrupt the FTS index. In that case the user must refresh
+   * explicitly via `diffwiki index`. We only run the CLI update when no daemon
+   * is serving the index.
    */
   async function ensureFresh(collections: Collection[], searchType: string, log: PluginLogFn): Promise<void> {
     try {
@@ -235,6 +241,14 @@ export function makePluginDefinition(
       if (indexMtime >= contentMtime) return;
 
       const env = qmdEnv(home);
+
+      // The daemon holds the sqlite DB — a concurrent CLI write can corrupt the
+      // FTS index. Skip the on-search reindex and defer to `diffwiki index`.
+      if (await probeHealth(mcpBaseUrl(env), fetchFn, 1000)) {
+        log('warn', 'qmd daemon is serving the index — skipping on-search update; run `diffwiki index` to refresh');
+        return;
+      }
+
       log('info', 'index stale — running qmd update');
       await runQmd(['update', '--index', INDEX], { env });
 

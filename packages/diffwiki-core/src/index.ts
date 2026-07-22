@@ -25,7 +25,8 @@ export * from './articles';
 export * from './repo';
 
 // Search
-export { query, nativeSearch, resolveDefaultSearchMode } from './query';
+export { search, query, nativeSearch, resolveDefaultSearchMode } from './query';
+export type { SearchOutcome } from './query';
 
 // Diagnostics
 export { doctor } from './doctor';

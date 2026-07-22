@@ -274,20 +274,68 @@ export async function resolveDefaultSearchMode(): Promise<{ engine: string; type
 }
 
 /**
- * Search articles via the resolved search engine (native fallback on plugin failure).
+ * The result of a {@link search} call: the hits plus the metadata a host UI
+ * needs to tell the user WHICH engine ran and whether it silently degraded.
+ *
+ * `fellBackToNative` is true whenever the resolved engine could not serve the
+ * search (no provider, or `handleSearch` threw) and native BM25 produced these
+ * hits instead. `error`, when set, is the captured message from the failing
+ * engine — a failing engine is thus distinguishable from an engine that
+ * legitimately found zero results.
+ */
+export interface SearchOutcome {
+  /** The hits to display (from the engine, or from native on fallback). */
+  hits: QueryHit[];
+  /** The engine that was resolved and attempted (may differ from what produced `hits`). */
+  engine: string;
+  /** True when native BM25 produced `hits` because the engine failed/was unavailable. */
+  fellBackToNative: boolean;
+  /** The captured failure message from the engine, when it errored. */
+  error?: string;
+}
+
+/**
+ * Search articles via the resolved search engine, surfacing engine failures.
+ *
+ * Routing precedence: explicit `opts.engine` -> `config.defaultSearch` ->
+ * first enabled plugin -> native BM25.
+ *
+ * On ANY engine failure (no provider, or `handleSearch` throws) the error
+ * message is CAPTURED, native BM25 is run as a fallback, and the outcome
+ * reports `{ fellBackToNative: true, error }`. On success it reports
+ * `{ fellBackToNative: false }` with the engine's hits. This lets callers
+ * distinguish "the engine broke" from "the engine found nothing".
+ */
+export async function search(term: string, opts?: QueryOptions): Promise<SearchOutcome> {
+  const collections = await listCollections();
+  const engine = opts?.engine ?? (await resolveDefaultEngine());
+  if (engine === NATIVE_ENGINE) {
+    const hits = await nativeSearch(term, collections, opts?.collection);
+    return { hits, engine, fellBackToNative: false };
+  }
+  const provider = await loadSearchProvider(engine);
+  if (!provider) {
+    const hits = await nativeSearch(term, collections, opts?.collection);
+    return { hits, engine, fellBackToNative: true, error: `no provider found for engine "${engine}"` };
+  }
+  try {
+    const hits = await provider.handleSearch(term, collections, opts);
+    return { hits, engine, fellBackToNative: false };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    const hits = await nativeSearch(term, collections, opts?.collection);
+    return { hits, engine, fellBackToNative: true, error: message };
+  }
+}
+
+/**
+ * Search articles via the resolved search engine (native fallback on plugin
+ * failure). A thin wrapper over {@link search} that returns just the hits;
+ * engine errors are swallowed. Use {@link search} to surface those errors.
  *
  * Routing precedence: explicit `opts.engine` -> `config.defaultSearch` ->
  * first enabled plugin -> native BM25.
  */
 export async function query(term: string, opts?: QueryOptions): Promise<QueryHit[]> {
-  const collections = await listCollections();
-  const engine = opts?.engine ?? (await resolveDefaultEngine());
-  if (engine === NATIVE_ENGINE) return nativeSearch(term, collections, opts?.collection);
-  const provider = await loadSearchProvider(engine);
-  if (!provider) return nativeSearch(term, collections, opts?.collection);
-  try {
-    return await provider.handleSearch(term, collections, opts);
-  } catch {
-    return nativeSearch(term, collections, opts?.collection);
-  }
+  return (await search(term, opts)).hits;
 }

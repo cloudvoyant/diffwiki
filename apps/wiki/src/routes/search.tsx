@@ -164,6 +164,13 @@ function SearchComponent() {
           )}
         </div>
 
+        {/* Engine-failure notice: the resolved engine broke and native ran instead. */}
+        {q !== '' && search.engineError && (
+          <p className="text-xs text-muted-foreground" role="status" data-testid="search-engine-error">
+            Search engine failed ({search.engineError}) — showing native results.
+          </p>
+        )}
+
         {/* Results region */}
         {q === '' ? (
           <p className="text-sm text-muted-foreground">Type a query and press Enter.</p>

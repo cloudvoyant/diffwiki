@@ -1,5 +1,5 @@
 import { createServerFn } from '@tanstack/react-start';
-import { query, listCollections, listSearchModes, resolveDefaultSearchMode, type SearchMode } from 'diffwiki-core';
+import { search, listCollections, listSearchModes, resolveDefaultSearchMode, type SearchMode } from 'diffwiki-core';
 import { hitToResult } from '../lib/search';
 import type { SearchResultItem } from '../lib/types';
 
@@ -8,6 +8,11 @@ export interface SearchResponse {
   results: SearchResultItem[];
   /** Wall-clock time the search took on the server, in milliseconds. */
   tookMs: number;
+  /**
+   * When the resolved search engine failed and native results were served
+   * instead, the captured engine error message. Undefined on success.
+   */
+  engineError?: string;
 }
 
 export interface SearchModesResponse {
@@ -21,8 +26,10 @@ export interface SearchModesResponse {
  *
  * `engine` is the plugin name (e.g. `'native'`, `'diffwiki-qmd'`); `type` is the
  * search type advertised by that plugin (e.g. `'basic'`, `'keyword'`, `'semantic'`).
- * Both are passed through to `query()` which applies the routing precedence:
- * explicit engine → config.defaultSearch → first enabled plugin → native.
+ * Both are passed through to `search()` which applies the routing precedence:
+ * explicit engine → config.defaultSearch → first enabled plugin → native. When
+ * the engine fails, `search()` falls back to native and reports the error via
+ * `engineError` so the route can warn the user.
  *
  * A blank `q` short-circuits before any core call so the `/search` landing page
  * (no query yet) is instant.
@@ -34,14 +41,14 @@ export const runSearch = createServerFn({ method: 'GET' })
     if (!q) return { q: data.q, results: [], tookMs: 0 };
 
     const started = Date.now();
-    const [hits, collections] = await Promise.all([
-      query(q, { engine: data.engine, collection: data.collection, type: data.type }),
+    const [outcome, collections] = await Promise.all([
+      search(q, { engine: data.engine, collection: data.collection, type: data.type }),
       listCollections(),
     ]);
     const tookMs = Date.now() - started;
 
-    const results = hits.map((hit) => hitToResult(hit, collections));
-    return { q: data.q, results, tookMs };
+    const results = outcome.hits.map((hit) => hitToResult(hit, collections));
+    return { q: data.q, results, tookMs, engineError: outcome.error };
   });
 
 /**

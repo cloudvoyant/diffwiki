@@ -6,10 +6,21 @@
  * hits (no cold CLI call), HTTP failure falls back to the cold CLI, and
  * `DIFFWIKI_QMD_WARM=0` forces cold without touching the daemon.
  */
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, describe, expect, it, vi, beforeEach } from 'vitest';
 import type { FetchFn, SpawnFn } from '../src/daemon.js';
 
 const noopLog = () => {};
+
+/** Create a real temp collection dir with one md file so `newestMdMtime` > 0. */
+async function makeCollectionDir(): Promise<{ name: string; path: string }> {
+  const dir = await mkdtemp(join(tmpdir(), 'diffwiki-qmd-coll-'));
+  await mkdir(dir, { recursive: true });
+  await writeFile(join(dir, 'a.md'), '# a\n', 'utf8');
+  return { name: 'kb', path: dir };
+}
 
 // Mock the qmd CLI module so the cold path is observable and never real.
 vi.mock('../src/qmd.js', () => {
@@ -124,11 +135,20 @@ const COLD_ROWS = [
   },
 ];
 
+const collDirs: string[] = [];
+
 beforeEach(() => {
   qmdMock.__resetCalls();
   qmdMock.__setRunQmdJsonResult(COLD_ROWS);
   qmdMock.__setRunQmdResult('  Total: 1 files indexed\n  Pending: 0 need embedding\n');
   delete process.env.DIFFWIKI_QMD_WARM;
+});
+
+afterEach(async () => {
+  while (collDirs.length > 0) {
+    const dir = collDirs.pop()!;
+    await rm(dir, { recursive: true, force: true });
+  }
 });
 
 describe('search handler warm/cold routing', () => {
@@ -181,6 +201,47 @@ describe('search handler warm/cold routing', () => {
     expect(result.hits[0].title).toBe('Cold B');
     const searchCalls = qmdMock.__getCalls().filter((c) => c[1] === 'search');
     expect(searchCalls).toHaveLength(1);
+  });
+
+  it('skips qmd update when the daemon is holding the index (stale content)', async () => {
+    const coll = await makeCollectionDir();
+    collDirs.push(coll.path);
+    // statMtime: md content newer (2) than the index (1) -> stale, so ensureFresh
+    // would normally run `qmd update`. But the daemon is up, so it must NOT.
+    const statMtime = async (p: string) => (/\.sqlite$/.test(p) ? 1 : 2);
+    const { handlers } = makePluginDefinition({
+      home: '/tmp/home',
+      statMtime,
+      fetchFn: warmFetch(WARM_ROWS), // /health answers ok -> daemon "up"
+      spawnFn: neverSpawn,
+    });
+    await handlers.search({ term: 'foo', type: 'keyword', collections: [coll], limit: 20 }, noopLog);
+    const updateCalls = qmdMock.__getCalls().filter((c) => c[1] === 'update');
+    expect(updateCalls).toHaveLength(0);
+  });
+
+  it('runs qmd update when stale and no daemon is holding the index', async () => {
+    const coll = await makeCollectionDir();
+    collDirs.push(coll.path);
+    const statMtime = async (p: string) => (/\.sqlite$/.test(p) ? 1 : 2);
+    // /health is down -> daemon not up; force cold (warm off) so no daemon spawn.
+    process.env.DIFFWIKI_QMD_WARM = '0';
+    const downFetch: FetchFn = async () => ({
+      ok: false,
+      status: 503,
+      headers: { get: () => null },
+      text: async () => '',
+      json: async () => ({}),
+    });
+    const { handlers } = makePluginDefinition({
+      home: '/tmp/home',
+      statMtime,
+      fetchFn: downFetch,
+      spawnFn: neverSpawn,
+    });
+    await handlers.search({ term: 'foo', type: 'keyword', collections: [coll], limit: 20 }, noopLog);
+    const updateCalls = qmdMock.__getCalls().filter((c) => c[1] === 'update');
+    expect(updateCalls).toHaveLength(1);
   });
 
   it('health reports the warm daemon as running when /health is up', async () => {

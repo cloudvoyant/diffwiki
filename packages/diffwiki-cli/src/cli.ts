@@ -12,7 +12,7 @@ import {
   listPlugins,
   listSearchModes,
   loadSearchProvider,
-  query,
+  search,
   registerPlugin,
   removeArticle,
   removePlugin,
@@ -154,11 +154,15 @@ export function createProgram(): Command {
     .action(
       withErrors(async (term: string, opts: { engine?: string; collection?: string; type?: string }) => {
         const queryOpts: QueryOptions = { engine: opts.engine, collection: opts.collection, type: opts.type };
-        const hits = await query(term, queryOpts);
+        const outcome = await search(term, queryOpts);
+        const hits = outcome.hits;
         console.log(`${hits.length} result(s)`);
         for (const hit of hits) {
           const line = `${hit.collection}\t${hit.title}\t${hit.path}`;
           console.log(hit.snippet ? `${line}\t${hit.snippet}` : line);
+        }
+        if (outcome.error) {
+          console.error(`⚠ engine "${outcome.engine}" failed: ${outcome.error} — used native (${hits.length} results)`);
         }
       }),
     );
