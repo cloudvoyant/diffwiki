@@ -1,0 +1,59 @@
+/* graphite — tweakcn "graphite" preset: sophisticated monochrome grey with tight
+   radius. Strong minimal option for long-form reading. Tokens converted from source
+   hex to OKLCH; font stacks fall back to the loaded Inter / JetBrains Mono when
+   Montserrat/Fira Code aren't installed. */
+.theme-graphite {
+  --background: oklch(0.955 0 0);
+  --foreground: oklch(0.321 0 0);
+  --card: oklch(0.97 0 0);
+  --card-foreground: oklch(0.321 0 0);
+  --popover: oklch(0.97 0 0);
+  --popover-foreground: oklch(0.321 0 0);
+  --primary: oklch(0.489 0 0);
+  --primary-foreground: oklch(1 0 0);
+  --secondary: oklch(0.907 0 0);
+  --secondary-foreground: oklch(0.321 0 0);
+  --muted: oklch(0.885 0 0);
+  --muted-foreground: oklch(0.51 0 0);
+  --accent: oklch(0.808 0 0);
+  --accent-foreground: oklch(0.321 0 0);
+  --destructive: oklch(0.559 0.19 25.86);
+  --destructive-foreground: oklch(1 0 0);
+  --border: oklch(0.858 0 0);
+  --input: oklch(0.907 0 0);
+  --ring: oklch(0.489 0 0);
+  --sidebar: oklch(0.937 0 0);
+  --sidebar-foreground: oklch(0.321 0 0);
+  --sidebar-accent: oklch(0.808 0 0);
+  --sidebar-accent-foreground: oklch(0.321 0 0);
+  --radius: 0.35rem;
+  --font-sans: 'Montserrat', 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-serif: Georgia, Cambria, 'Times New Roman', serif;
+  --font-mono: 'Fira Code', 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.theme-graphite.dark {
+  --background: oklch(0.218 0 0);
+  --foreground: oklch(0.885 0 0);
+  --card: oklch(0.244 0 0);
+  --card-foreground: oklch(0.885 0 0);
+  --popover: oklch(0.244 0 0);
+  --popover-foreground: oklch(0.885 0 0);
+  --primary: oklch(0.706 0 0);
+  --primary-foreground: oklch(0.218 0 0);
+  --secondary: oklch(0.309 0 0);
+  --secondary-foreground: oklch(0.885 0 0);
+  --muted: oklch(0.285 0 0);
+  --muted-foreground: oklch(0.6 0 0);
+  --accent: oklch(0.371 0 0);
+  --accent-foreground: oklch(0.885 0 0);
+  --destructive: oklch(0.659 0.153 22.17);
+  --destructive-foreground: oklch(1 0 0);
+  --border: oklch(0.329 0 0);
+  --input: oklch(0.309 0 0);
+  --ring: oklch(0.706 0 0);
+  --sidebar: oklch(0.239 0 0);
+  --sidebar-foreground: oklch(0.885 0 0);
+  --sidebar-accent: oklch(0.371 0 0);
+  --sidebar-accent-foreground: oklch(0.885 0 0);
+}

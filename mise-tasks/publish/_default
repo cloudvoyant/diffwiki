@@ -9,7 +9,7 @@ source "${MISE_PROJECT_ROOT:-$PWD}/mise-tasks/utils"
 # if an earlier package publishes and a later one fails, a naive retry re-hits the now
 # immutable earlier version and errors. Instead, skip any package whose exact version is
 # already on the registry so retries only publish what is genuinely missing.
-for pkg_json in packages/*/package.json; do
+for pkg_json in packages/*/package.json apps/*/package.json; do
   name="$(node -p "require('./${pkg_json}').name")"
   version="$(node -p "require('./${pkg_json}').version")"
   is_private="$(node -p "require('./${pkg_json}').private === true")"

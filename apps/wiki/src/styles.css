@@ -1,0 +1,313 @@
+@import 'tailwindcss';
+@plugin '@tailwindcss/typography';
+@import 'tw-animate-css';
+/* All diffbook themes, one file per theme (each defines .theme-{name} light +
+   .theme-{name}.dark). Generated barrel — see the "Port all diffbook themes" task.
+   @import must precede other rules, so it lives here at the top; theme classes win
+   by specificity regardless of source order. */
+@import './styles/themes/index.css';
+
+/* Class-driven dark mode — .dark on <html> activates the dark variant.
+   &:is(.dark *) matches every element that is a descendant of .dark. */
+@custom-variant dark (&:is(.dark *));
+
+/* Bind swappable OKLCH tokens to Tailwind v4 utility variables.
+   `inline` means Tailwind emits var(--background) into utilities rather than
+   a fixed value, so reassigning --background under a .dark or .theme-* class
+   cascades to all utilities with no rebuild. */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 4px);
+  /* Themes also swap fonts — map them so a theme's --font-* cascades to utilities. */
+  --font-sans: var(--font-sans);
+  --font-serif: var(--font-serif);
+  --font-mono: var(--font-mono);
+}
+
+/* ── Default theme (shadcn Neutral OKLCH) ──────────────────────────────────
+   Applied to :root (no theme class) AND to .theme-default for explicit
+   selection parity — matches diffbook/themes/default.css exactly.
+   Wrapped in :where() so it has ZERO specificity: an explicit light theme class
+   (.theme-x, specificity 0,1,0) must win over this base. Without it, a light
+   theme ties :root and loses on source order (only .dark variants, 0,2,0, won),
+   so every light theme rendered with the neutral default palette. */
+:where(:root, .theme-default) {
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --destructive-foreground: oklch(0.985 0 0);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --radius: 0.625rem;
+  /* Layout tokens consumed by the three-column shell */
+  --nav-h: 3.5rem;
+  --sidebar-w: 16rem;
+  /* Right TOC gutter matches the left sidebar width so the content sits between
+     two equal rails. */
+  --toc-w: 16rem;
+  --content-max: 48rem;
+  /* Chart palette */
+  --chart-1: oklch(0.62 0.19 260);
+  --chart-2: oklch(0.7 0.15 165);
+  --chart-3: oklch(0.72 0.15 75);
+  --chart-4: oklch(0.64 0.22 25);
+  --chart-5: oklch(0.62 0.18 305);
+}
+
+/* ── Default theme dark ──────────────────────────────────────────────────
+   Also :where()-wrapped (zero specificity): the no-theme `.dark` base must not
+   override an explicit theme's dark tokens (.theme-x.dark, 0,2,0). */
+:where(.dark, .theme-default.dark) {
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.922 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --destructive-foreground: oklch(0.985 0 0);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.556 0 0);
+  --sidebar: oklch(0.205 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  /* Chart palette — dark variants lift lightness ~+0.06 */
+  --chart-1: oklch(0.68 0.19 260);
+  --chart-2: oklch(0.76 0.15 165);
+  --chart-3: oklch(0.78 0.15 75);
+  --chart-4: oklch(0.7 0.22 25);
+  --chart-5: oklch(0.68 0.18 305);
+}
+
+/* ── Base layer ─────────────────────────────────────────────────────────── */
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif);
+  }
+  /* Headings use the theme's heading font (defaults to the sans stack; themes
+     like anthropic point --font-heading at a serif). */
+  :where(h1, h2, h3, h4, h5, h6) {
+    font-family: var(--font-heading, var(--font-sans, inherit));
+  }
+}
+
+/* ── Shiki dual-theme code block CSS ────────────────────────────────────
+   Shiki is called with defaultColor:false and themes:{light:'github-light',
+   dark:'github-dark'}. It emits inline style attributes with --shiki-light
+   and --shiki-dark variable pairs. The rules below set the default (light)
+   and override to dark when .dark is present on <html>.
+   !important is required to beat Shiki's inline style specificity. */
+.shiki,
+.shiki span {
+  color: var(--shiki-light) !important;
+  background-color: var(--shiki-light-bg) !important;
+  font-style: var(--shiki-light-font-style) !important;
+  font-weight: var(--shiki-light-font-weight) !important;
+  text-decoration: var(--shiki-light-text-decoration) !important;
+}
+
+.dark .shiki,
+.dark .shiki span {
+  color: var(--shiki-dark) !important;
+  background-color: var(--shiki-dark-bg) !important;
+  font-style: var(--shiki-dark-font-style) !important;
+  font-weight: var(--shiki-dark-font-weight) !important;
+  text-decoration: var(--shiki-dark-text-decoration) !important;
+}
+
+/* ── Code blocks: server-highlighted Shiki + client-added copy button ──────────
+   renderArticle wraps nothing; the client `ArticleBody` wraps each pre.shiki in
+   .code-wrap and appends .code-copy. */
+.code-wrap {
+  position: relative;
+  margin: 1rem 0;
+}
+.code-wrap pre.shiki,
+.code-wrap pre.shiki code {
+  margin: 0;
+  font-family: var(--font-mono, ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace);
+}
+.code-wrap pre.shiki {
+  border-radius: 0.5rem;
+  border: 1px solid var(--border);
+  padding: 1rem 1.25rem;
+  overflow-x: auto;
+  font-size: 0.85em;
+  line-height: 1.6;
+}
+.code-copy {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  padding: 0.2rem 0.5rem;
+  font-size: 0.7rem;
+  font-weight: 500;
+  border-radius: 0.375rem;
+  border: 1px solid var(--border);
+  background: var(--background);
+  color: var(--muted-foreground);
+  opacity: 0;
+  cursor: pointer;
+  transition:
+    opacity 0.15s,
+    color 0.15s;
+}
+.code-wrap:hover .code-copy,
+.code-copy:focus-visible {
+  opacity: 1;
+}
+.code-copy:hover {
+  color: var(--foreground);
+}
+
+/* ── Prose typography overrides (theme-aware via OKLCH tokens) ────────────── */
+.prose {
+  --tw-prose-body: var(--foreground);
+  --tw-prose-headings: var(--foreground);
+  --tw-prose-lead: var(--muted-foreground);
+  --tw-prose-links: var(--primary);
+  --tw-prose-bold: var(--foreground);
+  --tw-prose-counters: var(--muted-foreground);
+  --tw-prose-bullets: var(--border);
+  --tw-prose-hr: var(--border);
+  --tw-prose-quotes: var(--foreground);
+  --tw-prose-quote-borders: var(--border);
+  --tw-prose-captions: var(--muted-foreground);
+  --tw-prose-code: var(--foreground);
+  --tw-prose-th-borders: var(--border);
+  --tw-prose-td-borders: var(--border);
+  font-family: var(--font-sans, ui-sans-serif, system-ui, sans-serif);
+}
+/* Prose headings follow the theme's heading font too. */
+.prose :where(h1, h2, h3, h4, h5, h6) {
+  font-family: var(--font-heading, var(--font-sans, inherit));
+}
+
+/* Inline <code> (not inside a fenced block): subtle muted pill */
+.prose :where(code):not(pre code) {
+  background-color: var(--muted);
+  color: var(--foreground);
+  padding: 0.15em 0.4em;
+  border-radius: 0.3rem;
+  font-size: 0.85em;
+  font-weight: 500;
+  font-family: var(--font-mono, ui-monospace, 'SFMono-Regular', Menlo, monospace);
+  border: 1px solid var(--border);
+}
+.prose :where(code):not(pre code)::before,
+.prose :where(code):not(pre code)::after {
+  content: none;
+}
+
+/* Prose fallback for any bare <pre> not wrapped in .code-wrap */
+.prose :where(pre) {
+  border-radius: 0.5rem;
+  padding: 1rem 1.25rem;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  font-size: 0.85em;
+  line-height: 1.6;
+}
+.prose :where(pre) code {
+  background: transparent;
+  border: none;
+  padding: 0;
+  font-weight: inherit;
+  color: inherit;
+  font-size: inherit;
+}
+
+/* Keep the center content lane fixed when the sidebar is toggled. shadcn shrinks
+   the in-flow "sidebar-gap" to 0 on collapse, which resizes the inset and shifts
+   the content. Pin the gap to the sidebar width so a collapsed sidebar just
+   leaves an empty gutter in its place — the content never moves. */
+[data-slot='sidebar-gap'] {
+  width: var(--sidebar-width) !important;
+}
+
+/* The top bar spans the full width; the fixed sidebar rail starts below it. */
+[data-slot='sidebar-container'] {
+  top: var(--nav-h);
+  height: calc(100svh - var(--nav-h));
+}
+
+/* Sidebar blends with the page — use the page background, not a distinct surface
+   color. Covers the desktop rail and the mobile sheet (both carry
+   data-sidebar="sidebar"). Hover/active states still use the sidebar accent. */
+[data-sidebar='sidebar'] {
+  background-color: var(--background);
+}
+
+/* Keep content inside the right edge: break long tokens/URLs, and let wide
+   tables scroll horizontally instead of pushing the page out. `max-width: none`
+   removes the typography plugin's default 65ch cap so prose fills its column. */
+.prose {
+  max-width: none;
+  overflow-wrap: break-word;
+}
+.prose :where(table) {
+  display: block;
+  width: 100%;
+  overflow-x: auto;
+}

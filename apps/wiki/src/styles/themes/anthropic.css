@@ -1,0 +1,60 @@
+/* Anthropic — warm "research publication on parchment": ivory (#faf9f5) canvas,
+   warm near-black slate text (#141413), single clay/terracotta accent (#d97757),
+   serif display headings. Brand fonts Styrene + Tiempos are proprietary; substituted
+   with Source Serif 4 (serif) + Inter/Figtree (sans). Serif headings: YES. */
+.theme-anthropic {
+  --background: oklch(0.985 0.005 95); /* #faf9f5 ivory */
+  --foreground: oklch(0.235 0.006 75); /* #141413 warm near-black */
+  --card: oklch(0.995 0.004 95);
+  --card-foreground: oklch(0.235 0.006 75);
+  --popover: oklch(0.995 0.004 95);
+  --popover-foreground: oklch(0.235 0.006 75);
+  --primary: oklch(0.64 0.12 43); /* clay #d97757 */
+  --primary-foreground: oklch(0.985 0.005 95);
+  --secondary: oklch(0.945 0.008 90); /* oat #f0eee6 */
+  --secondary-foreground: oklch(0.3 0.006 75);
+  --muted: oklch(0.925 0.01 90); /* light oat #e8e6dc */
+  --muted-foreground: oklch(0.5 0.01 80);
+  --accent: oklch(0.925 0.01 90);
+  --accent-foreground: oklch(0.3 0.006 75);
+  --destructive: oklch(0.577 0.245 27.325);
+  --destructive-foreground: oklch(0.985 0.005 95);
+  --border: oklch(0.915 0.008 88); /* light, thin hairline (Anthropic uses faint rules) */
+  --input: oklch(0.905 0.008 88);
+  --ring: oklch(0.64 0.12 43);
+  --sidebar: oklch(0.965 0.007 92);
+  --sidebar-foreground: oklch(0.235 0.006 75);
+  --sidebar-accent: oklch(0.925 0.01 90);
+  --sidebar-accent-foreground: oklch(0.3 0.006 75);
+  --radius: 0.5rem;
+  --font-sans: 'Inter', 'Figtree', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-serif: 'Source Serif 4', 'Newsreader', Georgia, Cambria, 'Times New Roman', serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+  --font-heading: var(--font-serif); /* serif display headings */
+}
+
+.theme-anthropic.dark {
+  --background: oklch(0.205 0.006 75); /* warm slate #141413 */
+  --foreground: oklch(0.945 0.006 92); /* ivory text */
+  --card: oklch(0.245 0.006 75);
+  --card-foreground: oklch(0.945 0.006 92);
+  --popover: oklch(0.245 0.006 75);
+  --popover-foreground: oklch(0.945 0.006 92);
+  --primary: oklch(0.68 0.12 45); /* clay, brightened for dark */
+  --primary-foreground: oklch(0.205 0.006 75);
+  --secondary: oklch(0.285 0.008 78);
+  --secondary-foreground: oklch(0.945 0.006 92);
+  --muted: oklch(0.285 0.008 78);
+  --muted-foreground: oklch(0.7 0.01 85);
+  --accent: oklch(0.32 0.01 80);
+  --accent-foreground: oklch(0.945 0.006 92);
+  --destructive: oklch(0.704 0.191 22.216);
+  --destructive-foreground: oklch(0.985 0.005 95);
+  --border: oklch(1 0 0 / 8%); /* fainter hairline in dark */
+  --input: oklch(1 0 0 / 11%);
+  --ring: oklch(0.68 0.12 45);
+  --sidebar: oklch(0.235 0.006 75);
+  --sidebar-foreground: oklch(0.945 0.006 92);
+  --sidebar-accent: oklch(0.32 0.01 80);
+  --sidebar-accent-foreground: oklch(0.945 0.006 92);
+}

@@ -29,6 +29,9 @@ build/
 out/
 target/
 bin/
+# ...but keep the diffwiki-app server launcher under apps/wiki/bin/
+!apps/wiki/bin/
+!apps/wiki/bin/**
 obj/
 node_modules/
 bower_components/
@@ -128,3 +131,6 @@ test-results/
 
 # Codevoyant style guide learning data (personal observations)
 .codevoyant/
+
+# TanStack Router generated file
+apps/wiki/src/routeTree.gen.ts

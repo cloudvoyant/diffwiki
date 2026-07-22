@@ -1,6 +1,7 @@
 import eslint from '@eslint/js';
 import tseslint from 'typescript-eslint';
 import globals from 'globals';
+import reactHooks from 'eslint-plugin-react-hooks';
 
 export default tseslint.config(
   eslint.configs.recommended,
@@ -12,7 +13,28 @@ export default tseslint.config(
       },
     },
   },
+  // React app (apps/wiki) — browser globals + react-hooks rules
   {
-    ignores: ['**/dist/', '**/node_modules/'],
+    files: ['apps/**/*.{ts,tsx}'],
+    plugins: {
+      'react-hooks': reactHooks,
+    },
+    languageOptions: {
+      globals: {
+        ...globals.browser,
+      },
+    },
+    rules: {
+      ...reactHooks.configs.recommended.rules,
+    },
+  },
+  {
+    ignores: [
+      '**/dist/',
+      '**/node_modules/',
+      '**/.tanstack/',
+      '**/.output/',
+      '**/routeTree.gen.ts',
+    ],
   },
 );

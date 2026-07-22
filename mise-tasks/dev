@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+#MISE description="Start the diffwiki wiki app dev server"
+set -euo pipefail
+source "${MISE_PROJECT_ROOT:-$PWD}/mise-tasks/utils"
+cd "${MISE_PROJECT_ROOT:-$PWD}"
+
+# The app resolves the diffwiki-core workspace dep to its built dist/, so build
+# it first. Without this, a fresh checkout or a `mise run clean` (which removes
+# packages/*/dist) leaves core unbuilt and vite fails with
+# "diffwiki-core ... could not be resolved".
+pnpm --filter diffwiki-core build
+
+pnpm --filter "diffwiki-app" dev
