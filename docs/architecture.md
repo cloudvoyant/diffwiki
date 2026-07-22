@@ -41,6 +41,8 @@ state logic synchronously testable.
 
 ## Search & Plugins
 
+> **See also:** [docs/plugins.md](plugins.md) — plugin protocol, lifecycle, dependency resolution, and authoring guide. [docs/search.md](search.md) — engine routing, native BM25, qmd keyword/semantic/hybrid, ripgrep, and the web search route.
+
 Search has two layers, both reached through `query(term, opts)` in `query.ts`:
 
 - **Native BM25 engine** — a zero-dependency, cross-platform full-text search built into
