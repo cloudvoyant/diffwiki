@@ -1,15 +1,23 @@
+/**
+ * Plugin lifecycle management.
+ *
+ * Handles installing (from npm), registering (from an existing binary),
+ * removing, and listing plugins. Installation and registration both run
+ * a `describe` op to validate the plugin and cache its capabilities in
+ * the registry, then a best-effort `setup` op to provision the plugin.
+ *
+ * @module
+ */
+
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
 import { pluginsDir } from '../paths';
 import { PluginError } from '../errors';
 import { listCollections } from '../collections';
 import { deregisterPlugin, readPluginRegistry, upsertPlugin } from './registry';
-import { loadSearchProvider } from './loader';
-import type { PluginRecord, SearchProvider } from '../types';
-
-const run = promisify(execFile);
+import { invokePlugin, LONG_TIMEOUT_MS } from './invoke';
+import type { PluginCapabilities, PluginRecord } from '../types';
+import { runProcess } from '../plugin';
 
 interface PackageManifest {
   name?: string;
@@ -96,35 +104,44 @@ async function discoverSearchPackage(dir: string): Promise<DiscoveredPackage | n
   return null;
 }
 
-/** Close a provider without letting a close failure escape. */
-async function bestEffortClose(provider: SearchProvider | null): Promise<void> {
-  try {
-    await provider?.close();
-  } catch {
-    /* swallow */
-  }
+/** Run a one-shot `describe` op to validate the plugin and return its capabilities. */
+async function describePlugin(command: string[]): Promise<{
+  name: string;
+  kind: string;
+  version?: string;
+  capabilities: PluginCapabilities;
+}> {
+  return invokePlugin<{
+    name: string;
+    kind: string;
+    version?: string;
+    capabilities: PluginCapabilities;
+  }>(command, 'describe', {});
 }
 
-/** Run a plugin's `setup` op end-to-end, best-effort, always closing the provider. */
-async function runSetup(name: string, prefetchModels: boolean): Promise<void> {
-  let provider: SearchProvider | null = null;
+/** Run a plugin's `setup` op end-to-end, best-effort. */
+async function runSetup(command: string[]): Promise<void> {
   try {
-    provider = await loadSearchProvider(name);
-    if (provider) {
-      await provider.setup(await listCollections(), { embed: false, prefetchModels });
-    }
+    const collections = await listCollections();
+    await invokePlugin(
+      command,
+      'setup',
+      {
+        collections: collections.map((c) => ({ name: c.name, path: c.path })),
+        embed: false,
+        prefetchModels: false,
+      },
+      { timeoutMs: LONG_TIMEOUT_MS },
+    );
   } catch {
     /* setup is best-effort; doctor reports readiness problems later */
-  } finally {
-    await bestEffortClose(provider);
   }
 }
 
 /**
  * Install an npm spec into the managed root, register the discovered search bin,
- * then (unless opts.setup === false) run the plugin's end-to-end `setup` so the
- * user lands on a warm, working search. A setup failure does not unwind the
- * install -- the record is saved and `doctor` surfaces the problem later.
+ * run a `describe` to validate and cache capabilities, then (unless `opts.setup
+ * === false`) run the plugin's `setup` op so the user lands on a working search.
  */
 export async function installPlugin(
   spec: string,
@@ -132,7 +149,7 @@ export async function installPlugin(
 ): Promise<PluginRecord> {
   const dir = await ensurePluginRoot();
   try {
-    await run('npm', ['install', spec, '--prefix', dir]);
+    await runProcess('npm', ['install', spec, '--prefix', dir]);
   } catch (err) {
     throw new PluginError(`npm install ${spec} failed: ${(err as Error).message}`);
   }
@@ -142,42 +159,70 @@ export async function installPlugin(
       `no diffwiki search plugin found in "${spec}" (need package.json diffwiki.kind === "search" + bin)`,
     );
   }
+
+  const command = ['node', discovered.binAbs];
+
+  // Validate via describe and cache capabilities.
+  let capabilities: PluginCapabilities;
+  try {
+    const desc = await describePlugin(command);
+    if (desc.kind !== 'search') {
+      throw new PluginError(`plugin "${discovered.name}" reported kind "${desc.kind}", expected "search"`);
+    }
+    capabilities = desc.capabilities;
+  } catch (err) {
+    if (err instanceof PluginError) throw err;
+    throw new PluginError(`plugin "${discovered.name}" failed describe: ${(err as Error).message}`);
+  }
+
   const record: PluginRecord = {
     name: discovered.name,
     kind: 'search',
-    command: ['node', discovered.binAbs],
+    command,
     version: discovered.version,
+    capabilities,
     enabled: true,
     managed: true,
   };
   await upsertPlugin(record);
+
   if (opts?.setup !== false) {
-    await runSetup(record.name, !!opts?.prefetchModels);
+    await runSetup(command);
   }
   return record;
 }
 
 /**
- * Register an already-present executable as a search plugin. Validates by spawning
- * it (handshake + capability check) and runs its `setup` best-effort.
+ * Register an existing executable as a search plugin. Validates by running
+ * `describe`, caches capabilities, then runs `setup` best-effort.
  */
 export async function registerPlugin(name: string, command: string[]): Promise<PluginRecord> {
   if (command.length === 0) throw new PluginError(`register "${name}": --command must not be empty`);
-  const record: PluginRecord = { name, kind: 'search', command, enabled: true, managed: false };
-  await upsertPlugin(record);
-  const provider = await loadSearchProvider(name);
-  if (!provider) {
-    await deregisterPlugin(name);
-    throw new PluginError(`plugin "${name}" did not spawn as a search plugin (command: ${command.join(' ')})`);
-  }
-  // kind check already passed during spawnPluginClient handshake
+
+  // Validate via describe.
+  let capabilities: PluginCapabilities;
   try {
-    await provider.setup(await listCollections(), { embed: false, prefetchModels: false });
-  } catch {
-    /* setup is best-effort; doctor reports readiness problems later */
-  } finally {
-    await bestEffortClose(provider);
+    const desc = await describePlugin(command);
+    if (desc.kind !== 'search') {
+      throw new PluginError(`plugin "${name}" reported kind "${desc.kind}", expected "search"`);
+    }
+    capabilities = desc.capabilities;
+  } catch (err) {
+    if (err instanceof PluginError) throw err;
+    throw new PluginError(`plugin "${name}" did not respond to describe (command: ${command.join(' ')})`);
   }
+
+  const record: PluginRecord = {
+    name,
+    kind: 'search',
+    command,
+    capabilities,
+    enabled: true,
+    managed: false,
+  };
+  await upsertPlugin(record);
+
+  await runSetup(command);
   return record;
 }
 
@@ -188,7 +233,7 @@ export async function removePlugin(name: string): Promise<void> {
   if (record.managed) {
     const dir = await ensurePluginRoot();
     try {
-      await run('npm', ['uninstall', name, '--prefix', dir]);
+      await runProcess('npm', ['uninstall', name, '--prefix', dir]);
     } catch {
       /* proceed to deregister even if npm uninstall complains */
     }
@@ -196,25 +241,22 @@ export async function removePlugin(name: string): Promise<void> {
   await deregisterPlugin(name);
 }
 
-/** Attempt to spawn a plugin and report whether it answered the handshake. */
-async function probeSpawnable(name: string): Promise<boolean> {
-  let provider: SearchProvider | null = null;
+/** Attempt a one-shot `describe` to check if the plugin responds. */
+async function probeDescribable(command: string[]): Promise<boolean> {
   try {
-    provider = await loadSearchProvider(name);
-    return provider !== null;
+    await describePlugin(command);
+    return true;
   } catch {
     return false;
-  } finally {
-    await bestEffortClose(provider);
   }
 }
 
-/** List every registered plugin, marking whether it currently spawns + handshakes. */
+/** List every registered plugin, marking whether it currently responds to `describe`. */
 export async function listPlugins(): Promise<Array<PluginRecord & { spawnable: boolean }>> {
   const registry = await readPluginRegistry();
   const out: Array<PluginRecord & { spawnable: boolean }> = [];
   for (const record of registry.plugins) {
-    const spawnable = record.enabled ? await probeSpawnable(record.name) : false;
+    const spawnable = record.enabled ? await probeDescribable(record.command) : false;
     out.push({ ...record, spawnable });
   }
   return out;

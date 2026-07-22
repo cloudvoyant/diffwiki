@@ -1,3 +1,13 @@
+/**
+ * Diagnostics and health checks.
+ *
+ * `doctor()` inspects the diffwiki home directory, registry, collections,
+ * config, and every registered plugin to produce a list of human-readable
+ * diagnostics at ok/warn/error severity levels.
+ *
+ * @module
+ */
+
 import fs from 'node:fs/promises';
 import { registryPath, resolveHome } from './paths';
 import { readRegistry } from './registry';
@@ -6,7 +16,7 @@ import { listCollections } from './collections';
 import { listPlugins } from './plugins/manager';
 import { loadSearchProvider } from './plugins/loader';
 import { NATIVE_ENGINE } from './types';
-import type { Config, Diagnostic, PluginHealth, SearchProvider } from './types';
+import type { Config, Diagnostic, PluginHealth } from './types';
 
 async function exists(target: string): Promise<boolean> {
   try {
@@ -17,6 +27,7 @@ async function exists(target: string): Promise<boolean> {
   }
 }
 
+/** Run all diagnostics and return the results. */
 export async function doctor(): Promise<Diagnostic[]> {
   const out: Diagnostic[] = [];
   const home = resolveHome();
@@ -118,9 +129,8 @@ async function appendPluginDiagnostics(out: Diagnostic[], config: Config): Promi
       continue;
     }
     out.push({ level: 'ok', message: `plugin "${p.name}" enabled and spawnable` });
-    let provider: SearchProvider | null = null;
     try {
-      provider = await loadSearchProvider(p.name);
+      const provider = await loadSearchProvider(p.name);
       if (!provider) {
         out.push({ level: 'error', message: `plugin "${p.name}" failed to load for a health check` });
         continue;
@@ -130,12 +140,6 @@ async function appendPluginDiagnostics(out: Diagnostic[], config: Config): Promi
       out.push(readinessLine(p.name, health));
     } catch (err) {
       out.push({ level: 'error', message: `plugin "${p.name}" health check failed: ${(err as Error).message}` });
-    } finally {
-      try {
-        await provider?.close();
-      } catch {
-        /* swallow */
-      }
     }
   }
 

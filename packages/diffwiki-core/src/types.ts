@@ -95,15 +95,14 @@ export interface PluginRegistryFile {
   version: number;
   plugins: PluginRecord[];
 }
+/** Capabilities a plugin advertises via the `describe` op, cached in the registry. */
 export interface PluginCapabilities {
+  /** Search types the plugin supports (e.g. `['keyword', 'semantic', 'hybrid']`). */
   searchTypes: string[];
+  /** Whether the plugin supports filtering results by collection. */
   collectionFilter: boolean;
   /** Whether the plugin handles lifecycle events (article/collection mutations). */
   events: boolean;
-  /** @deprecated Use `events` instead. Kept for wire-format backward compatibility during migration. */
-  hooks?: boolean;
-  /** Whether the plugin supports the `setup` op. */
-  setup?: boolean;
 }
 export interface PluginReadiness {
   toolInstalled: boolean;
@@ -125,21 +124,26 @@ export interface SearchMode {
 }
 export type PluginEvent =
   'collection-added' | 'collection-removed' | 'article-created' | 'article-updated' | 'article-removed';
+/**
+ * Host-side facade for a search plugin. Each method is backed by a one-shot
+ * subprocess invocation -- there is no persistent process and no `close()`.
+ */
 export interface SearchProvider {
+  /** Plugin name. */
   name: string;
+  /** Plugin capabilities (cached from the `describe` op). */
   capabilities: PluginCapabilities;
-  setup(
-    collections: CollectionEntry[],
-    opts?: { embed?: boolean; prefetchModels?: boolean },
-  ): Promise<{ ready: boolean }>;
+  /** Run a search query and return hits with absolute paths. */
+  handleSearch(term: string, collections: CollectionEntry[], opts?: QueryOptions): Promise<QueryHit[]>;
+  /** Rebuild the search index. Returns the number of documents indexed. */
   reindex(collections: CollectionEntry[], opts?: { embed?: boolean }): Promise<number>;
-  search(term: string, collections: CollectionEntry[], opts?: QueryOptions): Promise<QueryHit[]>;
-  notify(
+  /** Emit a lifecycle event to the plugin (best-effort). */
+  emitEvent(
     event: PluginEvent,
     collection: string,
     relPath: string | undefined,
     collections: CollectionEntry[],
   ): Promise<void>;
+  /** Check plugin health and readiness. */
   health(collections: CollectionEntry[]): Promise<PluginHealth>;
-  close(): Promise<void>;
 }

@@ -1,3 +1,15 @@
+/**
+ * Search query routing.
+ *
+ * `query()` is the primary search entry point. It resolves the search engine
+ * (explicit opt, config default, first enabled plugin, or native BM25), runs
+ * the search, and falls back to native on plugin failure. The built-in native
+ * search is a zero-dependency BM25-ranked full-text search across title, body,
+ * tags, and collection name.
+ *
+ * @module
+ */
+
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import type { Dirent } from 'node:fs';
@@ -5,7 +17,7 @@ import { listCollections } from './collections';
 import { parseArticle } from './frontmatter';
 import { readConfig } from './config';
 import { CollectionNotFoundError } from './errors';
-import { loadSearchProvider, listSearchModes } from './plugins/loader';
+import { loadSearchProvider } from './plugins/loader';
 import { listEnabledPlugins } from './plugins/registry';
 import { NATIVE_ENGINE } from './types';
 import type { CollectionEntry, QueryHit, QueryOptions } from './types';
@@ -123,9 +135,6 @@ export async function nativeSearch(
   const docs: DocEntry[] = [];
   for (const entry of targets) {
     for (const full of await collectMarkdownFiles(entry.path)) {
-      // A single unreadable file or malformed frontmatter (e.g. an unquoted
-      // colon in the title, which the strict YAML engine rejects) must never
-      // fail the whole search -- degrade that file to its filename and keep going.
       const fallbackTitle = path.basename(full).replace(/\.mdx?$/, '');
       let title = fallbackTitle;
       let tags: string[] = [];
@@ -173,8 +182,6 @@ export async function nativeSearch(
     }));
   }
 
-  // Precompute a per-doc Set of all tokens once so docFreq membership is O(1)
-  // instead of rebuilding + scanning the concatenated token array per query term.
   const docTokenSets = docs.map(
     (doc) => new Set<string>([...doc.fields.title, ...doc.fields.tags, ...doc.fields.collection, ...doc.fields.body]),
   );
@@ -187,7 +194,6 @@ export async function nativeSearch(
     for (const tokenSet of docTokenSets) {
       if (tokenSet.has(qt)) docFreq++;
     }
-    // Standard BM25 IDF: ln((N - docFreq + 0.5) / (docFreq + 0.5) + 1)
     idf.set(qt, Math.log((N - docFreq + 0.5) / (docFreq + 0.5) + 1));
   }
 
@@ -242,11 +248,7 @@ async function resolveDefaultEngine(): Promise<string> {
 
 /**
  * Resolve the engine + type that `query()` would use when the caller passes no
- * explicit engine/type. Mirrors `resolveDefaultEngine`'s precedence and, when the
- * resolved engine is a plugin, prefers the type from `config.defaultSearch`'s
- * `:type` suffix (if that plugin advertises it) else the plugin's first advertised
- * search type. The native engine always resolves to `basic`. UIs use this to
- * pre-select the search-mode dropdown to the engine actually run server-side.
+ * explicit engine/type. Reads cached capabilities from the registry -- no spawn.
  */
 export async function resolveDefaultSearchMode(): Promise<{ engine: string; type: string }> {
   const config = await readConfig();
@@ -260,15 +262,23 @@ export async function resolveDefaultSearchMode(): Promise<{ engine: string; type
 
   if (engine === NATIVE_ENGINE) return { engine, type: 'basic' };
 
-  const modes = await listSearchModes();
-  const engineModes = modes.filter((m) => m.plugin === engine);
-  if (engineModes.length === 0) return { engine: NATIVE_ENGINE, type: 'basic' };
-  if (configuredType && engineModes.some((m) => m.type === configuredType)) {
+  // Read capabilities from the registry instead of spawning.
+  const record = enabled.find((p) => p.name === engine);
+  const searchTypes = record?.capabilities?.searchTypes ?? [];
+  if (searchTypes.length === 0) return { engine: NATIVE_ENGINE, type: 'basic' };
+
+  if (configuredType && searchTypes.includes(configuredType)) {
     return { engine, type: configuredType };
   }
-  return { engine, type: engineModes[0].type };
+  return { engine, type: searchTypes[0] };
 }
 
+/**
+ * Search articles via the resolved search engine (native fallback on plugin failure).
+ *
+ * Routing precedence: explicit `opts.engine` -> `config.defaultSearch` ->
+ * first enabled plugin -> native BM25.
+ */
 export async function query(term: string, opts?: QueryOptions): Promise<QueryHit[]> {
   const collections = await listCollections();
   const engine = opts?.engine ?? (await resolveDefaultEngine());
@@ -276,10 +286,8 @@ export async function query(term: string, opts?: QueryOptions): Promise<QueryHit
   const provider = await loadSearchProvider(engine);
   if (!provider) return nativeSearch(term, collections, opts?.collection);
   try {
-    return await provider.search(term, collections, opts);
+    return await provider.handleSearch(term, collections, opts);
   } catch {
     return nativeSearch(term, collections, opts?.collection);
-  } finally {
-    await provider.close();
   }
 }

@@ -1,26 +1,46 @@
-import { loadSearchProvider } from './loader';
+/**
+ * Plugin lifecycle event emission.
+ *
+ * Fires a lifecycle event at the active search plugin -- best-effort and
+ * non-blocking. diffwiki emits events on every content mutation (article
+ * create/update/remove, collection add/remove). A plugin's `onEvent`
+ * handler can self-manage in response (e.g. incremental reindex).
+ *
+ * Events are an optimisation, not the correctness path: the mtime-staleness
+ * lazy reindex on `search` remains the guarantee, so a dropped event only
+ * costs a later lazy rebuild, never wrong results.
+ *
+ * @module
+ */
+
 import { listCollections } from '../collections';
+import { findEnabledPlugin } from './registry';
+import { invokePlugin } from './invoke';
 import type { PluginEvent } from '../types';
 
 /**
- * Fire a lifecycle hook at the active search plugin -- best-effort and
- * non-blocking. Callers invoke this as `void emitPluginEvent(...)` and never
- * await it, so a slow or absent plugin can neither stall nor fail a content
- * mutation. Every error is swallowed; the lazy mtime-staleness reindex on
- * `search` remains the correctness guarantee, so a dropped hook only costs a
- * later lazy rebuild, never wrong results.
+ * Emit a lifecycle event to the active search plugin.
+ *
+ * This function is designed to be called fire-and-forget: `void emitPluginEvent(...)`.
+ * It only invokes the plugin when the plugin has `capabilities.events === true`.
+ * Every error is swallowed -- a slow or absent plugin can neither stall nor
+ * fail a content mutation.
  */
 export async function emitPluginEvent(event: PluginEvent, collection: string, relPath?: string): Promise<void> {
   try {
-    const provider = await loadSearchProvider();
-    try {
-      if (provider?.capabilities.hooks) {
-        await provider.notify(event, collection, relPath, await listCollections());
-      }
-    } finally {
-      await provider?.close();
-    }
+    const record = await findEnabledPlugin('search');
+    if (!record) return;
+    if (!record.capabilities?.events) return;
+
+    const collections = await listCollections();
+    const entry = collections.find((c) => c.name === collection);
+    await invokePlugin(record.command, 'event', {
+      event,
+      collection: entry ? { name: entry.name, path: entry.path } : { name: collection, path: '' },
+      relPath,
+      collections: collections.map((c) => ({ name: c.name, path: c.path })),
+    });
   } catch {
-    /* swallow -- hooks are an optimisation, never the correctness path */
+    /* swallow -- events are an optimisation, never the correctness path */
   }
 }

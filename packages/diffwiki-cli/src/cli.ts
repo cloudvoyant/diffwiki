@@ -139,12 +139,8 @@ export function createProgram(): Command {
           );
           return;
         }
-        try {
-          const indexed = await provider.reindex(await listCollections(), { embed: !!opts.embed });
-          console.log(`Indexed ${indexed} document(s).`);
-        } finally {
-          await provider.close();
-        }
+        const indexed = await provider.reindex(await listCollections(), { embed: !!opts.embed });
+        console.log(`Indexed ${indexed} document(s).`);
       }),
     );
 

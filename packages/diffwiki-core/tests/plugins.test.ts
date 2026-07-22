@@ -19,77 +19,59 @@ let scratch: string[];
 
 /**
  * A minimal but real protocol plugin, written to disk and spawned as `node <file>`.
- * It speaks newline-delimited JSON over stdio: one response line per request id.
+ * It speaks the one-shot JSON-over-stdio protocol: read one JSON request from
+ * stdin, write one JSON response to stdout, then exit.
  */
 const FAKE_PLUGIN = `
 let buffer = '';
 process.stdin.setEncoding('utf8');
 process.stdin.on('data', (chunk) => {
   buffer += chunk;
-  let i = buffer.indexOf('\\n');
-  while (i >= 0) {
-    const line = buffer.slice(0, i);
-    buffer = buffer.slice(i + 1);
-    if (line.trim()) handle(JSON.parse(line));
-    i = buffer.indexOf('\\n');
-  }
 });
-
-function send(obj) {
-  process.stdout.write(JSON.stringify(obj) + '\\n');
-}
-
-function handle(req) {
-  const { id, op, params } = req;
-  if (op === 'initialize') {
-    send({
-      id,
-      ok: true,
-      result: {
-        name: 'stub-plugin',
-        kind: 'search',
-        version: '0.0.0',
-        capabilities: { searchTypes: ['stub'], collectionFilter: true, hooks: false, setup: true },
-      },
-    });
+process.stdin.on('end', () => {
+  const line = buffer.trim();
+  if (!line) { process.exit(1); return; }
+  const req = JSON.parse(line);
+  const { op, params } = req;
+  let result;
+  if (op === 'describe') {
+    result = {
+      name: 'stub-plugin',
+      kind: 'search',
+      version: '0.0.0',
+      capabilities: { searchTypes: ['stub'], collectionFilter: true, events: false },
+    };
   } else if (op === 'search') {
     const first = (params.collections || [])[0];
     const collection = first ? first.name : 'unknown';
-    send({
-      id,
-      ok: true,
-      result: { hits: [{ collection, relPath: 'a.md', title: 'Alpha', tags: [] }] },
-    });
+    result = { hits: [{ collection, relPath: 'a.md', title: 'Alpha', tags: [] }] };
   } else if (op === 'health') {
-    send({
-      id,
-      ok: true,
-      result: {
-        ready: true,
-        readiness: {
-          toolInstalled: true,
-          modelsPresent: true,
-          indexBuilt: true,
-          docsIndexed: 1,
-          embeddingsPending: 0,
-          firstSearchCost: 'instant',
-        },
-        diagnostics: [{ level: 'ok', message: 'stub ready' }],
+    result = {
+      ready: true,
+      readiness: {
+        toolInstalled: true,
+        modelsPresent: true,
+        indexBuilt: true,
+        docsIndexed: 1,
+        embeddingsPending: 0,
+        firstSearchCost: 'instant',
       },
-    });
+      diagnostics: [{ level: 'ok', message: 'stub ready' }],
+    };
   } else if (op === 'setup') {
-    send({ id, ok: true, result: { ready: true, steps: [] } });
+    result = { ready: true, steps: [] };
   } else if (op === 'index') {
-    send({ id, ok: true, result: { indexed: 0 } });
-  } else if (op === 'notify') {
-    send({ id, ok: true, result: { accepted: true } });
-  } else if (op === 'shutdown') {
-    send({ id, ok: true, result: {} });
-    process.exit(0);
+    result = { indexed: 0 };
+  } else if (op === 'event') {
+    result = { accepted: true };
   } else {
-    send({ id, ok: false, error: { message: 'unknown op: ' + op } });
+    process.stdout.write(JSON.stringify({ ok: false, error: { message: 'unknown op: ' + op } }) + '\\n');
+    process.exit(1);
+    return;
   }
-}
+  process.stdout.write(JSON.stringify({ ok: true, result }) + '\\n');
+  process.exit(0);
+});
 `;
 
 async function writeFakePlugin(): Promise<string> {
@@ -106,6 +88,7 @@ async function registerStubPlugin(): Promise<void> {
     name: 'stub-plugin',
     kind: 'search',
     command: [process.execPath, file],
+    capabilities: { searchTypes: ['stub'], collectionFilter: true, events: false },
     enabled: true,
     managed: false,
   });
@@ -132,17 +115,13 @@ describe('protocol client + loader', () => {
 
     const provider = await loadSearchProvider('stub-plugin');
     expect(provider).not.toBeNull();
-    try {
-      expect(provider!.name).toBe('stub-plugin');
-      expect(provider!.capabilities.searchTypes).toEqual(['stub']);
-      const hits = await provider!.search('anything', [entry], {});
-      expect(hits).toHaveLength(1);
-      expect(hits[0].collection).toBe('notes');
-      expect(hits[0].title).toBe('Alpha');
-      expect(hits[0].path).toBe(path.join(entry.path, 'a.md'));
-    } finally {
-      await provider!.close();
-    }
+    expect(provider!.name).toBe('stub-plugin');
+    expect(provider!.capabilities.searchTypes).toEqual(['stub']);
+    const hits = await provider!.handleSearch('anything', [entry], {});
+    expect(hits).toHaveLength(1);
+    expect(hits[0].collection).toBe('notes');
+    expect(hits[0].title).toBe('Alpha');
+    expect(hits[0].path).toBe(path.join(entry.path, 'a.md'));
   });
 
   it('lists native FIRST, then the plugin modes', async () => {

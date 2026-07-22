@@ -1,3 +1,12 @@
+/**
+ * Known plugin catalog.
+ *
+ * A built-in directory of official diffwiki plugins that users can install.
+ * This is discovery only -- installing goes through `installPlugin(spec)`.
+ *
+ * @module
+ */
+
 import type { PluginKind } from '../types';
 
 /**
@@ -32,7 +41,7 @@ export const KNOWN_PLUGINS: readonly KnownPlugin[] = [
   },
 ];
 
-/** The known/official plugins available to install. */
+/** Return a copy of the known/official plugins available to install. */
 export function listAvailablePlugins(): KnownPlugin[] {
   return [...KNOWN_PLUGINS];
 }
