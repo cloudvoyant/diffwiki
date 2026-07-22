@@ -1,20 +1,13 @@
 @import 'tailwindcss';
 @plugin '@tailwindcss/typography';
 @import 'tw-animate-css';
-/* All diffbook themes, one file per theme (each defines .theme-{name} light +
-   .theme-{name}.dark). Generated barrel — see the "Port all diffbook themes" task.
-   @import must precede other rules, so it lives here at the top; theme classes win
-   by specificity regardless of source order. */
+/* Diffbook theme barrel — @import must precede other rules; specificity handles ordering. */
 @import './styles/themes/index.css';
 
-/* Class-driven dark mode — .dark on <html> activates the dark variant.
-   &:is(.dark *) matches every element that is a descendant of .dark. */
+/* Class-driven dark mode: .dark on <html> activates the dark variant. */
 @custom-variant dark (&:is(.dark *));
 
-/* Bind swappable OKLCH tokens to Tailwind v4 utility variables.
-   `inline` means Tailwind emits var(--background) into utilities rather than
-   a fixed value, so reassigning --background under a .dark or .theme-* class
-   cascades to all utilities with no rebuild. */
+/* Bind OKLCH tokens to Tailwind v4 utilities (`inline` → var() references cascade on theme switch). */
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -54,12 +47,8 @@
 }
 
 /* ── Default theme (shadcn Neutral OKLCH) ──────────────────────────────────
-   Applied to :root (no theme class) AND to .theme-default for explicit
-   selection parity — matches diffbook/themes/default.css exactly.
-   Wrapped in :where() so it has ZERO specificity: an explicit light theme class
-   (.theme-x, specificity 0,1,0) must win over this base. Without it, a light
-   theme ties :root and loses on source order (only .dark variants, 0,2,0, won),
-   so every light theme rendered with the neutral default palette. */
+   :where() gives zero specificity so explicit .theme-x classes (0,1,0) always win.
+   Without it a light theme ties :root and loses on source order. */
 :where(:root, .theme-default) {
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
@@ -88,8 +77,7 @@
   /* Layout tokens consumed by the three-column shell */
   --nav-h: 3.5rem;
   --sidebar-w: 16rem;
-  /* Right TOC gutter matches the left sidebar width so the content sits between
-     two equal rails. */
+  /* Right TOC gutter — matches the sidebar width for symmetric rails. */
   --toc-w: 16rem;
   --content-max: 48rem;
   /* Chart palette */
@@ -100,9 +88,8 @@
   --chart-5: oklch(0.62 0.18 305);
 }
 
-/* ── Default theme dark ──────────────────────────────────────────────────
-   Also :where()-wrapped (zero specificity): the no-theme `.dark` base must not
-   override an explicit theme's dark tokens (.theme-x.dark, 0,2,0). */
+/* ── Default theme dark ─────────────────────────────────────────────────────
+   :where()-wrapped so .theme-x.dark (0,2,0) overrides this base. */
 :where(.dark, .theme-default.dark) {
   --background: oklch(0.145 0 0);
   --foreground: oklch(0.985 0 0);
@@ -152,12 +139,8 @@
   }
 }
 
-/* ── Shiki dual-theme code block CSS ────────────────────────────────────
-   Shiki is called with defaultColor:false and themes:{light:'github-light',
-   dark:'github-dark'}. It emits inline style attributes with --shiki-light
-   and --shiki-dark variable pairs. The rules below set the default (light)
-   and override to dark when .dark is present on <html>.
-   !important is required to beat Shiki's inline style specificity. */
+/* ── Shiki dual-theme (defaultColor:false) ───────────────────────────────
+   Shiki emits --shiki-light/--shiki-dark inline pairs; !important beats inline specificity. */
 .shiki,
 .shiki span {
   color: var(--shiki-light) !important;
@@ -176,9 +159,7 @@
   text-decoration: var(--shiki-dark-text-decoration) !important;
 }
 
-/* ── Code blocks: server-highlighted Shiki + client-added copy button ──────────
-   renderArticle wraps nothing; the client `ArticleBody` wraps each pre.shiki in
-   .code-wrap and appends .code-copy. */
+/* ── Code blocks: Shiki highlight + copy button (`ArticleBody` wraps pre.shiki in .code-wrap) ── */
 .code-wrap {
   position: relative;
   margin: 1rem 0;
@@ -278,16 +259,8 @@
   font-size: inherit;
 }
 
-/* Desktop only (>=1024px): keep the center content lane fixed when the sidebar
-   is toggled. shadcn shrinks the in-flow "sidebar-gap" to 0 on collapse, which
-   resizes the inset and shifts the content. Pin the gap to the sidebar width so
-   a collapsed sidebar just leaves an empty gutter in its place — the content
-   never moves.
-
-   Below 1024px (tablet) the pin is deliberately NOT applied: the sidebar stays
-   inline (no overlay), but collapsing it lets the gap fall to its natural 0 so
-   the content reflows to fill the freed space instead of stranding an empty
-   sidebar-width gutter. */
+/* >=1024px: pin sidebar-gap to --sidebar-width so content doesn't shift on collapse.
+   Not applied below 1024px — let the gap collapse so content reflows to fill the space. */
 @media (min-width: 1024px) {
   [data-slot='sidebar-gap'] {
     width: var(--sidebar-width) !important;
@@ -300,16 +273,12 @@
   height: calc(100svh - var(--nav-h));
 }
 
-/* Sidebar blends with the page — use the page background, not a distinct surface
-   color. Covers the desktop rail and the mobile sheet (both carry
-   data-sidebar="sidebar"). Hover/active states still use the sidebar accent. */
+/* Sidebar uses page background (not a distinct surface) on both desktop rail and mobile sheet. */
 [data-sidebar='sidebar'] {
   background-color: var(--background);
 }
 
-/* Keep content inside the right edge: break long tokens/URLs, and let wide
-   tables scroll horizontally instead of pushing the page out. `max-width: none`
-   removes the typography plugin's default 65ch cap so prose fills its column. */
+/* Remove the typography plugin's 65ch cap; break long tokens and scroll wide tables. */
 .prose {
   max-width: none;
   overflow-wrap: break-word;
