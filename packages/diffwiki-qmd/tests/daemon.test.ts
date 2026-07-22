@@ -61,9 +61,9 @@ function fakeSpawn(): { spawnFn: SpawnFn; calls: Array<{ command: string; args: 
 
 describe('env resolution', () => {
   it('defaults host/port and builds the base url', () => {
-    expect(mcpHost({})).toBe('127.0.0.1');
+    expect(mcpHost({})).toBe('localhost');
     expect(mcpPort({})).toBe(8191);
-    expect(mcpBaseUrl({})).toBe('http://127.0.0.1:8191');
+    expect(mcpBaseUrl({})).toBe('http://localhost:8191');
   });
 
   it('honours DIFFWIKI_QMD_MCP_HOST / _PORT overrides', () => {
@@ -79,10 +79,10 @@ describe('env resolution', () => {
 describe('probeHealth', () => {
   it('returns true only when the daemon answers status:ok', async () => {
     const up = fakeFetch([true]);
-    expect(await probeHealth('http://127.0.0.1:8191', up.fetchFn, 1000)).toBe(true);
+    expect(await probeHealth('http://localhost:8191', up.fetchFn, 1000)).toBe(true);
     const down = fakeFetch([false]);
-    expect(await probeHealth('http://127.0.0.1:8191', down.fetchFn, 1000)).toBe(false);
-    expect(up.calls[0]).toBe('http://127.0.0.1:8191/health');
+    expect(await probeHealth('http://localhost:8191', down.fetchFn, 1000)).toBe(false);
+    expect(up.calls[0]).toBe('http://localhost:8191/health');
   });
 });
 
@@ -91,9 +91,9 @@ describe('ensureDaemon', () => {
     const { fetchFn, calls } = fakeFetch([true]);
     const spawn = fakeSpawn();
     const baseUrl = await ensureDaemon({}, { fetchFn, spawnFn: spawn.spawnFn, sleep: noSleep });
-    expect(baseUrl).toBe('http://127.0.0.1:8191');
+    expect(baseUrl).toBe('http://localhost:8191');
     expect(spawn.calls).toHaveLength(0);
-    expect(calls).toEqual(['http://127.0.0.1:8191/health']);
+    expect(calls).toEqual(['http://localhost:8191/health']);
   });
 
   it('health-down: spawns detached, unrefs, then polls until healthy', async () => {
@@ -101,7 +101,7 @@ describe('ensureDaemon', () => {
     const { fetchFn } = fakeFetch([false, false, true]);
     const spawn = fakeSpawn();
     const baseUrl = await ensureDaemon({}, { fetchFn, spawnFn: spawn.spawnFn, sleep: noSleep, maxPolls: 5 });
-    expect(baseUrl).toBe('http://127.0.0.1:8191');
+    expect(baseUrl).toBe('http://localhost:8191');
     expect(spawn.calls).toHaveLength(1);
     expect(spawn.calls[0].command).toBe('qmd');
     expect(spawn.calls[0].args).toEqual([
@@ -111,7 +111,7 @@ describe('ensureDaemon', () => {
       '--index',
       'diffwiki',
       '--host',
-      '127.0.0.1',
+      'localhost',
       '--port',
       '8191',
     ]);

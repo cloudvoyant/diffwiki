@@ -28,8 +28,14 @@
  * @module
  */
 
-/** Default host the qmd MCP daemon binds. Overridable via `DIFFWIKI_QMD_MCP_HOST`. */
-export const DEFAULT_MCP_HOST = '127.0.0.1';
+/**
+ * Default host for reaching diffwiki's qmd daemon. Uses `localhost` (NOT
+ * `127.0.0.1`): qmd 2.5.3 binds the MCP server on IPv6 `localhost` (`::1`) even
+ * when passed `--host 127.0.0.1`, so an IPv4 probe never connects. `localhost`
+ * lets Node's resolver reach whichever stack the daemon actually bound.
+ * Overridable via `DIFFWIKI_QMD_MCP_HOST`.
+ */
+export const DEFAULT_MCP_HOST = 'localhost';
 
 /**
  * Default port for diffwiki's *private* qmd daemon. Deliberately NOT qmd's own
