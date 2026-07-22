@@ -9,8 +9,9 @@ diffwiki lets you capture and organize markdown notes into named collections. Gl
 collections live under `~/.diffwiki/collections`; you can also `init` a wiki inside any
 repository so its notes travel with the code. A single `registry.json` tracks every
 collection so `diffwiki list` can find them all. This guide covers the CLI shipped by this
-scaffold. Search (`query`) is a placeholder for now — real semantic (QMD) search and any UI
-come later.
+scaffold, including real full-text search (`query`) — a built-in BM25 engine plus optional
+subprocess search plugins for keyword (ripgrep) and semantic/hybrid (QMD) search — and a
+local web UI.
 
 ## Requirements
 
@@ -93,10 +94,48 @@ Adds, removes, or replaces (`update-tags`) an article's tags.
 
 Deletes an article file.
 
-### `diffwiki query [-c collection] [term]`
+### `diffwiki query [--engine name] [-c collection] [-t type] [term]`
 
-**Dummy** case-insensitive substring search over title, filename, and tags. Prints matches;
-a stand-in for future QMD search.
+Full-text search across every registered collection. Prints one tab-separated result per line
+(`collection` · `title` · `path`, plus a snippet when the engine returns one). An empty term
+lists all articles.
+
+- `--engine <name>` — the search engine to use. Defaults to `config.defaultSearch`, else the
+  first enabled search plugin, else the built-in `native` BM25 engine.
+- `-c, --collection <name>` — limit the search to one collection.
+- `-t, --type <type>` — engine-defined search type (e.g. `keyword`, `semantic`, `hybrid` for
+  the QMD plugin). Ignored by the native engine.
+
+The native engine ranks with BM25 over title/tags/collection/body and needs no setup. If a
+plugin is unavailable or errors, `query` transparently falls back to native.
+
+### Search plugins — `diffwiki plugin …` and `diffwiki index`
+
+Search can be extended with subprocess plugins (e.g. `diffwiki-qmd` for semantic/hybrid,
+`diffwiki-ripgrep` for fast keyword search).
+
+```bash
+# Install a plugin from an npm spec (or a local path) and provision it
+diffwiki plugin install diffwiki-ripgrep
+diffwiki plugin install diffwiki-qmd --prefetch-models   # heavy: pre-download models
+diffwiki plugin install ./path/to/plugin --no-setup      # skip setup; run `diffwiki index` later
+
+# Register an already-installed executable as a plugin
+diffwiki plugin register my-engine --command node /abs/adapter.js
+
+# List registered plugins (name, kind, version, enabled, managed, spawnable)
+diffwiki plugin list
+
+# Remove a plugin
+diffwiki plugin remove diffwiki-qmd
+
+# (Re)build the active plugin's index; --embed also builds vector embeddings
+diffwiki index
+diffwiki index --embed
+```
+
+Make a plugin the default engine with `diffwiki config-set defaultSearch <engine[:type]>`
+(e.g. `diffwiki-qmd:semantic`). `diffwiki query` then uses it unless you pass `--engine`.
 
 ### `diffwiki init [-c collection] [-p path]`
 
@@ -104,19 +143,23 @@ Creates an in-repo wiki, writes `diffwiki.yaml`, and registers it globally.
 
 ### `diffwiki config-set <key> <value>` / `diffwiki config-get <key>`
 
-Reads/writes `~/.diffwiki/config.json` (e.g. `defaultCollection`).
+Reads/writes `~/.diffwiki/config.json`. Keys include `defaultCollection` and `defaultSearch`
+(a `<engine[:type]>` string selecting the default search engine and, optionally, its type).
 
 ### `diffwiki doctor`
 
 Diagnoses configuration: home/registry presence, collection paths, and default-collection
-validity. Exits non-zero if any error-level issue is found.
+validity. It also checks search-plugin readiness — whether `defaultSearch` names an installed
+engine, and each enabled plugin's `health` (tool installed, index built, models present,
+first-search cost). Exits non-zero if any error-level issue is found.
 
 ## Configuration
 
 - **`DIFFWIKI_HOME`** — overrides `~/.diffwiki` (used by tests to sandbox state).
 - **`~/.diffwiki/registry.json`** — `{ version, collections: [{ name, type, path, createdAt
 }] }`.
-- **`~/.diffwiki/config.json`** — `{ defaultCollection?: string }`.
+- **`~/.diffwiki/config.json`** — `{ defaultCollection?: string, defaultSearch?: string }`.
+- **`~/.diffwiki/plugins.json`** — the registry of installed/registered search plugins.
 - **`diffwiki.yaml`** (in-repo) — `{ collection, path }`.
 
 ## Local Web UI (`apps/wiki`)
@@ -142,7 +185,8 @@ Open `http://localhost:3000` in your browser.
 
 | URL | What you see |
 |---|---|
-| `/` | The diffwiki logo, a search bar (non-functional — coming later), and a pill for each registered collection |
+| `/` | The diffwiki logo, a search bar (Enter submits to `/search`), and a pill for each registered collection |
+| `/search?q=…` | Search results for `q`, with a collection filter and a search-mode dropdown (native BM25 plus any installed plugin modes). The dropdown pre-selects the engine actually used for the query |
 | `/<collection>` | The collection's index page — an authored `index.md`/`README.md` at the collection root if present, otherwise an auto-generated listing of its top-level folders and articles |
 | `/<collection>/<folder>` | A folder's index page — the folder's authored `index.md`/`README.md`, otherwise an auto-generated listing of its children |
 | `/<collection>/<path>` | The rendered article; e.g. `/notes/guide/setup` renders `~/.diffwiki/collections/notes/guide/setup.md` |
@@ -242,7 +286,9 @@ the SSE connection.
 
 ### Known Limitations
 
-- `query` is a placeholder (no semantic/QMD search).
+- Semantic/hybrid search requires installing the `diffwiki-qmd` plugin, which depends on the
+  external `qmd` tool and downloads models (~2 GB) on first semantic/hybrid use. Without a
+  plugin, search uses the built-in native BM25 engine (keyword only).
 - Content is rendered as **Markdown** (GFM), highlighted server-side with Shiki. A `.mdx` extension is accepted but treated as plain Markdown — embedded JSX/components are not executed.
 - Publishing/CI wiring for the new packages is a follow-up (see plan Future Work).
 
