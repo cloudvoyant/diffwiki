@@ -138,7 +138,7 @@ describe('query (dummy)', () => {
   });
 
   it('errors on an unregistered explicit collection instead of returning nothing', async () => {
-    await expect(query('anything', 'ghost')).rejects.toBeInstanceOf(CollectionNotFoundError);
+    await expect(query('anything', { collection: 'ghost' })).rejects.toBeInstanceOf(CollectionNotFoundError);
   });
 });
 

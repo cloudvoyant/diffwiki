@@ -12,3 +12,8 @@ export * from './query';
 export * from './doctor';
 export * from './browse';
 export * from './render';
+export * from './plugins/registry';
+export * from './plugins/client';
+export * from './plugins/loader';
+export * from './plugins/manager';
+export * from './plugins/events';

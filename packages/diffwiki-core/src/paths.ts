@@ -22,3 +22,15 @@ export function collectionsDir(): string {
 export function collectionDir(name: string): string {
   return path.join(collectionsDir(), name);
 }
+
+export function pluginsDir(): string {
+  return path.join(resolveHome(), 'plugins');
+}
+
+export function pluginsRegistryPath(): string {
+  return path.join(resolveHome(), 'plugins.json');
+}
+
+export function indexDir(): string {
+  return path.join(resolveHome(), 'index');
+}
