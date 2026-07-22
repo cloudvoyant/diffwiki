@@ -36,6 +36,8 @@ vi.mock('../src/qmd.js', () => {
     modelsDir: (home: string) => home + '/qmd/qmd/models',
     qmdIndexPath: (home: string) => home + '/qmd/qmd/diffwiki.sqlite',
     qmdOnPath: async () => true,
+    resolveQmd: async () => ['qmd'],
+    QMD_DEPENDENCY: { command: 'qmd', npm: '@tobilu/qmd', hint: 'install qmd' },
     runQmd: async (args: readonly string[]) => {
       calls.push(['qmd', ...args]);
       return mockRunQmdResult;

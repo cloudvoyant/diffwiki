@@ -15,9 +15,9 @@ import { pluginsDir } from '../paths';
 import { PluginError } from '../errors';
 import { listCollections } from '../collections';
 import { deregisterPlugin, readPluginRegistry, upsertPlugin } from './registry';
-import { invokePlugin, LONG_TIMEOUT_MS } from './invoke';
+import { invokePlugin, LONG_TIMEOUT_MS } from './host';
 import type { PluginCapabilities, PluginRecord } from '../types';
-import { runProcess } from '../plugin';
+import { runProcess } from './sdk';
 
 interface PackageManifest {
   name?: string;
@@ -125,11 +125,39 @@ async function describePlugin(
   }>(command, 'describe', {}, { name });
 }
 
-/** Run a plugin's `setup` op end-to-end, best-effort. `name` scopes forwarded logs. */
-async function runSetup(command: string[], name?: string): Promise<void> {
+/** One provisioning step reported by a plugin's `setup` op. */
+export interface SetupStep {
+  step: string;
+  ok: boolean;
+  message?: string;
+}
+
+/** The captured result of a plugin's `setup` op. */
+export interface SetupOutcome {
+  /** Whether the plugin provisioned to a ready-to-search state. */
+  ready: boolean;
+  /** Per-step results (e.g. verify-qmd, add-collections, index). */
+  steps: SetupStep[];
+}
+
+/** The result of {@link installPlugin}: the registered record + the setup outcome (if setup ran). */
+export interface InstallOutcome {
+  record: PluginRecord;
+  /** The setup result, or undefined when setup was skipped (`opts.setup === false`). */
+  setup?: SetupOutcome;
+}
+
+/**
+ * Run a plugin's `setup` op end-to-end and capture the outcome. Never throws:
+ * a setup failure is returned as `{ ready: false, ... }` so the caller can
+ * report it rather than aborting the install (the plugin stays registered and
+ * search degrades to native until the dependency is resolved). `name` scopes
+ * forwarded logs.
+ */
+async function runSetup(command: string[], name?: string): Promise<SetupOutcome> {
   try {
     const collections = await listCollections();
-    await invokePlugin(
+    const result = await invokePlugin<{ ready?: boolean; steps?: SetupStep[] }>(
       command,
       'setup',
       {
@@ -139,8 +167,9 @@ async function runSetup(command: string[], name?: string): Promise<void> {
       },
       { timeoutMs: LONG_TIMEOUT_MS, name },
     );
-  } catch {
-    /* setup is best-effort; doctor reports readiness problems later */
+    return { ready: result?.ready === true, steps: result?.steps ?? [] };
+  } catch (err) {
+    return { ready: false, steps: [{ step: 'setup', ok: false, message: (err as Error).message }] };
   }
 }
 
@@ -152,7 +181,7 @@ async function runSetup(command: string[], name?: string): Promise<void> {
 export async function installPlugin(
   spec: string,
   opts?: { setup?: boolean; prefetchModels?: boolean },
-): Promise<PluginRecord> {
+): Promise<InstallOutcome> {
   const dir = await ensurePluginRoot();
   try {
     await runProcess('npm', ['install', spec, '--prefix', dir]);
@@ -192,10 +221,8 @@ export async function installPlugin(
   };
   await upsertPlugin(record);
 
-  if (opts?.setup !== false) {
-    await runSetup(command, discovered.name);
-  }
-  return record;
+  const setup = opts?.setup !== false ? await runSetup(command, discovered.name) : undefined;
+  return { record, setup };
 }
 
 /**

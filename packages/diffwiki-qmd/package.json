@@ -26,6 +26,7 @@
     "lint:fix": "eslint src tests --no-error-on-unmatched-pattern --fix"
   },
   "dependencies": {
+    "@tobilu/qmd": "^2.5.3",
     "diffwiki-core": "workspace:*"
   },
   "devDependencies": {

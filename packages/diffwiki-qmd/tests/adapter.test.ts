@@ -11,10 +11,22 @@ import { afterEach, describe, expect, it, vi, beforeEach } from 'vitest';
 
 // Mock the SDK process utilities at the module level so qmd.ts (which imports them)
 // gets our fakes. Each test sets up its own return values via mockImplementation.
+// Shared across the mock factory (hoisted above imports) so resolveDependency
+// can delegate to the same commandExists mock the tests toggle.
+const { commandExistsMock } = vi.hoisted(() => ({ commandExistsMock: vi.fn() }));
+
 vi.mock('diffwiki-core/plugin', () => ({
   runProcess: vi.fn(),
   runProcessJson: vi.fn(),
-  commandExists: vi.fn(),
+  commandExists: commandExistsMock,
+  // qmd.ts resolves its binary through resolveDependency; delegate to the same
+  // commandExists mock so `mockCommandExists.mockResolvedValue(true|false)`
+  // drives qmd presence, and report file === 'qmd' when present.
+  resolveDependency: vi.fn(async (dependency: { command: string }) =>
+    (await commandExistsMock(dependency.command))
+      ? { dependency, command: ['qmd'], source: 'path' }
+      : { dependency, command: null, source: 'missing' },
+  ),
   definePlugin: vi.fn((def: unknown) => ({ definition: def, run: vi.fn() })),
 }));
 
@@ -28,7 +40,7 @@ import {
   type QmdRow,
   type StatMtimeFn,
 } from '../src/bin.js';
-import { qmdIndexPath } from '../src/qmd.js';
+import { qmdIndexPath, resetQmdResolution } from '../src/qmd.js';
 import type { FetchFn, SpawnFn } from '../src/daemon.js';
 
 const noopLog = () => {};
@@ -47,6 +59,11 @@ const mockCommandExists = vi.mocked(commandExists);
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // The qmd binary resolution is cached per process; clear it so each test's
+  // commandExists toggle is honoured.
+  resetQmdResolution();
+  // Default: qmd resolves (present). The missing-qmd tests override to false.
+  mockCommandExists.mockResolvedValue(true);
   // Disable warm mode so tests exercise only the cold CLI path.
   process.env.DIFFWIKI_QMD_WARM = '0';
 });
@@ -241,7 +258,9 @@ describe('setup handler', () => {
     );
 
     expect(result.ready).toBe(false);
-    expect(result.steps).toEqual([{ step: 'verify-qmd', ok: false, message: 'qmd not on PATH' }]);
+    expect(result.steps).toHaveLength(1);
+    expect(result.steps?.[0]).toMatchObject({ step: 'verify-qmd', ok: false });
+    expect(result.steps?.[0].message).toContain('qmd unresolved');
     expect(log).toHaveBeenCalledWith('error', expect.stringContaining('npm i -g @tobilu/qmd'));
   });
 

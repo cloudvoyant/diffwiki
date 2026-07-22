@@ -1,41 +1,17 @@
 /**
  * Minimal MCP Streamable-HTTP client for the qmd warm daemon.
  *
- * Implements exactly the two round-trips verified in
- * `.codevoyant/plans/plugin-sdk-refactor/research/qmd-daemon-http.md`:
- *
- *   1. `POST /mcp` `initialize` — establishes a session; the daemon returns a
- *      `mcp-session-id` response header we capture and reuse. Models are NOT
- *      loaded here, so it is fast. `notifications/initialized` is NOT required.
- *   2. `POST /mcp` `tools/call name=query` — the actual search, sent with the
- *      captured session-id header. The diffwiki `type` maps to `searches` /
- *      `rerank` (keyword→lex, semantic→vec, hybrid→lex+vec+rerank).
- *
- * The response `result.structuredContent.results[]` is parsed into `QmdRow[]`
- * with a clean `<collection>/<relPath>` `file` (no `qmd://`, no `?index=`),
- * which `bin.ts` splits via `splitQmdPath` exactly as the cold path does.
- *
- * `fetch` is injected (`FetchFn`) so unit tests never touch the network.
+ * Two round-trips: `initialize` (captures `mcp-session-id`) then
+ * `tools/call name=query` with the mapped `searches`/`rerank` pair.
+ * `fetch` is injected for testability.
  *
  * @module
  */
 
-import type { FetchFn } from './daemon.js';
-import type { QmdRow } from './bin.js';
+import type { FetchFn, McpSearchArgs, QmdRow } from './types.js';
 
-/** Arguments for a warm MCP search. */
-export interface McpSearchArgs {
-  /** The user's search term / query string. */
-  term: string;
-  /** diffwiki search type: `keyword` | `semantic` | `hybrid`. */
-  type: string;
-  /** Optional single-collection filter (qmd collection name). */
-  collection?: string;
-  /** Max results. */
-  limit: number;
-  /** Minimum score filter (0 disables). */
-  minScore?: number;
-}
+// Re-export so existing imports from mcp.js continue to resolve.
+export type { McpSearchArgs } from './types.js';
 
 /** One entry of the `searches` array in a qmd `query` tool call. */
 interface QmdSearchSpec {
@@ -77,9 +53,8 @@ interface McpResultRow {
 }
 
 /**
- * Parse an MCP JSON-RPC response body. qmd's Streamable-HTTP may return either
- * a bare JSON object or an SSE `data: {…}` frame; handle both. Throws on a
- * JSON-RPC error or an unparseable body.
+ * Parse an MCP JSON-RPC response. Handles both bare JSON and SSE `data:` frames.
+ * Throws on JSON-RPC error or unparseable body.
  */
 function parseJsonRpc(text: string): { result?: unknown; error?: { message?: string } } {
   const trimmed = text.trim();
@@ -98,19 +73,14 @@ function parseJsonRpc(text: string): { result?: unknown; error?: { message?: str
 
 /**
  * Run a warm search against the qmd MCP daemon at `baseUrl`.
+ * Throws on HTTP/JSON-RPC failure so the caller can fall back to the cold CLI.
  *
- * Sends `initialize` (capturing the `mcp-session-id` header), then
- * `tools/call name=query` with the mapped `searches`/`rerank`, `collection`,
- * `limit`, `minScore`, and an `intent` (the term — qmd recommends always
- * sending one). Returns the parsed rows. Throws on any HTTP/JSON-RPC failure so
- * the caller can fall back to the cold CLI.
- *
- * @param baseUrl  The daemon base URL (`http://host:port`).
+ * @param baseUrl  Daemon base URL (`http://host:port`).
  * @param args     Search arguments.
  * @param fetchFn  Injected fetch.
  */
 export async function mcpSearch(baseUrl: string, args: McpSearchArgs, fetchFn: FetchFn): Promise<QmdRow[]> {
-  // 1. initialize — establish a session and capture the session-id header.
+  // 1. initialize — capture the session-id header.
   const initRes = await fetchFn(`${baseUrl}/mcp`, {
     method: 'POST',
     headers: MCP_HEADERS_BASE,
@@ -135,7 +105,7 @@ export async function mcpSearch(baseUrl: string, args: McpSearchArgs, fetchFn: F
   // Drain the body so the connection can be reused / closed cleanly.
   await initRes.text();
 
-  // 2. tools/call name=query — reuse the session id in a request header.
+  // 2. tools/call name=query
   const { searches, rerank } = searchesForType(args.type, args.term);
   const queryArgs: Record<string, unknown> = {
     searches,
@@ -145,9 +115,7 @@ export async function mcpSearch(baseUrl: string, args: McpSearchArgs, fetchFn: F
     rerank,
   };
   if (args.collection && args.collection.length > 0) {
-    // qmd's `query` tool filters via `collections` (a plural array). A singular
-    // `collection` key is silently ignored, so results leak from every
-    // collection — the filter must be sent as a one-element array.
+    // `collections` (plural array) — a singular `collection` key is silently ignored.
     queryArgs.collections = [args.collection];
   }
 

@@ -11,7 +11,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { definePlugin, runProcess, runProcessJson, commandExists } from '../src/plugin';
-import { invokePlugin } from '../src/plugins/invoke';
+import { invokePlugin } from '../src/plugins/host';
 
 let scratch: string[];
 

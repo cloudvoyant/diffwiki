@@ -1,10 +1,5 @@
 /**
- * ripgrep CLI helpers.
- *
- * Low-level functions for spawning `rg`, parsing its `--json` output, and
- * extracting cheap titles from markdown files. These are ripgrep-specific
- * and not shared with other adapters. The generic `commandExists` utility
- * comes from `diffwiki-core/plugin`.
+ * ripgrep CLI helpers — spawn `rg`, parse `--json` output, extract cheap titles.
  *
  * @module
  */
@@ -14,24 +9,12 @@ import { createReadStream } from 'node:fs';
 import { basename, extname } from 'node:path';
 import { createInterface } from 'node:readline';
 import { commandExists } from 'diffwiki-core/plugin';
+import type { SpawnRgFn, ReadFileFn, RunRgOptions } from './types.js';
 
-/** Injectable spawn function -- resolves raw stdout from `rg <args>`. Exit 1 -> empty string. Throws on exit 2+. */
-export type SpawnRgFn = (args: string[]) => Promise<string>;
+// Re-export so existing imports from ripgrep.js continue to resolve.
+export type { SpawnRgFn, ReadFileFn, RunRgOptions } from './types.js';
 
-/** Injectable file-lines reader -- returns up to 20 lines for `cheapTitle`. */
-export type ReadFileFn = (absPath: string) => Promise<string[]>;
-
-export interface RunRgOptions {
-  /** Use fixed-strings mode (`--fixed-strings -i`). When false, regex mode (default). */
-  fixedStrings: boolean;
-  /** Max matches returned per rg invocation. Default 20. */
-  limit: number;
-}
-
-/**
- * Real rg spawner: collects stdout, treats exit 1 (no matches) as empty output,
- * throws for exit 2+ (real rg error).
- */
+/** Real rg spawner: exit 1 (no matches) → empty string; exit 2+ → throws. */
 export const spawnRg: SpawnRgFn = (args) =>
   new Promise<string>((resolve, reject) => {
     const chunks: Buffer[] = [];
@@ -47,10 +30,7 @@ export const spawnRg: SpawnRgFn = (args) =>
     });
   });
 
-/**
- * Real file-lines reader: reads up to 20 lines from `absPath` using readline,
- * resolves early once 20 lines are read.
- */
+/** Read up to 20 lines from `absPath`; resolves early once 20 lines are collected. */
 export const readFileLines: ReadFileFn = (absPath) =>
   new Promise<string[]>((resolve, reject) => {
     const lines: string[] = [];
@@ -68,10 +48,7 @@ export const readFileLines: ReadFileFn = (absPath) =>
     stream.on('error', reject);
   });
 
-/**
- * True if `rg` is on PATH. Uses the SDK's `commandExists` utility.
- * Accepts optional injected spawner for backward compatibility with tests.
- */
+/** True if `rg` is on PATH. Accepts an injected spawner for test compatibility. */
 export async function rgOnPath(spawnFn: SpawnRgFn = spawnRg): Promise<boolean> {
   if (spawnFn !== spawnRg) {
     // Test-injected spawner -- use the old probe logic
@@ -85,9 +62,7 @@ export async function rgOnPath(spawnFn: SpawnRgFn = spawnRg): Promise<boolean> {
   return commandExists('rg');
 }
 
-/**
- * Run `rg --json` with the given pattern and collection root paths.
- */
+/** Run `rg --json` with the given pattern and collection root paths. */
 export async function runRg(spawnFn: SpawnRgFn, pattern: string, roots: string[], opts: RunRgOptions): Promise<string> {
   const limit = opts.limit > 0 ? opts.limit : 20;
   const args: string[] = ['--json', '--line-number', '--max-count', String(limit), '--glob', '*.{md,mdx}'];
@@ -98,11 +73,7 @@ export async function runRg(spawnFn: SpawnRgFn, pattern: string, roots: string[]
   return spawnFn(args);
 }
 
-/**
- * Cheap title extraction: reads up to 20 lines and returns the first YAML
- * frontmatter `title:` value, or the first ATX heading text, or the file
- * basename without extension.
- */
+/** Extract a cheap title: first YAML `title:`, first ATX heading, or filename. */
 export async function cheapTitle(absPath: string, readFn: ReadFileFn = readFileLines): Promise<string> {
   let lines: string[];
   try {

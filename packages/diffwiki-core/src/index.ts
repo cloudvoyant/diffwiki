@@ -58,4 +58,4 @@ export {
   findEnabledPlugin,
   findPluginRecord,
 } from './plugins/index';
-export type { KnownPlugin } from './plugins/index';
+export type { KnownPlugin, InstallOutcome, SetupOutcome, SetupStep } from './plugins/index';

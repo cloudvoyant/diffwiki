@@ -8,8 +8,17 @@
  * @module
  */
 
-export { loadSearchProvider, listSearchModes } from './loader';
-export { installPlugin, registerPlugin, removePlugin, listPlugins, ensurePluginRoot } from './manager';
+export { loadSearchProvider, listSearchModes } from './host';
+export {
+  installPlugin,
+  registerPlugin,
+  removePlugin,
+  listPlugins,
+  ensurePluginRoot,
+  type InstallOutcome,
+  type SetupOutcome,
+  type SetupStep,
+} from './manager';
 export { emitPluginEvent } from './events';
 export { listAvailablePlugins, type KnownPlugin } from './catalog';
 export {

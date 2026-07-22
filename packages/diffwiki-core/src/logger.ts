@@ -10,7 +10,7 @@
  *
  * All diffwiki loggers live under the `['diffwiki', ...]` category so an app can
  * route the whole tree with a single logger config entry. Plugin diagnostics
- * are forwarded under `['diffwiki', 'plugin', <name>]` (see `plugins/invoke.ts`).
+ * are forwarded under `['diffwiki', 'plugin', <name>]` (see `plugins/host.ts`).
  *
  * [DEVIATION] The task brief lists the level name `warn`, but the installed
  * `@logtape/logtape` (2.2.4) names that level `warning` (levels are

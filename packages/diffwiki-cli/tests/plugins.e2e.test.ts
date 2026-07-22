@@ -1,4 +1,5 @@
 import { execSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -6,83 +7,12 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { run } from './helpers';
 
+/** The subprocess plugin fixture, loaded from a real file (not an inline string). */
+const FIXTURE = readFileSync(new URL('./fixtures/stub-plugin.mjs', import.meta.url), 'utf8');
+
 let home: string;
 let scriptDir: string;
 let scriptPath: string;
-
-/**
- * A real one-shot subprocess plugin implementing the diffwiki protocol.
- * Reads one JSON request from stdin, responds on stdout, and exits.
- * `DIFFWIKI_FIXTURE_TOOL_MISSING=1` flips `health` to report its dependency absent.
- */
-const FIXTURE = `#!/usr/bin/env node
-const toolMissing = process.env.DIFFWIKI_FIXTURE_TOOL_MISSING === '1';
-
-let buffer = '';
-process.stdin.setEncoding('utf8');
-process.stdin.on('data', (chunk) => { buffer += chunk; });
-process.stdin.on('end', () => {
-  const line = buffer.trim();
-  if (!line) { process.exit(1); return; }
-  const msg = JSON.parse(line);
-  const result = handle(msg.op, msg.params || {});
-  process.stdout.write(JSON.stringify({ ok: true, result }) + '\\n');
-  process.exit(0);
-});
-
-function handle(op, params) {
-  switch (op) {
-    case 'describe':
-      return {
-        name: 'stub',
-        kind: 'search',
-        version: '0.0.1',
-        capabilities: { searchTypes: ['stub'], collectionFilter: true, events: true },
-      };
-    case 'setup':
-      return { ready: true, steps: [{ step: 'stub-setup', ok: true }] };
-    case 'index': {
-      const n = Array.isArray(params.collections) ? params.collections.length : 0;
-      return { indexed: n };
-    }
-    case 'event':
-      return { accepted: true };
-    case 'search':
-      return {
-        hits: [{
-          collection: 'stub',
-          relPath: 'canned.md',
-          title: 'stub hit for ' + (params.term || ''),
-          snippet: 'a canned snippet',
-          score: 1,
-          docid: 'stub-1',
-          tags: ['stub'],
-        }],
-      };
-    case 'health':
-      if (toolMissing) {
-        return {
-          ready: false,
-          readiness: {
-            toolInstalled: false, modelsPresent: false, indexBuilt: false,
-            docsIndexed: 0, embeddingsPending: 0, firstSearchCost: 'model-download',
-          },
-          diagnostics: [{ level: 'error', message: 'stub tool missing — install it' }],
-        };
-      }
-      return {
-        ready: true,
-        readiness: {
-          toolInstalled: true, modelsPresent: true, indexBuilt: true,
-          docsIndexed: 1, embeddingsPending: 0, firstSearchCost: 'instant',
-        },
-        diagnostics: [{ level: 'ok', message: 'stub ready' }],
-      };
-    default:
-      throw new Error('unknown op ' + op);
-  }
-}
-`;
 
 /** Probe for rg on PATH at module load time. */
 const rgOnPath = (() => {
@@ -124,6 +54,7 @@ beforeEach(async () => {
 afterEach(async () => {
   delete process.env.DIFFWIKI_HOME;
   delete process.env.DIFFWIKI_FIXTURE_TOOL_MISSING;
+  delete process.env.DIFFWIKI_FIXTURE_SETUP_NOT_READY;
   await fs.rm(home, { recursive: true, force: true });
   await fs.rm(scriptDir, { recursive: true, force: true });
 });
@@ -292,3 +223,40 @@ describe.skipIf(!(process.env.DIFFWIKI_E2E_REAL && qmdOnPath))(
     });
   },
 );
+
+describe('plugin install setup surfacing (local package, no network)', () => {
+  it('installs a local package, reports "Not ready" when setup fails, keeps it registered', async () => {
+    // A minimal installable package (no dependencies -> npm install is offline).
+    const pkgDir = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'diffwiki-stub-pkg-')));
+    await fs.writeFile(
+      path.join(pkgDir, 'package.json'),
+      JSON.stringify({
+        name: 'diffwiki-stub-search',
+        version: '0.0.1',
+        type: 'module',
+        bin: { 'diffwiki-stub-search': 'bin.mjs' },
+        diffwiki: { kind: 'search' },
+      }),
+      'utf8',
+    );
+    await fs.writeFile(path.join(pkgDir, 'bin.mjs'), FIXTURE, 'utf8');
+
+    // Make setup report not-ready (as if a declared dependency didn't resolve).
+    process.env.DIFFWIKI_FIXTURE_SETUP_NOT_READY = '1';
+    try {
+      const inst = await run(['plugin', 'install', pkgDir]);
+      expect(inst.ok).toBe(true);
+      expect(inst.out).toContain('Installed');
+      // The setup outcome is surfaced instead of a bare "Installed".
+      expect(inst.out).toContain('Not ready');
+      expect(inst.out).toContain('unresolved');
+      expect(inst.out).toContain('diffwiki doctor');
+
+      // ...and the plugin stays registered so it works once the dep lands.
+      const list = await run(['plugin', 'list']);
+      expect(list.out).toContain('diffwiki-stub-search');
+    } finally {
+      await fs.rm(pkgDir, { recursive: true, force: true });
+    }
+  }, 60_000);
+});

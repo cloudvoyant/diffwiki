@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { configureSync, type LogRecord, resetSync } from '@logtape/logtape';
-import { invokePlugin } from '../src/plugins/invoke';
+import { invokePlugin } from '../src/plugins/host';
 
 /**
  * A minimal protocol plugin that emits a structured `{log}` line on stderr and

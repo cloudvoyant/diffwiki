@@ -23,39 +23,13 @@ import type {
   EventHandlerResult,
   HealthHandlerResult,
 } from 'diffwiki-core/plugin';
-import { cheapTitle, readFileLines, rgOnPath, runRg, spawnRg, type ReadFileFn, type SpawnRgFn } from './ripgrep.js';
+import { cheapTitle, readFileLines, rgOnPath, runRg, spawnRg } from './ripgrep.js';
+import type { Collection, RgEvent, Hit, Deps } from './types.js';
+
+// Re-export types so existing imports from this module continue to resolve.
+export type { Collection, RgMatchData, RgEvent, Hit, Deps } from './types.js';
 
 const VERSION = '0.3.0';
-
-export interface Collection {
-  name: string;
-  path: string;
-}
-
-/** A single parsed rg --json match event (the `data` sub-object). */
-export interface RgMatchData {
-  path: { text: string };
-  lines: { text: string };
-  line_number: number;
-}
-
-/** A top-level rg --json event line. */
-export interface RgEvent {
-  type: string;
-  data: RgMatchData;
-}
-
-export interface Hit {
-  collection: string;
-  relPath: string;
-  title: string;
-  snippet?: string;
-}
-
-export interface Deps {
-  spawnFn?: SpawnRgFn;
-  readFn?: ReadFileFn;
-}
 
 function asCollections(raw: unknown): Collection[] {
   if (!Array.isArray(raw)) return [];
@@ -67,10 +41,7 @@ function asCollections(raw: unknown): Collection[] {
     .map((c) => ({ name: (c as Collection).name, path: (c as Collection).path }));
 }
 
-/**
- * Prefix-match `filePath` against the collection list (longest path first) to
- * derive `{collection, relPath}`. Returns null if no collection matches.
- */
+/** Prefix-match `filePath` against collections (longest first). Returns null if no match. */
 export function matchCollection(
   filePath: string,
   collections: Collection[],

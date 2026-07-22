@@ -15,7 +15,7 @@
 
 import { listCollections } from '../collections';
 import { findEnabledPlugin } from './registry';
-import { invokePlugin } from './invoke';
+import { invokePlugin } from './host';
 import type { PluginEvent } from '../types';
 
 /**

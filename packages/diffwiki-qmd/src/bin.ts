@@ -31,40 +31,30 @@ import type {
   EventHandlerResult,
   HealthHandlerResult,
 } from 'diffwiki-core/plugin';
-import { INDEX, modelsDir, qmdEnv, qmdIndexPath, qmdOnPath, runQmd, runQmdJson } from './qmd.js';
-import { ensureDaemon, mcpBaseUrl, probeHealth, type FetchFn, type SpawnFn } from './daemon.js';
+import {
+  INDEX,
+  modelsDir,
+  qmdEnv,
+  qmdIndexPath,
+  qmdOnPath,
+  resolveQmd,
+  runQmd,
+  runQmdJson,
+  QMD_DEPENDENCY,
+} from './qmd.js';
+import { ensureDaemon, mcpBaseUrl, probeHealth } from './daemon.js';
 import { mcpSearch } from './mcp.js';
+import type { Collection, QmdRow, Hit, StatMtimeFn, QmdStatusInfo, FetchFn, SpawnFn } from './types.js';
+
+// Re-export types so existing imports from this module continue to resolve.
+export type { Collection, QmdRow, Hit, StatMtimeFn, QmdStatusInfo } from './types.js';
+// Re-export daemon types used in makePluginDefinition's public signature.
+export type { FetchFn, SpawnFn } from './types.js';
 
 const VERSION = '0.3.0';
 
-export interface Collection {
-  name: string;
-  path: string;
-}
-
-export interface QmdRow {
-  file?: string;
-  displayPath?: string;
-  title?: string;
-  bestChunk?: string;
-  score?: number;
-  docid?: string;
-}
-
-export interface Hit {
-  collection: string;
-  relPath: string;
-  title: string;
-  snippet?: string;
-  score?: number;
-  docid?: string;
-}
-
-/** Returns the mtime (epoch ms) for a given path, or 0 if the file does not exist. */
-export type StatMtimeFn = (filePath: string) => Promise<number>;
-
 /** Default statMtime: real fs.stat, returns 0 on ENOENT/error. */
-export const realStatMtime: StatMtimeFn = async (filePath: string): Promise<number> => {
+export const realStatMtime: StatMtimeFn = async (filePath) => {
   try {
     const s = await stat(filePath);
     return s.mtimeMs;
@@ -105,11 +95,8 @@ export async function newestMdMtime(dirs: string[], statFn: StatMtimeFn): Promis
 /**
  * Newest mtime (epoch ms) across the qmd index's sqlite files.
  *
- * qmd runs in WAL mode, so committed writes land in `diffwiki.sqlite-wal` (and
- * `-shm`) while the base `.sqlite` mtime stays frozen. Staleness must therefore
- * consider all three files, else the base mtime reads perpetually old and the
- * index is judged stale on every search. Each path is stat'd via the injected
- * `statMtime` (which returns 0 on ENOENT), so missing sidecar files are ignored.
+ * qmd uses WAL mode: writes land in `.sqlite-wal` while the base `.sqlite` mtime
+ * stays frozen — all three files must be checked or the index looks perpetually stale.
  */
 export async function qmdIndexMtime(home: string, statMtime: StatMtimeFn): Promise<number> {
   const base = qmdIndexPath(home);
@@ -117,15 +104,7 @@ export async function qmdIndexMtime(home: string, statMtime: StatMtimeFn): Promi
   return Math.max(...mtimes);
 }
 
-export interface QmdStatusInfo {
-  docsIndexed: number;
-  embeddingsPending: number;
-}
-
-/**
- * Parse the human output of `qmd status` -- it does NOT honour `--format json`,
- * so we scrape the "Total: N files indexed" / "Pending: N need embedding" lines.
- */
+/** Parse `qmd status` output (no `--format json` support) — scrapes "Total:" / "Pending:" lines. */
 export function parseQmdStatus(text: string): QmdStatusInfo {
   const total = /Total:\s*(\d+)/i.exec(text);
   const pending = /Pending:\s*(\d+)/i.exec(text);
@@ -236,16 +215,11 @@ export function makePluginDefinition(
   const spawnFn = deps.spawnFn;
 
   /**
-   * Best-effort staleness check: if the newest md/mdx file is newer than the
-   * qmd index, run `qmd update` before searching. For semantic/hybrid, also
-   * run `qmd embed` when pending.
+   * Best-effort staleness check: run `qmd update` (and `embed` for semantic/hybrid)
+   * when md/mdx files are newer than the index.
    *
-   * Concurrency safety: if the long-lived `qmd mcp` daemon is holding the
-   * sqlite index (a `/health` probe answers OK), we SKIP the CLI
-   * `qmd update`/`embed` — a concurrent CLI writer racing the daemon's open DB
-   * handle can corrupt the FTS index. In that case the user must refresh
-   * explicitly via `diffwiki index`. We only run the CLI update when no daemon
-   * is serving the index.
+   * Skipped when the warm daemon is up — a concurrent CLI write can corrupt the
+   * FTS index while the daemon holds the DB. User must run `diffwiki index` to refresh.
    */
   async function ensureFresh(collections: Collection[], searchType: string, log: PluginLogFn): Promise<void> {
     try {
@@ -257,8 +231,7 @@ export function makePluginDefinition(
 
       const env = qmdEnv(home);
 
-      // The daemon holds the sqlite DB — a concurrent CLI write can corrupt the
-      // FTS index. Skip the on-search reindex and defer to `diffwiki index`.
+      // Daemon holds the DB — skip CLI write to avoid FTS corruption.
       if (await probeHealth(mcpBaseUrl(env), fetchFn, 1000)) {
         log('warn', 'qmd daemon is serving the index — skipping on-search update; run `diffwiki index` to refresh');
         return;
@@ -283,10 +256,7 @@ export function makePluginDefinition(
     }
   }
 
-  /**
-   * Cold search path: shell `qmd <sub> --format json`. This is the fallback
-   * used whenever warm mode is disabled, the daemon can't start, or HTTP fails.
-   */
+  /** Cold search: shell `qmd <sub> --format json`. Fallback when warm mode is off or fails. */
   async function coldSearch(
     env: NodeJS.ProcessEnv,
     term: string,
@@ -305,11 +275,7 @@ export function makePluginDefinition(
     return rowsToHits(Array.isArray(rows) ? rows : []);
   }
 
-  /**
-   * Warm search path: ensure the MCP daemon is up, then run the query over
-   * HTTP. Returns the hits, or `null` to signal the caller should fall back to
-   * the cold path (daemon unavailable, HTTP/JSON error, etc.). Never throws.
-   */
+  /** Warm search: ensure daemon is up, query over HTTP. Returns null (→ cold fallback) on any failure. */
   async function warmSearch(
     env: NodeJS.ProcessEnv,
     term: string,
@@ -319,7 +285,8 @@ export function makePluginDefinition(
     log: PluginLogFn,
   ): Promise<Hit[] | null> {
     try {
-      const baseUrl = await ensureDaemon(env, { fetchFn, spawnFn });
+      const qmdCommand = (await resolveQmd()) ?? undefined;
+      const baseUrl = await ensureDaemon(env, { fetchFn, spawnFn, qmdCommand });
       if (!baseUrl) {
         log('warn', 'qmd warm daemon unavailable — falling back to cold search');
         return null;
@@ -372,8 +339,8 @@ export function makePluginDefinition(
       const steps: Array<{ step: string; ok: boolean; message?: string }> = [];
       const installed = await qmdOnPath();
       if (!installed) {
-        log('error', 'qmd not found on PATH — install with: npm i -g @tobilu/qmd');
-        steps.push({ step: 'verify-qmd', ok: false, message: 'qmd not on PATH' });
+        log('error', `qmd not found (npm-local or PATH) — ${QMD_DEPENDENCY.hint}`);
+        steps.push({ step: 'verify-qmd', ok: false, message: `qmd unresolved — ${QMD_DEPENDENCY.hint}` });
         return { ready: false, steps };
       }
       steps.push({ step: 'verify-qmd', ok: true });
@@ -427,10 +394,10 @@ export function makePluginDefinition(
       const diagnostics: Array<{ level: 'ok' | 'warn' | 'error'; message: string }> = [];
       const toolInstalled = await qmdOnPath();
       if (!toolInstalled) {
-        log('error', 'qmd not on PATH');
+        log('error', 'qmd could not be resolved (npm-local or PATH)');
         diagnostics.push({
           level: 'error',
-          message: 'qmd not installed — run: npm i -g @tobilu/qmd',
+          message: `qmd not installed — ${QMD_DEPENDENCY.hint}`,
         });
         return {
           ready: false,
@@ -519,16 +486,14 @@ export function makePluginDefinition(
       collectionFilter: true,
       events: true,
     },
+    dependencies: [QMD_DEPENDENCY],
     handlers,
   };
 
   return { definition, handlers };
 }
 
-/**
- * Build the plugin. `home` is set via the injected dep (tests) or
- * `process.env.DIFFWIKI_HOME` / `~/.diffwiki` (the running binary).
- */
+/** Build the plugin. `home` defaults to `process.env.DIFFWIKI_HOME` or `~/.diffwiki`. */
 export function createPlugin(deps?: {
   home?: string;
   statMtime?: StatMtimeFn;

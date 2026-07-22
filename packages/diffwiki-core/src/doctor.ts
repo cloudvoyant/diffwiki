@@ -14,7 +14,7 @@ import { readRegistry } from './registry';
 import { readConfig } from './config';
 import { listCollections } from './collections';
 import { listPlugins } from './plugins/manager';
-import { loadSearchProvider } from './plugins/loader';
+import { loadSearchProvider } from './plugins/host';
 import { NATIVE_ENGINE } from './types';
 import type { Config, Diagnostic, PluginHealth } from './types';
 

@@ -18,7 +18,7 @@ import { parseArticle } from './frontmatter';
 import { readConfig } from './config';
 import { CollectionNotFoundError } from './errors';
 import { getLogger } from './logger';
-import { loadSearchProvider } from './plugins/loader';
+import { loadSearchProvider } from './plugins/host';
 import { listEnabledPlugins } from './plugins/registry';
 import { NATIVE_ENGINE } from './types';
 import type { CollectionEntry, QueryHit, QueryOptions } from './types';

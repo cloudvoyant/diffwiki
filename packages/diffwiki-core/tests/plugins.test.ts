@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   createArticle,
@@ -18,69 +19,24 @@ import type { CollectionEntry } from '../src/types';
 let home: string;
 let scratch: string[];
 
-/**
- * A minimal but real protocol plugin, written to disk and spawned as `node <file>`.
- * It speaks the one-shot JSON-over-stdio protocol: read one JSON request from
- * stdin, write one JSON response to stdout, then exit.
- */
-const FAKE_PLUGIN = `
-let buffer = '';
-process.stdin.setEncoding('utf8');
-process.stdin.on('data', (chunk) => {
-  buffer += chunk;
-});
-process.stdin.on('end', () => {
-  const line = buffer.trim();
-  if (!line) { process.exit(1); return; }
-  const req = JSON.parse(line);
-  const { op, params } = req;
-  let result;
-  if (op === 'describe') {
-    result = {
-      name: 'stub-plugin',
-      kind: 'search',
-      version: '0.0.0',
-      capabilities: { searchTypes: ['stub'], collectionFilter: true, events: false },
-    };
-  } else if (op === 'search') {
-    const first = (params.collections || [])[0];
-    const collection = first ? first.name : 'unknown';
-    result = { hits: [{ collection, relPath: 'a.md', title: 'Alpha', tags: [] }] };
-  } else if (op === 'health') {
-    result = {
-      ready: true,
-      readiness: {
-        toolInstalled: true,
-        modelsPresent: true,
-        indexBuilt: true,
-        docsIndexed: 1,
-        embeddingsPending: 0,
-        firstSearchCost: 'instant',
-      },
-      diagnostics: [{ level: 'ok', message: 'stub ready' }],
-    };
-  } else if (op === 'setup') {
-    result = { ready: true, steps: [] };
-  } else if (op === 'index') {
-    result = { indexed: 0 };
-  } else if (op === 'event') {
-    result = { accepted: true };
-  } else {
-    process.stdout.write(JSON.stringify({ ok: false, error: { message: 'unknown op: ' + op } }) + '\\n');
-    process.exit(1);
-    return;
-  }
-  process.stdout.write(JSON.stringify({ ok: true, result }) + '\\n');
-  process.exit(0);
-});
-`;
+const FIXTURES_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures');
 
-async function writeFakePlugin(): Promise<string> {
+/**
+ * Copy a plugin fixture (a real protocol plugin under `tests/fixtures/`) into a
+ * fresh temp dir and return the path, spawned in tests as `node <file>`. Each
+ * fixture speaks the one-shot JSON-over-stdio protocol: read one JSON request
+ * from stdin, write one JSON response to stdout, then exit.
+ */
+async function stageFixturePlugin(fixture: string): Promise<string> {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'diffwiki-plugin-'));
   scratch.push(dir);
-  const file = path.join(dir, 'fake-plugin.mjs');
-  await fs.writeFile(file, FAKE_PLUGIN, 'utf8');
+  const file = path.join(dir, fixture);
+  await fs.copyFile(path.join(FIXTURES_DIR, fixture), file);
   return file;
+}
+
+async function writeFakePlugin(): Promise<string> {
+  return stageFixturePlugin('stub-plugin.mjs');
 }
 
 async function registerStubPlugin(): Promise<void> {
@@ -95,43 +51,8 @@ async function registerStubPlugin(): Promise<void> {
   });
 }
 
-/**
- * A protocol plugin whose `search` handler throws — the SDK writes
- * `{ ok:false, error }`, the host's invoke rejects, and `search()` must capture
- * the message and fall back to native.
- */
-const THROWING_PLUGIN = `
-let buffer = '';
-process.stdin.setEncoding('utf8');
-process.stdin.on('data', (chunk) => { buffer += chunk; });
-process.stdin.on('end', () => {
-  const line = buffer.trim();
-  if (!line) { process.exit(1); return; }
-  const req = JSON.parse(line);
-  const { op } = req;
-  if (op === 'describe') {
-    process.stdout.write(JSON.stringify({ ok: true, result: {
-      name: 'boom-plugin', kind: 'search', version: '0.0.0',
-      capabilities: { searchTypes: ['boom'], collectionFilter: true, events: false },
-    } }) + '\\n');
-    process.exit(0);
-    return;
-  }
-  if (op === 'search') {
-    process.stdout.write(JSON.stringify({ ok: false, error: { message: 'engine exploded' } }) + '\\n');
-    process.exit(1);
-    return;
-  }
-  process.stdout.write(JSON.stringify({ ok: true, result: {} }) + '\\n');
-  process.exit(0);
-});
-`;
-
 async function registerThrowingPlugin(): Promise<void> {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'diffwiki-plugin-'));
-  scratch.push(dir);
-  const file = path.join(dir, 'boom-plugin.mjs');
-  await fs.writeFile(file, THROWING_PLUGIN, 'utf8');
+  const file = await stageFixturePlugin('throwing-plugin.mjs');
   await upsertPlugin({
     name: 'boom-plugin',
     kind: 'search',

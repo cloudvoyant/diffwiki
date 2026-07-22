@@ -168,7 +168,10 @@ export function createProgram(): Command {
         const hits = outcome.hits;
         console.log(`${hits.length} result(s)`);
         for (const hit of hits) {
-          const line = `${hit.collection}\t${hit.title}\t${hit.path}`;
+          // Lead with the score (mode-dependent scale) so it's easy to eyeball a
+          // cutoff; `-` when the engine returned no score.
+          const score = typeof hit.score === 'number' ? hit.score.toFixed(3) : '-';
+          const line = `${score}\t${hit.collection}\t${hit.title}\t${hit.path}`;
           console.log(hit.snippet ? `${line}\t${hit.snippet}` : line);
         }
         if (outcome.error) {
@@ -187,12 +190,20 @@ export function createProgram(): Command {
     .option('--prefetch-models', 'pre-download models during setup (heavy)')
     .action(
       withErrors(async (spec: string, opts: { setup: boolean; prefetchModels?: boolean }) => {
-        const record = await installPlugin(spec, {
+        const { record, setup } = await installPlugin(spec, {
           setup: opts.setup,
           prefetchModels: opts.prefetchModels,
         });
         console.log(`Installed "${record.name}"${record.version ? ` v${record.version}` : ''}`);
-        if (!opts.setup) console.log('Skipped setup (--no-setup) — run: diffwiki index');
+        if (!opts.setup) {
+          console.log('Skipped setup (--no-setup) — run: diffwiki index');
+        } else if (setup && !setup.ready) {
+          // Registered but not provisioned (e.g. a dependency didn't resolve).
+          // Keep it registered — search degrades to native until it's ready.
+          const reason = setup.steps.find((s) => !s.ok)?.message ?? 'setup did not complete';
+          console.log(`⚠ Not ready: ${reason}`);
+          console.log('  → run: diffwiki doctor');
+        }
       }),
     );
 
