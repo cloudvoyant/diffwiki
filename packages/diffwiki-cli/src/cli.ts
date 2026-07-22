@@ -6,15 +6,22 @@ import {
   doctor,
   getConfigValue,
   initRepoWiki,
+  installPlugin,
   listCollections,
+  listPlugins,
+  listSearchModes,
+  loadSearchProvider,
   query,
+  registerPlugin,
   removeArticle,
+  removePlugin,
   removeTags,
   setConfigValue,
   setTags,
   updateArticleBody,
   type Article,
   type DiagnosticLevel,
+  type QueryOptions,
 } from 'diffwiki-core';
 import { version } from './version';
 import { collect, splitTags, withErrors } from './runtime';
@@ -116,17 +123,106 @@ export function createProgram(): Command {
   registerTagCommand('update-tags', setTags);
 
   program
+    .command('index')
+    .description('Rebuild the search index via the active plugin')
+    .option('--embed', 'also build vector embeddings (may download models on first run)')
+    .action(
+      withErrors(async (opts: { embed?: boolean }) => {
+        const provider = await loadSearchProvider();
+        if (!provider) {
+          const installable = (await listSearchModes()).filter((m) => m.plugin !== 'native');
+          console.log(
+            installable.length > 0
+              ? `No index-backed plugin active. Available modes: ${installable.map((m) => `${m.plugin}·${m.type}`).join(', ')}`
+              : 'No search plugin installed — using native search (nothing to index). Install one with: diffwiki plugin install <spec>',
+          );
+          return;
+        }
+        try {
+          const indexed = await provider.reindex(await listCollections(), { embed: !!opts.embed });
+          console.log(`Indexed ${indexed} document(s).`);
+        } finally {
+          await provider.close();
+        }
+      }),
+    );
+
+  program
     .command('query')
-    .description('Search articles (dummy — QMD coming later)')
+    .description('Search articles via the resolved search engine (native fallback if none)')
+    .option('--engine <name>', 'search engine/plugin (default: config defaultSearch, else native)')
     .option('-c, --collection <name>', 'limit to a collection')
+    .option('-t, --type <type>', 'search type (engine-defined, e.g. keyword|semantic|hybrid)')
     .argument('[term]', 'search term', '')
     .action(
-      withErrors(async (term: string, opts: { collection?: string }) => {
-        const hits = await query(term, opts.collection);
-        console.log(`(dummy search — QMD coming later) ${hits.length} result(s)`);
+      withErrors(async (term: string, opts: { engine?: string; collection?: string; type?: string }) => {
+        const queryOpts: QueryOptions = { engine: opts.engine, collection: opts.collection, type: opts.type };
+        const hits = await query(term, queryOpts);
+        console.log(`${hits.length} result(s)`);
         for (const hit of hits) {
-          console.log(`${hit.collection}\t${hit.title}\t${hit.path}`);
+          const line = `${hit.collection}\t${hit.title}\t${hit.path}`;
+          console.log(hit.snippet ? `${line}\t${hit.snippet}` : line);
         }
+      }),
+    );
+
+  const plugin = program.command('plugin').description('Manage search plugins');
+
+  plugin
+    .command('install')
+    .description('Install a search plugin from an npm spec and provision it (setup)')
+    .argument('<spec>', 'npm package spec (name, name@version, or path)')
+    .option('--no-setup', 'skip the end-to-end setup after install')
+    .option('--prefetch-models', 'pre-download models during setup (heavy)')
+    .action(
+      withErrors(async (spec: string, opts: { setup: boolean; prefetchModels?: boolean }) => {
+        const record = await installPlugin(spec, {
+          setup: opts.setup,
+          prefetchModels: opts.prefetchModels,
+        });
+        console.log(`Installed "${record.name}"${record.version ? ` v${record.version}` : ''}`);
+        if (!opts.setup) console.log('Skipped setup (--no-setup) — run: diffwiki index');
+      }),
+    );
+
+  plugin
+    .command('register')
+    .description('Register an existing executable as a search plugin')
+    .argument('<name>', 'plugin name')
+    .requiredOption('--command <cmd...>', 'command argv to spawn the plugin (e.g. node /abs/adapter.js)')
+    .action(
+      withErrors(async (name: string, opts: { command: string[] }) => {
+        const record = await registerPlugin(name, opts.command);
+        console.log(`Registered "${record.name}" → ${record.command.join(' ')}`);
+      }),
+    );
+
+  plugin
+    .command('list')
+    .description('List registered search plugins')
+    .action(
+      withErrors(async () => {
+        const plugins = await listPlugins();
+        if (plugins.length === 0) {
+          console.log('No plugins registered. Install one with: diffwiki plugin install <spec>');
+          return;
+        }
+        for (const p of plugins) {
+          console.log(
+            `${p.name}\t${p.kind}\t${p.version ?? '-'}\tenabled=${p.enabled}\tmanaged=${!!p.managed}\tspawnable=${p.spawnable}`,
+          );
+        }
+      }),
+    );
+
+  plugin
+    .command('remove')
+    .description('Remove a search plugin')
+    .argument('<name>', 'plugin name')
+    .action(
+      withErrors(async (name: string) => {
+        await removePlugin(name);
+        console.log(`Removed "${name}"`);
       }),
     );
 
@@ -149,7 +245,7 @@ export function createProgram(): Command {
 
   program
     .command('config-set')
-    .description('Set a config value (e.g. defaultCollection)')
+    .description('Set a config value (e.g. defaultCollection, or defaultSearch <engine[:type]>)')
     .argument('<key>', 'config key')
     .argument('<value>', 'config value')
     .action(
