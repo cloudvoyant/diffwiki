@@ -1,8 +1,7 @@
 // Gated real e2e: skipped when `rg` is not on PATH (`describe.skipIf(!rgPresent)`).
-// When rg IS present, spawns the built dist/bin.js as a subprocess and drives the
-// full initialize->search round-trip over stdio to prove the real rg integration.
-// Integration note: `diffwiki plugin register diffwiki-ripgrep --command "node <binPath>"`
-// makes this plugin appear in `listSearchModes()` once registered with diffwiki.
+// When rg IS present, spawns the built dist/bin.js as a one-shot subprocess per op
+// and drives the full describe->search round-trip over stdio to prove the real rg
+// integration using the definePlugin SDK protocol.
 import { spawn } from 'node:child_process';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -11,74 +10,64 @@ import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { rgOnPath, spawnRg } from '../src/ripgrep.js';
 
-// Probe rg at module load — determines whether the suite runs or skips.
+// Probe rg at module load -- determines whether the suite runs or skips.
 const rgPresent = await rgOnPath(spawnRg);
 
 const BIN_PATH = fileURLToPath(new URL('../dist/bin.js', import.meta.url));
 
-interface RgResponse {
-  id: number;
+interface PluginResponse {
   ok: boolean;
   result?: unknown;
   error?: { message: string };
 }
 
 /**
- * Write one JSON-lines request to `proc.stdin` and read stdout lines until the
- * matching response `id` is found. Log lines (no `id`) are collected and ignored
- * for assertion purposes.
+ * Spawn the plugin binary as a one-shot subprocess: write one JSON request to
+ * stdin, close stdin, read the JSON response from stdout, and wait for exit.
  */
-async function sendRequest(
-  proc: ReturnType<typeof spawn>,
-  id: number,
-  op: string,
-  params: Record<string, unknown> = {},
-): Promise<RgResponse> {
-  return new Promise<RgResponse>((resolve, reject) => {
-    const req = JSON.stringify({ id, op, params }) + '\n';
-    let buffer = '';
+async function invokePlugin(op: string, params: Record<string, unknown> = {}): Promise<PluginResponse> {
+  return new Promise<PluginResponse>((resolve, reject) => {
+    const proc = spawn('node', [BIN_PATH], {
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
 
-    const onData = (chunk: Buffer): void => {
-      buffer += chunk.toString('utf8');
-      let nl = buffer.indexOf('\n');
-      while (nl !== -1) {
-        const line = buffer.slice(0, nl).trim();
-        buffer = buffer.slice(nl + 1);
-        if (line.length > 0) {
-          try {
-            const obj = JSON.parse(line) as Record<string, unknown>;
-            // Skip log lines (they have no `id`)
-            if ('log' in obj) {
-              nl = buffer.indexOf('\n');
-              continue;
-            }
-            const res = obj as unknown as RgResponse;
-            if (res.id === id) {
-              proc.stdout!.off('data', onData);
-              proc.stdout!.off('error', reject);
-              resolve(res);
-              return;
-            }
-          } catch {
-            // Malformed line — skip
-          }
-        }
-        nl = buffer.indexOf('\n');
+    let stdout = '';
+    let stderr = '';
+
+    proc.stdout!.on('data', (chunk: Buffer) => {
+      stdout += chunk.toString('utf8');
+    });
+    proc.stderr!.on('data', (chunk: Buffer) => {
+      stderr += chunk.toString('utf8');
+    });
+
+    proc.on('error', reject);
+    proc.on('close', (code) => {
+      // Parse the last non-empty line of stdout as the response
+      const lines = stdout.split('\n').filter((l) => l.trim().length > 0);
+      if (lines.length === 0) {
+        reject(new Error(`Plugin exited with code ${code}, no output. stderr: ${stderr}`));
+        return;
       }
-    };
+      try {
+        const response = JSON.parse(lines[lines.length - 1]) as PluginResponse;
+        resolve(response);
+      } catch {
+        reject(new Error(`Failed to parse plugin response: ${lines[lines.length - 1]}`));
+      }
+    });
 
-    proc.stdout!.on('data', onData);
-    proc.stdout!.on('error', reject);
-    proc.stdin!.write(req, (err) => {
-      if (err) reject(err);
+    // Write the one-shot request and close stdin
+    const req = JSON.stringify({ op, params });
+    proc.stdin!.write(req + '\n', () => {
+      proc.stdin!.end();
     });
   });
 }
 
-describe.skipIf(!rgPresent)('ripgrep e2e — real rg subprocess', () => {
+describe.skipIf(!rgPresent)('ripgrep e2e -- real rg subprocess (one-shot)', () => {
   let tmpDir: string;
   let collectionDir: string;
-  let proc: ReturnType<typeof spawn>;
 
   beforeAll(async () => {
     // Create temp collection with a seeded md file
@@ -90,34 +79,14 @@ describe.skipIf(!rgPresent)('ripgrep e2e — real rg subprocess', () => {
       '# Quick Notes\n\nthe quick brown fox jumps over the lazy dog\n',
       'utf8',
     );
-
-    // Spawn the built bin — drives it as an external subprocess exactly as the host would
-    proc = spawn('node', [BIN_PATH], {
-      stdio: ['pipe', 'pipe', 'pipe'],
-    });
-    proc.stderr!.on('data', (chunk: Buffer) => {
-      // Surface stderr for debugging if the test fails
-      process.stderr.write(`[diffwiki-ripgrep bin stderr] ${chunk.toString()}`);
-    });
   });
 
   afterAll(async () => {
-    // Graceful shutdown
-    try {
-      await sendRequest(proc, 999, 'shutdown');
-    } catch {
-      // Ignore shutdown errors
-    }
-    proc.stdin!.end();
-    await new Promise<void>((resolve) => proc.on('close', () => resolve()));
     await rm(tmpDir, { recursive: true, force: true });
   });
 
-  it('initialize handshake returns correct name/kind/capabilities', async () => {
-    const res = await sendRequest(proc, 1, 'initialize', {
-      protocol: 1,
-      home: tmpDir,
-    });
+  it('describe returns correct name/kind/capabilities', async () => {
+    const res = await invokePlugin('describe', {});
     expect(res.ok).toBe(true);
     const result = res.result as Record<string, unknown>;
     expect(result.name).toBe('diffwiki-ripgrep');
@@ -126,7 +95,7 @@ describe.skipIf(!rgPresent)('ripgrep e2e — real rg subprocess', () => {
   });
 
   it('search returns a real hit for the seeded phrase', async () => {
-    const res = await sendRequest(proc, 2, 'search', {
+    const res = await invokePlugin('search', {
       term: 'quick brown fox',
       collections: [{ name: 'mycollection', path: collectionDir }],
       type: 'text',
@@ -143,7 +112,7 @@ describe.skipIf(!rgPresent)('ripgrep e2e — real rg subprocess', () => {
   });
 
   it('health reports ready:true with rg present', async () => {
-    const res = await sendRequest(proc, 3, 'health', {
+    const res = await invokePlugin('health', {
       collections: [{ name: 'mycollection', path: collectionDir }],
     });
     expect(res.ok).toBe(true);
@@ -154,7 +123,7 @@ describe.skipIf(!rgPresent)('ripgrep e2e — real rg subprocess', () => {
   });
 
   it('regex search returns a real hit using a regex pattern', async () => {
-    const res = await sendRequest(proc, 4, 'search', {
+    const res = await invokePlugin('search', {
       term: 'qu[ia]ck',
       collections: [{ name: 'mycollection', path: collectionDir }],
       type: 'regex',

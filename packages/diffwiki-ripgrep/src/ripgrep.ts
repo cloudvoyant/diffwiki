@@ -1,12 +1,24 @@
+/**
+ * ripgrep CLI helpers.
+ *
+ * Low-level functions for spawning `rg`, parsing its `--json` output, and
+ * extracting cheap titles from markdown files. These are ripgrep-specific
+ * and not shared with other adapters. The generic `commandExists` utility
+ * comes from `diffwiki-core/plugin`.
+ *
+ * @module
+ */
+
 import { spawn } from 'node:child_process';
 import { createReadStream } from 'node:fs';
 import { basename, extname } from 'node:path';
 import { createInterface } from 'node:readline';
+import { commandExists } from 'diffwiki-core/plugin';
 
-/** Injectable spawn function — resolves raw stdout from `rg <args>`. Exit 1 → empty string. Throws on exit 2+. */
+/** Injectable spawn function -- resolves raw stdout from `rg <args>`. Exit 1 -> empty string. Throws on exit 2+. */
 export type SpawnRgFn = (args: string[]) => Promise<string>;
 
-/** Injectable file-lines reader — returns up to 20 lines for `cheapTitle`. */
+/** Injectable file-lines reader -- returns up to 20 lines for `cheapTitle`. */
 export type ReadFileFn = (absPath: string) => Promise<string[]>;
 
 export interface RunRgOptions {
@@ -30,8 +42,7 @@ export const spawnRg: SpawnRgFn = (args) =>
       if (code === 0 || code === 1) {
         resolve(Buffer.concat(chunks).toString('utf8'));
       } else {
-        const stderr = ''; // stderr already piped away; surface exit code
-        reject(new Error(`rg exited with code ${code}${stderr ? ': ' + stderr : ''}`));
+        reject(new Error(`rg exited with code ${code}`));
       }
     });
   });
@@ -58,21 +69,24 @@ export const readFileLines: ReadFileFn = (absPath) =>
   });
 
 /**
- * True if `rg` is on PATH (answers `--version`). Accepts optional injected spawner
- * so tests can stub without touching PATH.
+ * True if `rg` is on PATH. Uses the SDK's `commandExists` utility.
+ * Accepts optional injected spawner for backward compatibility with tests.
  */
 export async function rgOnPath(spawnFn: SpawnRgFn = spawnRg): Promise<boolean> {
-  try {
-    await spawnFn(['--version']);
-    return true;
-  } catch {
-    return false;
+  if (spawnFn !== spawnRg) {
+    // Test-injected spawner -- use the old probe logic
+    try {
+      await spawnFn(['--version']);
+      return true;
+    } catch {
+      return false;
+    }
   }
+  return commandExists('rg');
 }
 
 /**
- * Run `rg --json` with the given pattern and collection root paths, returning
- * raw newline-delimited stdout (caller parses JSON lines and filters `type==='match'`).
+ * Run `rg --json` with the given pattern and collection root paths.
  */
 export async function runRg(spawnFn: SpawnRgFn, pattern: string, roots: string[], opts: RunRgOptions): Promise<string> {
   const limit = opts.limit > 0 ? opts.limit : 20;

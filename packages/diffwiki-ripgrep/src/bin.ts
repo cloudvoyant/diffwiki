@@ -1,5 +1,28 @@
-import { fileURLToPath } from 'node:url';
-import { serve, type HandlerMap } from './protocol.js';
+/**
+ * diffwiki-ripgrep plugin binary.
+ *
+ * Implements the diffwiki plugin protocol via `definePlugin()` from the SDK.
+ * Drives `rg` (ripgrep) for instant literal/regex search -- no index, no
+ * models, no setup beyond verifying rg is on PATH.
+ *
+ * @module
+ */
+
+import { definePlugin } from 'diffwiki-core/plugin';
+import type {
+  PluginDefinition,
+  PluginLogFn,
+  SearchParams,
+  IndexParams,
+  SetupParams,
+  EventParams,
+  HealthParams,
+  SearchHandlerResult,
+  IndexHandlerResult,
+  SetupHandlerResult,
+  EventHandlerResult,
+  HealthHandlerResult,
+} from 'diffwiki-core/plugin';
 import { cheapTitle, readFileLines, rgOnPath, runRg, spawnRg, type ReadFileFn, type SpawnRgFn } from './ripgrep.js';
 
 const VERSION = '0.3.0';
@@ -34,15 +57,14 @@ export interface Deps {
   readFn?: ReadFileFn;
 }
 
-function asCollections(params: Record<string, unknown>): Collection[] {
-  const raw = params.collections;
+function asCollections(raw: unknown): Collection[] {
   if (!Array.isArray(raw)) return [];
   return raw
     .filter(
       (c): c is Collection =>
         !!c && typeof (c as Collection).name === 'string' && typeof (c as Collection).path === 'string',
     )
-    .map((c) => ({ name: c.name, path: c.path }));
+    .map((c) => ({ name: (c as Collection).name, path: (c as Collection).path }));
 }
 
 /**
@@ -59,7 +81,6 @@ export function matchCollection(
     if (filePath.startsWith(prefix)) {
       return { collection: col.name, relPath: filePath.slice(prefix.length) };
     }
-    // Exact match (file IS the root, edge case)
     if (filePath === col.path) {
       return { collection: col.name, relPath: '' };
     }
@@ -82,66 +103,30 @@ export function parseRgOutput(stdout: string): RgEvent[] {
     });
 }
 
-/** Build the op handler map with injected rg spawn and file-read functions. */
-export function makeHandlers(deps: Deps = {}): HandlerMap {
+/** Build the plugin definition with injected rg spawn and file-read functions. */
+export function makePluginDefinition(deps: Deps = {}): {
+  definition: PluginDefinition;
+  handlers: {
+    search: (params: SearchParams, log: PluginLogFn) => Promise<SearchHandlerResult>;
+    index: (params: IndexParams, log: PluginLogFn) => Promise<IndexHandlerResult>;
+    setup: (params: SetupParams, log: PluginLogFn) => Promise<SetupHandlerResult>;
+    onEvent: (params: EventParams, log: PluginLogFn) => Promise<EventHandlerResult>;
+    health: (params: HealthParams, log: PluginLogFn) => Promise<HealthHandlerResult>;
+  };
+} {
   const spawnFn = deps.spawnFn ?? spawnRg;
   const readFn = deps.readFn ?? readFileLines;
 
-  return {
-    initialize() {
-      return {
-        name: 'diffwiki-ripgrep',
-        kind: 'search',
-        version: VERSION,
-        capabilities: {
-          searchTypes: ['text', 'regex'],
-          collectionFilter: true,
-          hooks: false,
-          setup: true,
-        },
-      };
-    },
-
-    async setup(params, log) {
-      void params;
-      const rgPresent = await rgOnPath(spawnFn);
-      if (!rgPresent) {
-        log('error', 'ripgrep (rg) not found — install it: https://github.com/BurntSushi/ripgrep');
-        return {
-          ready: false,
-          steps: [
-            {
-              step: 'verify-rg',
-              ok: false,
-              message: 'rg not on PATH — install ripgrep: https://github.com/BurntSushi/ripgrep',
-            },
-          ],
-        };
-      }
-      return {
-        ready: true,
-        steps: [{ step: 'verify-rg', ok: true }],
-      };
-    },
-
-    index() {
-      return { indexed: 0 };
-    },
-
-    notify() {
-      return { accepted: true };
-    },
-
-    async search(params) {
-      const term = typeof params.term === 'string' ? params.term : '';
-      const collections = asCollections(params);
+  const handlers = {
+    async search(params: SearchParams): Promise<SearchHandlerResult> {
+      const term = params.term ?? '';
+      const collections = asCollections(params.collections);
       const collectionFilter =
         typeof params.collection === 'string' && params.collection.length > 0 ? params.collection : null;
-      const type = typeof params.type === 'string' ? params.type : 'text';
-      const limit = typeof params.limit === 'number' && params.limit > 0 ? params.limit : 20;
+      const type = params.type ?? 'text';
+      const limit = params.limit && params.limit > 0 ? params.limit : 20;
       const fixedStrings = type !== 'regex';
 
-      // Determine search roots
       let roots: string[];
       let activeCollections: Collection[];
       if (collectionFilter !== null) {
@@ -186,7 +171,36 @@ export function makeHandlers(deps: Deps = {}): HandlerMap {
       return { hits };
     },
 
-    async health() {
+    async index(): Promise<IndexHandlerResult> {
+      return { indexed: 0 };
+    },
+
+    async setup(_params: SetupParams, log: PluginLogFn): Promise<SetupHandlerResult> {
+      const rgPresent = await rgOnPath(spawnFn);
+      if (!rgPresent) {
+        log('error', 'ripgrep (rg) not found — install it: https://github.com/BurntSushi/ripgrep');
+        return {
+          ready: false,
+          steps: [
+            {
+              step: 'verify-rg',
+              ok: false,
+              message: 'rg not on PATH — install ripgrep: https://github.com/BurntSushi/ripgrep',
+            },
+          ],
+        };
+      }
+      return {
+        ready: true,
+        steps: [{ step: 'verify-rg', ok: true }],
+      };
+    },
+
+    async onEvent(): Promise<EventHandlerResult> {
+      return { accepted: true };
+    },
+
+    async health(): Promise<HealthHandlerResult> {
       const rgPresent = await rgOnPath(spawnFn);
       return {
         ready: rgPresent,
@@ -208,26 +222,28 @@ export function makeHandlers(deps: Deps = {}): HandlerMap {
             ],
       };
     },
-
-    shutdown() {
-      return {};
-    },
   };
+
+  const definition: PluginDefinition = {
+    name: 'diffwiki-ripgrep',
+    kind: 'search' as const,
+    version: VERSION,
+    capabilities: {
+      searchTypes: ['text', 'regex'],
+      collectionFilter: true,
+      events: false,
+    },
+    handlers,
+  };
+
+  return { definition, handlers };
 }
 
-const isMain = (() => {
-  try {
-    return process.argv[1] === fileURLToPath(import.meta.url);
-  } catch {
-    return false;
-  }
-})();
-
-if (isMain) {
-  serve(makeHandlers({ spawnFn: spawnRg, readFn: readFileLines }))
-    .then(() => process.exit(0))
-    .catch((err: unknown) => {
-      process.stderr.write(`diffwiki-ripgrep: fatal: ${String(err)}\n`);
-      process.exit(1);
-    });
+/** Create the defined plugin with optional injected dependencies. */
+export function createPlugin(deps?: Deps): ReturnType<typeof definePlugin> {
+  const { definition } = makePluginDefinition(deps);
+  return definePlugin(definition);
 }
+
+// Run when invoked as a binary.
+createPlugin().run();
