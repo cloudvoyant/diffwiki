@@ -1,4 +1,5 @@
 import { existsSync, readdirSync } from 'node:fs';
+import { stat, readdir } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -47,10 +48,60 @@ export interface Hit {
   docid?: string;
 }
 
+/** Returns the mtime (epoch ms) for a given path, or 0 if the file does not exist. */
+export type StatMtimeFn = (filePath: string) => Promise<number>;
+
+/** Default statMtime: real fs.stat, returns 0 on ENOENT/error. */
+export const realStatMtime: StatMtimeFn = async (filePath: string): Promise<number> => {
+  try {
+    const s = await stat(filePath);
+    return s.mtimeMs;
+  } catch {
+    return 0;
+  }
+};
+
+/**
+ * Recursively find the newest mtime (epoch ms) among `*.md` / `*.mdx` files
+ * under `dirs`. Returns 0 if no markdown files are found or all stats fail.
+ * Bounded and best-effort: unreadable dirs are silently skipped.
+ */
+export async function newestMdMtime(dirs: string[], statFn: StatMtimeFn): Promise<number> {
+  let newest = 0;
+  async function walk(dir: string): Promise<void> {
+    let entries: Array<{ name: string; isDirectory: () => boolean; isFile: () => boolean }>;
+    try {
+      entries = await readdir(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        await walk(full);
+      } else if (entry.isFile() && /\.mdx?$/.test(entry.name)) {
+        const mt = await statFn(full);
+        if (mt > newest) newest = mt;
+      }
+    }
+  }
+  for (const d of dirs) {
+    await walk(d);
+  }
+  return newest;
+}
+
+/** Path to the qmd index sqlite3 file under the relocated cache. */
+export function qmdIndexPath(home: string): string {
+  return join(home, 'qmd', 'qmd', INDEX, 'index.sqlite3');
+}
+
 export interface Deps {
   exec: ExecFileFn;
   /** Initial home; overridden by `initialize.params.home` when provided. */
   home?: string;
+  /** Injectable stat function for mtime checks. Defaults to real fs.stat. */
+  statMtime?: StatMtimeFn;
 }
 
 /** Derive collection + relPath from a qmd row's `file` (strip `qmd://`) or `displayPath`. */
@@ -112,6 +163,43 @@ async function addCollections(exec: ExecFileFn, env: Env, collections: Collectio
 export function makeHandlers(deps: Deps): HandlerMap {
   let home = deps.home ?? join(homedir(), '.diffwiki');
   const exec = deps.exec;
+  const statMtime = deps.statMtime ?? realStatMtime;
+
+  /**
+   * Best-effort staleness check: if the newest `*.md/*.mdx` file across
+   * collection roots is newer than the qmd index file (or the index is
+   * missing), run `qmd update` before searching. For semantic/hybrid
+   * searches, also run `qmd embed` when status shows pending embeddings.
+   * All errors are swallowed -- search must proceed regardless.
+   */
+  async function ensureFresh(collections: Collection[], searchType: string, log: LogFn): Promise<void> {
+    try {
+      const roots = collections.map((c) => c.path);
+      const contentMtime = await newestMdMtime(roots, statMtime);
+      if (contentMtime === 0) return; // no markdown files found
+      const indexMtime = await statMtime(qmdIndexPath(home));
+      if (indexMtime >= contentMtime) return; // index is up to date
+
+      const env = qmdEnv(home);
+      log('info', 'index stale — running qmd update');
+      await runQmd(exec, ['update', '--index', INDEX], env);
+
+      // For semantic/hybrid, check if embeddings are needed
+      if (searchType === 'semantic' || searchType === 'hybrid') {
+        try {
+          const status = await runQmdJson<QmdStatus>(exec, ['status', '--index', INDEX, '--format', 'json'], env);
+          if (typeof status.needsEmbedding === 'number' && status.needsEmbedding > 0) {
+            log('info', `${status.needsEmbedding} doc(s) need embedding — running qmd embed`);
+            await runQmd(exec, ['embed', '--index', INDEX], env);
+          }
+        } catch {
+          // status/embed failure is non-fatal
+        }
+      }
+    } catch {
+      // entire freshness check is best-effort
+    }
+  }
 
   return {
     initialize(params) {
@@ -198,12 +286,15 @@ export function makeHandlers(deps: Deps): HandlerMap {
       return { accepted: true };
     },
 
-    async search(params) {
+    async search(params, log) {
       const env = qmdEnv(home);
       const term = typeof params.term === 'string' ? params.term : '';
       const type = typeof params.type === 'string' ? params.type : 'keyword';
       const limit = typeof params.limit === 'number' && params.limit > 0 ? params.limit : 20;
       const sub = searchSubcommand(type);
+
+      const collections = asCollections(params);
+      await ensureFresh(collections, type, log);
 
       const args = [sub, term, '--index', INDEX, '--format', 'json', '-n', String(limit)];
       if (typeof params.collection === 'string' && params.collection.length > 0) {

@@ -5,7 +5,15 @@
 // suite slow, network-dependent, and flaky. Every test injects a canned `ExecFileFn`
 // so the adapter's op -> CLI mapping and JSON parsing are exercised in isolation.
 import { describe, expect, it, vi } from 'vitest';
-import { makeHandlers, searchSubcommand, splitQmdPath, type QmdRow } from '../src/bin.js';
+import {
+  makeHandlers,
+  newestMdMtime,
+  qmdIndexPath,
+  searchSubcommand,
+  splitQmdPath,
+  type QmdRow,
+  type StatMtimeFn,
+} from '../src/bin.js';
 import type { ExecFileFn } from '../src/qmd.js';
 
 const noopLog = () => {};
@@ -275,5 +283,153 @@ describe('initialize handler', () => {
     expect(result.capabilities.collectionFilter).toBe(true);
     expect(result.capabilities.hooks).toBe(true);
     expect(result.capabilities.setup).toBe(true);
+  });
+});
+
+describe('search handler — staleness check', () => {
+  const HOME = '/tmp/test-home';
+
+  it('runs qmd update before search when index is stale', async () => {
+    const calls: string[][] = [];
+    const exec: ExecFileFn = async (file, args) => {
+      calls.push([file, ...args]);
+      if (args[0] === 'search' || args[0] === 'vsearch' || args[0] === 'query') {
+        return { stdout: '[]', stderr: '' };
+      }
+      return { stdout: '', stderr: '' };
+    };
+    // Content is newer (2000) than the index (1000) — stale
+    const statMtime: StatMtimeFn = async (filePath: string) => {
+      if (filePath === qmdIndexPath(HOME)) return 1000;
+      return 2000; // all content files are newer
+    };
+
+    const { mkdtemp, writeFile, rm } = await import('node:fs/promises');
+    const { join } = await import('node:path');
+    const { tmpdir } = await import('node:os');
+    const tmpBase = await mkdtemp(join(tmpdir(), 'qmd-stale-test-'));
+    const docsDir = join(tmpBase, 'docs');
+    const notesDir = join(tmpBase, 'notes');
+    await import('node:fs/promises').then((fs) => fs.mkdir(docsDir, { recursive: true }));
+    await import('node:fs/promises').then((fs) => fs.mkdir(notesDir, { recursive: true }));
+    await writeFile(join(docsDir, 'article.md'), '# test', 'utf8');
+
+    const collections = [
+      { name: 'docs', path: docsDir },
+      { name: 'notes', path: notesDir },
+    ];
+
+    const handlers = makeHandlers({ exec, home: HOME, statMtime });
+    await handlers.search({ term: 'foo', type: 'keyword', collections }, noopLog);
+
+    // qmd update should have been called BEFORE the search subcommand
+    const updateIdx = calls.findIndex((c) => c.includes('update'));
+    const searchIdx = calls.findIndex((c) => c[1] === 'search' || c[1] === 'vsearch' || c[1] === 'query');
+    expect(updateIdx).toBeGreaterThanOrEqual(0);
+    expect(searchIdx).toBeGreaterThan(updateIdx);
+
+    await rm(tmpBase, { recursive: true, force: true });
+  });
+
+  it('skips qmd update when index is fresh', async () => {
+    const calls: string[][] = [];
+    const exec: ExecFileFn = async (file, args) => {
+      calls.push([file, ...args]);
+      return { stdout: '[]', stderr: '' };
+    };
+    // Index is newer (3000) than content (2000) — fresh
+    const statMtime: StatMtimeFn = async (filePath: string) => {
+      if (filePath === qmdIndexPath(HOME)) return 3000;
+      return 2000;
+    };
+
+    const { mkdtemp, writeFile, rm } = await import('node:fs/promises');
+    const { join } = await import('node:path');
+    const { tmpdir } = await import('node:os');
+    const tmpBase = await mkdtemp(join(tmpdir(), 'qmd-fresh-test-'));
+    const docsDir = join(tmpBase, 'docs');
+    await import('node:fs/promises').then((fs) => fs.mkdir(docsDir, { recursive: true }));
+    await writeFile(join(docsDir, 'article.md'), '# test', 'utf8');
+
+    const collections = [{ name: 'docs', path: docsDir }];
+
+    const handlers = makeHandlers({ exec, home: HOME, statMtime });
+    await handlers.search({ term: 'foo', type: 'keyword', collections }, noopLog);
+
+    // Only the search subcommand should have been called — no update
+    expect(calls.every((c) => !c.includes('update'))).toBe(true);
+    expect(calls.some((c) => c[1] === 'search')).toBe(true);
+
+    await rm(tmpBase, { recursive: true, force: true });
+  });
+
+  it('runs qmd embed after update for semantic search when embeddings pending', async () => {
+    const calls: string[][] = [];
+    const exec: ExecFileFn = async (file, args) => {
+      calls.push([file, ...args]);
+      if (args[0] === 'vsearch') return { stdout: '[]', stderr: '' };
+      if (args[0] === 'status') {
+        return { stdout: JSON.stringify({ totalDocuments: 5, needsEmbedding: 3 }), stderr: '' };
+      }
+      return { stdout: '', stderr: '' };
+    };
+    const statMtime: StatMtimeFn = async (filePath: string) => {
+      if (filePath === qmdIndexPath(HOME)) return 1000;
+      return 2000;
+    };
+
+    const { mkdtemp, writeFile, rm } = await import('node:fs/promises');
+    const { join } = await import('node:path');
+    const { tmpdir } = await import('node:os');
+    const tmpBase = await mkdtemp(join(tmpdir(), 'qmd-embed-test-'));
+    const docsDir = join(tmpBase, 'docs');
+    await import('node:fs/promises').then((fs) => fs.mkdir(docsDir, { recursive: true }));
+    await writeFile(join(docsDir, 'article.md'), '# test', 'utf8');
+
+    const collections = [{ name: 'docs', path: docsDir }];
+
+    const handlers = makeHandlers({ exec, home: HOME, statMtime });
+    await handlers.search({ term: 'foo', type: 'semantic', collections }, noopLog);
+
+    const updateIdx = calls.findIndex((c) => c.includes('update'));
+    const embedIdx = calls.findIndex((c) => c.includes('embed'));
+    const searchIdx = calls.findIndex((c) => c[1] === 'vsearch');
+    expect(updateIdx).toBeGreaterThanOrEqual(0);
+    expect(embedIdx).toBeGreaterThan(updateIdx);
+    expect(searchIdx).toBeGreaterThan(embedIdx);
+
+    await rm(tmpBase, { recursive: true, force: true });
+  });
+});
+
+describe('newestMdMtime helper', () => {
+  it('returns 0 for an empty directory', async () => {
+    const { mkdtemp, rm } = await import('node:fs/promises');
+    const { join } = await import('node:path');
+    const { tmpdir } = await import('node:os');
+    const tmpBase = await mkdtemp(join(tmpdir(), 'qmd-mtime-test-'));
+    const result = await newestMdMtime([tmpBase], async () => 500);
+    expect(result).toBe(0);
+    await rm(tmpBase, { recursive: true, force: true });
+  });
+
+  it('returns the max mtime across markdown files', async () => {
+    const { mkdtemp, writeFile, rm } = await import('node:fs/promises');
+    const { join } = await import('node:path');
+    const { tmpdir } = await import('node:os');
+    const tmpBase = await mkdtemp(join(tmpdir(), 'qmd-mtime-test-'));
+    await writeFile(join(tmpBase, 'a.md'), '# a', 'utf8');
+    await writeFile(join(tmpBase, 'b.mdx'), '# b', 'utf8');
+    await writeFile(join(tmpBase, 'c.txt'), 'ignored', 'utf8');
+
+    const mtimes: Record<string, number> = {};
+    mtimes[join(tmpBase, 'a.md')] = 100;
+    mtimes[join(tmpBase, 'b.mdx')] = 300;
+
+    const statFn: StatMtimeFn = async (p) => mtimes[p] ?? 0;
+    const result = await newestMdMtime([tmpBase], statFn);
+    expect(result).toBe(300);
+
+    await rm(tmpBase, { recursive: true, force: true });
   });
 });
