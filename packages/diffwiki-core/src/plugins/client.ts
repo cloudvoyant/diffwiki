@@ -12,7 +12,12 @@ import type {
   SearchProvider,
 } from '../types';
 
-const REQUEST_TIMEOUT_MS = 30_000;
+// Per-op timeouts. Most ops are quick, but `setup`/`index` can download a
+// multi-hundred-MB embedding model and embed a whole corpus (minutes), and a
+// semantic/hybrid `search` may trigger an incremental re-embed on a stale index.
+const REQUEST_TIMEOUT_MS = 30_000; // initialize, notify, health
+const SEARCH_TIMEOUT_MS = 120_000; // search (hybrid rerank / small re-embed)
+const LONG_TIMEOUT_MS = 1_800_000; // setup, index — model download + full embed
 const SHUTDOWN_GRACE_MS = 500;
 
 interface Pending {
@@ -106,14 +111,18 @@ export async function spawnPluginClient(record: PluginRecord): Promise<SearchPro
     failAll(new Error('plugin process exited'));
   });
 
-  const request = <T = unknown>(op: string, params: Record<string, unknown>): Promise<T> => {
+  const request = <T = unknown>(
+    op: string,
+    params: Record<string, unknown>,
+    timeoutMs: number = REQUEST_TIMEOUT_MS,
+  ): Promise<T> => {
     if (closed) return Promise.reject(new Error('plugin process is not running'));
     return new Promise<T>((resolve, reject) => {
       const id = nextId++;
       const timer = setTimeout(() => {
         pending.delete(id);
         reject(new Error(`plugin request "${op}" timed out`));
-      }, REQUEST_TIMEOUT_MS);
+      }, timeoutMs);
       pending.set(id, {
         resolve: (result) => resolve(result as T),
         reject,
@@ -215,28 +224,40 @@ export async function spawnPluginClient(record: PluginRecord): Promise<SearchPro
     name,
     capabilities,
     async setup(collections, opts) {
-      const result = await request<{ ready?: boolean }>('setup', {
-        collections: toWireCollections(collections),
-        embed: opts?.embed,
-        prefetchModels: opts?.prefetchModels,
-      });
+      const result = await request<{ ready?: boolean }>(
+        'setup',
+        {
+          collections: toWireCollections(collections),
+          embed: opts?.embed,
+          prefetchModels: opts?.prefetchModels,
+        },
+        LONG_TIMEOUT_MS,
+      );
       return { ready: result?.ready === true };
     },
     async reindex(collections, opts) {
-      const result = await request<{ indexed?: number }>('index', {
-        collections: toWireCollections(collections),
-        embed: opts?.embed,
-      });
+      const result = await request<{ indexed?: number }>(
+        'index',
+        {
+          collections: toWireCollections(collections),
+          embed: opts?.embed,
+        },
+        LONG_TIMEOUT_MS,
+      );
       return result?.indexed ?? 0;
     },
     async search(term, collections, opts) {
-      const result = await request('search', {
-        term,
-        collections: toWireCollections(collections),
-        collection: opts?.collection,
-        type: opts?.type,
-        limit: opts?.limit,
-      });
+      const result = await request(
+        'search',
+        {
+          term,
+          collections: toWireCollections(collections),
+          collection: opts?.collection,
+          type: opts?.type,
+          limit: opts?.limit,
+        },
+        SEARCH_TIMEOUT_MS,
+      );
       return mapHits(result, collections);
     },
     async notify(event: PluginEvent, collection, relPath, collections) {
