@@ -86,6 +86,8 @@ export interface PluginRecord {
   kind: PluginKind;
   command: string[];
   version?: string;
+  /** Capabilities cached at install/register time via the `describe` op. */
+  capabilities?: PluginCapabilities;
   enabled: boolean;
   managed?: boolean;
 }
@@ -96,8 +98,12 @@ export interface PluginRegistryFile {
 export interface PluginCapabilities {
   searchTypes: string[];
   collectionFilter: boolean;
-  hooks: boolean;
-  setup: boolean;
+  /** Whether the plugin handles lifecycle events (article/collection mutations). */
+  events: boolean;
+  /** @deprecated Use `events` instead. Kept for wire-format backward compatibility during migration. */
+  hooks?: boolean;
+  /** Whether the plugin supports the `setup` op. */
+  setup?: boolean;
 }
 export interface PluginReadiness {
   toolInstalled: boolean;
