@@ -39,14 +39,6 @@ export async function deregisterPlugin(name: string): Promise<void> {
   await writePluginRegistry(registry);
 }
 
-export async function setPluginEnabled(name: string, enabled: boolean): Promise<void> {
-  const registry = await readPluginRegistry();
-  const record = registry.plugins.find((p) => p.name === name);
-  if (!record) return;
-  record.enabled = enabled;
-  await writePluginRegistry(registry);
-}
-
 export async function listEnabledPlugins(kind: PluginKind): Promise<PluginRecord[]> {
   const registry = await readPluginRegistry();
   return registry.plugins.filter((p) => p.enabled && p.kind === kind);

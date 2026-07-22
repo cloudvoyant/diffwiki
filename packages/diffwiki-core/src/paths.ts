@@ -30,7 +30,3 @@ export function pluginsDir(): string {
 export function pluginsRegistryPath(): string {
   return path.join(resolveHome(), 'plugins.json');
 }
-
-export function indexDir(): string {
-  return path.join(resolveHome(), 'index');
-}

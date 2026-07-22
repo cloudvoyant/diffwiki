@@ -1,11 +1,17 @@
 import { createServerFn } from '@tanstack/react-start';
-import { query, listCollections, listSearchModes } from 'diffwiki-core';
+import { query, listCollections, listSearchModes, resolveDefaultSearchMode, type SearchMode } from 'diffwiki-core';
 import { hitToResult } from '../lib/search';
 import type { SearchResultItem } from '../lib/types';
 
 export interface SearchResponse {
   q: string;
   results: SearchResultItem[];
+}
+
+export interface SearchModesResponse {
+  modes: SearchMode[];
+  /** The engine+type `query()` uses when the request omits engine/type. */
+  default: { engine: string; type: string };
 }
 
 /**
@@ -35,10 +41,15 @@ export const runSearch = createServerFn({ method: 'GET' })
   });
 
 /**
- * Return the available search modes from `listSearchModes()`.
+ * Return the available search modes plus the default engine+type the server
+ * actually runs when the request omits engine/type.
  *
- * Always includes at minimum `{ plugin: 'native', type: 'basic', label: 'native · bm25' }`
- * prepended before any installed plugin modes. The `/search` route renders
- * these as `<option>` elements so the dropdown reflects exactly what is installed.
+ * `modes` always includes at minimum `{ plugin: 'native', type: 'basic', label: 'native · bm25' }`
+ * prepended before any installed plugin modes. The `/search` route renders these
+ * as `<option>` elements and pre-selects `default` so the dropdown reflects the
+ * engine that would actually run (which may be the first enabled plugin, not native).
  */
-export const getSearchModes = createServerFn({ method: 'GET' }).handler(() => listSearchModes());
+export const getSearchModes = createServerFn({ method: 'GET' }).handler(async (): Promise<SearchModesResponse> => {
+  const [modes, def] = await Promise.all([listSearchModes(), resolveDefaultSearchMode()]);
+  return { modes, default: def };
+});

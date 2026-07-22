@@ -119,41 +119,70 @@ export async function spawnPluginClient(record: PluginRecord): Promise<SearchPro
         reject,
         timer,
       });
-      child.stdin.write(`${JSON.stringify({ id, op, params })}\n`);
+      child.stdin.write(`${JSON.stringify({ id, op, params })}\n`, (err) => {
+        // A mid-flight write failure (e.g. EPIPE) must reject the pending request
+        // promptly rather than let it hang until the 30s timeout.
+        if (!err) return;
+        const p = pending.get(id);
+        if (!p) return;
+        pending.delete(id);
+        clearTimeout(p.timer);
+        p.reject(err);
+      });
     });
   };
 
-  const handshake = await request<{
+  // Any failure during handshake/validation must not leave a live child behind.
+  let handshake: {
     name: string;
     kind: string;
     version?: string;
     capabilities: PluginCapabilities;
-  }>('initialize', { protocol: 1, home: resolveHome() });
+  };
+  try {
+    handshake = await request<{
+      name: string;
+      kind: string;
+      version?: string;
+      capabilities: PluginCapabilities;
+    }>('initialize', { protocol: 1, home: resolveHome() });
 
-  if (handshake.kind !== 'search') {
+    if (handshake.kind !== 'search') {
+      throw new Error(`plugin "${record.name}" reported kind "${handshake.kind}", expected "search"`);
+    }
+  } catch (err) {
     closed = true;
-    child.kill();
-    throw new Error(`plugin "${record.name}" reported kind "${handshake.kind}", expected "search"`);
+    child.kill('SIGKILL');
+    throw err;
   }
 
   const capabilities = handshake.capabilities;
   const name = handshake.name;
 
   const mapHits = (result: unknown, collections: CollectionEntry[]): QueryHit[] => {
-    const hits = (result as { hits?: WireHit[] } | undefined)?.hits ?? [];
-    return hits.map((h) => {
+    const raw = (result as { hits?: unknown } | undefined)?.hits;
+    const hits = Array.isArray(raw) ? raw : [];
+    const out: QueryHit[] = [];
+    for (const item of hits) {
+      if (typeof item !== 'object' || item === null) continue;
+      const h = item as Partial<WireHit>;
+      // Defensive wire parsing (mirror the adapters): skip entries whose required
+      // string fields are not strings rather than trusting the cast.
+      if (typeof h.collection !== 'string' || typeof h.relPath !== 'string') continue;
+      const title = typeof h.title === 'string' ? h.title : h.relPath;
       const coll = collections.find((c) => c.name === h.collection);
       const abs = coll ? path.join(coll.path, h.relPath) : h.relPath;
-      return {
+      out.push({
         collection: h.collection,
         path: abs,
-        title: h.title,
-        tags: h.tags ?? [],
-        snippet: h.snippet,
-        score: h.score,
-        docid: h.docid,
-      };
-    });
+        title,
+        tags: Array.isArray(h.tags) ? h.tags.filter((t): t is string => typeof t === 'string') : [],
+        snippet: typeof h.snippet === 'string' ? h.snippet : undefined,
+        score: typeof h.score === 'number' ? h.score : undefined,
+        docid: typeof h.docid === 'string' ? h.docid : undefined,
+      });
+    }
+    return out;
   };
 
   const close = async (): Promise<void> => {

@@ -1,7 +1,6 @@
 import { createFileRoute, Link } from '@tanstack/react-router';
 import { useState } from 'react';
-import { runSearch } from '../server/search';
-import { getSearchModes } from '../server/search';
+import { runSearch, getSearchModes } from '../server/search';
 import { getCollections } from '../server/collections';
 import { PageLayout } from '../components/page-layout';
 import { cn } from '../lib/utils';
@@ -22,18 +21,18 @@ export const Route = createFileRoute('/search')({
     type: search.type,
   }),
   loader: async ({ deps }) => {
-    const [search, collections, modes] = await Promise.all([
+    const [search, collections, searchModes] = await Promise.all([
       runSearch({ data: { q: deps.q, collection: deps.c, engine: deps.engine, type: deps.type } }),
       getCollections(),
       getSearchModes(),
     ]);
-    return { search, collections, modes };
+    return { search, collections, modes: searchModes.modes, defaultMode: searchModes.default };
   },
   component: SearchComponent,
 });
 
 function SearchComponent() {
-  const { search, collections, modes } = Route.useLoaderData();
+  const { search, collections, modes, defaultMode } = Route.useLoaderData();
   const params = Route.useSearch();
   const navigate = Route.useNavigate();
 
@@ -45,14 +44,11 @@ function SearchComponent() {
     void navigate({ to: '/search', search: (prev) => ({ ...prev, q: value }) });
   };
 
-  // The current mode key is "engine:type"; fall back to the first available mode
-  // (always 'native:basic' at minimum) when neither param is set.
+  // The current mode key is "engine:type". When the URL omits engine/type, reflect
+  // the engine the server actually runs (resolved via config.defaultSearch / first
+  // enabled plugin / native) rather than blindly showing the first listed mode.
   const currentModeKey =
-    params.engine && params.type
-      ? `${params.engine}:${params.type}`
-      : modes.length > 0
-        ? `${modes[0].plugin}:${modes[0].type}`
-        : '';
+    params.engine && params.type ? `${params.engine}:${params.type}` : `${defaultMode.engine}:${defaultMode.type}`;
 
   const handleModeChange = (value: string) => {
     // Split on the first colon only so plugin names like "diffwiki-qmd" are safe.

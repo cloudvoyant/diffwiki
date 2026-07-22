@@ -275,7 +275,7 @@ export function makeHandlers(deps: Deps): HandlerMap {
     async notify(params, log) {
       const env = qmdEnv(home);
       const collection = params.collection as Collection | undefined;
-      if (collection && typeof collection.name === 'string') {
+      if (collection && typeof collection.name === 'string' && typeof collection.path === 'string') {
         try {
           await runQmd(exec, ['update', '--index', INDEX, '-c', collection.name], env);
         } catch (err) {
@@ -296,10 +296,12 @@ export function makeHandlers(deps: Deps): HandlerMap {
       const collections = asCollections(params);
       await ensureFresh(collections, type, log);
 
-      const args = [sub, term, '--index', INDEX, '--format', 'json', '-n', String(limit)];
+      const args = [sub, '--index', INDEX, '--format', 'json', '-n', String(limit)];
       if (typeof params.collection === 'string' && params.collection.length > 0) {
         args.push('-c', params.collection);
       }
+      // `--` terminates flag parsing so a term starting with `-` isn't read as a qmd flag.
+      args.push('--', term);
 
       const rows = await runQmdJson<QmdRow[]>(exec, args, env);
       const hits: Hit[] = (Array.isArray(rows) ? rows : []).map((row) => {

@@ -5,7 +5,7 @@ import { listCollections } from './collections';
 import { parseArticle } from './frontmatter';
 import { readConfig } from './config';
 import { CollectionNotFoundError } from './errors';
-import { loadSearchProvider } from './plugins/loader';
+import { loadSearchProvider, listSearchModes } from './plugins/loader';
 import { listEnabledPlugins } from './plugins/registry';
 import { NATIVE_ENGINE } from './types';
 import type { CollectionEntry, QueryHit, QueryOptions } from './types';
@@ -173,14 +173,19 @@ export async function nativeSearch(
     }));
   }
 
+  // Precompute a per-doc Set of all tokens once so docFreq membership is O(1)
+  // instead of rebuilding + scanning the concatenated token array per query term.
+  const docTokenSets = docs.map(
+    (doc) => new Set<string>([...doc.fields.title, ...doc.fields.tags, ...doc.fields.collection, ...doc.fields.body]),
+  );
+
   // Compute IDF for each query term across the corpus
   const N = docs.length;
   const idf = new Map<string, number>();
   for (const qt of queryTerms) {
     let docFreq = 0;
-    for (const doc of docs) {
-      const allTokens = [...doc.fields.title, ...doc.fields.tags, ...doc.fields.collection, ...doc.fields.body];
-      if (allTokens.includes(qt)) docFreq++;
+    for (const tokenSet of docTokenSets) {
+      if (tokenSet.has(qt)) docFreq++;
     }
     // Standard BM25 IDF: ln((N - docFreq + 0.5) / (docFreq + 0.5) + 1)
     idf.set(qt, Math.log((N - docFreq + 0.5) / (docFreq + 0.5) + 1));
@@ -233,6 +238,35 @@ async function resolveDefaultEngine(): Promise<string> {
   if (configured && enabled.some((p) => p.name === configured)) return configured;
   if (enabled.length > 0) return enabled[0].name;
   return NATIVE_ENGINE;
+}
+
+/**
+ * Resolve the engine + type that `query()` would use when the caller passes no
+ * explicit engine/type. Mirrors `resolveDefaultEngine`'s precedence and, when the
+ * resolved engine is a plugin, prefers the type from `config.defaultSearch`'s
+ * `:type` suffix (if that plugin advertises it) else the plugin's first advertised
+ * search type. The native engine always resolves to `basic`. UIs use this to
+ * pre-select the search-mode dropdown to the engine actually run server-side.
+ */
+export async function resolveDefaultSearchMode(): Promise<{ engine: string; type: string }> {
+  const config = await readConfig();
+  const enabled = await listEnabledPlugins('search');
+  const configured = config.defaultSearch?.split(':')[0];
+  const configuredType = config.defaultSearch?.split(':')[1];
+
+  let engine = NATIVE_ENGINE;
+  if (configured && enabled.some((p) => p.name === configured)) engine = configured;
+  else if (enabled.length > 0) engine = enabled[0].name;
+
+  if (engine === NATIVE_ENGINE) return { engine, type: 'basic' };
+
+  const modes = await listSearchModes();
+  const engineModes = modes.filter((m) => m.plugin === engine);
+  if (engineModes.length === 0) return { engine: NATIVE_ENGINE, type: 'basic' };
+  if (configuredType && engineModes.some((m) => m.type === configuredType)) {
+    return { engine, type: configuredType };
+  }
+  return { engine, type: engineModes[0].type };
 }
 
 export async function query(term: string, opts?: QueryOptions): Promise<QueryHit[]> {

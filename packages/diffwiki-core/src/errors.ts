@@ -36,8 +36,4 @@ export class InvalidTargetError extends DiffwikiError {
   }
 }
 
-export class PluginError extends DiffwikiError {
-  constructor(message: string) {
-    super(message);
-  }
-}
+export class PluginError extends DiffwikiError {}
