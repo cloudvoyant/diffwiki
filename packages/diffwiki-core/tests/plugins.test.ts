@@ -108,8 +108,8 @@ afterEach(async () => {
   }
 });
 
-describe('protocol client + loader', () => {
-  it('handshakes and maps a hit to an absolute path', async () => {
+describe('one-shot protocol client + loader', () => {
+  it('describes and maps a hit to an absolute path', async () => {
     const entry: CollectionEntry = await createCollection('notes');
     await registerStubPlugin();
 
@@ -124,7 +124,7 @@ describe('protocol client + loader', () => {
     expect(hits[0].path).toBe(path.join(entry.path, 'a.md'));
   });
 
-  it('lists native FIRST, then the plugin modes', async () => {
+  it('lists native FIRST, then the plugin modes from cached capabilities', async () => {
     await registerStubPlugin();
     const modes = await listSearchModes();
     expect(modes[0]).toEqual({ plugin: 'native', type: 'basic', label: 'native · bm25' });

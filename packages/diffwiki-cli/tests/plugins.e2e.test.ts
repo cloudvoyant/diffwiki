@@ -11,111 +11,77 @@ let scriptDir: string;
 let scriptPath: string;
 
 /**
- * A real subprocess plugin implementing the diffwiki JSON-over-stdio protocol,
- * backed by an in-memory stub. Written to disk so the host spawns it for real.
- * `DIFFWIKI_FIXTURE_TOOL_MISSING=1` flips `health` to report its dependency
- * absent, exercising the doctor error path.
+ * A real one-shot subprocess plugin implementing the diffwiki protocol.
+ * Reads one JSON request from stdin, responds on stdout, and exits.
+ * `DIFFWIKI_FIXTURE_TOOL_MISSING=1` flips `health` to report its dependency absent.
  */
 const FIXTURE = `#!/usr/bin/env node
-import { createInterface } from 'node:readline';
-
 const toolMissing = process.env.DIFFWIKI_FIXTURE_TOOL_MISSING === '1';
 
-function reply(id, result) {
-  process.stdout.write(JSON.stringify({ id, ok: true, result }) + '\\n');
-}
-function log(level, message) {
-  process.stdout.write(JSON.stringify({ log: { level, message } }) + '\\n');
-}
+let buffer = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => { buffer += chunk; });
+process.stdin.on('end', () => {
+  const line = buffer.trim();
+  if (!line) { process.exit(1); return; }
+  const msg = JSON.parse(line);
+  const result = handle(msg.op, msg.params || {});
+  process.stdout.write(JSON.stringify({ ok: true, result }) + '\\n');
+  process.exit(0);
+});
 
-function handle(msg) {
-  const { id, op, params } = msg;
+function handle(op, params) {
   switch (op) {
-    case 'initialize':
-      reply(id, {
+    case 'describe':
+      return {
         name: 'stub',
         kind: 'search',
         version: '0.0.1',
-        capabilities: { kind: 'search', searchTypes: ['stub'], collectionFilter: true, hooks: true, setup: true },
-      });
-      break;
+        capabilities: { searchTypes: ['stub'], collectionFilter: true, events: true },
+      };
     case 'setup':
-      log('info', 'stub setup running');
-      reply(id, { ready: true, steps: [{ step: 'stub-setup', ok: true }] });
-      break;
+      return { ready: true, steps: [{ step: 'stub-setup', ok: true }] };
     case 'index': {
-      const n = Array.isArray(params && params.collections) ? params.collections.length : 0;
-      reply(id, { indexed: n });
-      break;
+      const n = Array.isArray(params.collections) ? params.collections.length : 0;
+      return { indexed: n };
     }
-    case 'notify':
-      reply(id, { accepted: true });
-      break;
+    case 'event':
+      return { accepted: true };
     case 'search':
-      reply(id, {
-        hits: [
-          {
-            collection: 'stub',
-            relPath: 'canned.md',
-            title: 'stub hit for ' + ((params && params.term) || ''),
-            snippet: 'a canned snippet',
-            score: 1,
-            docid: 'stub-1',
-            tags: ['stub'],
-          },
-        ],
-      });
-      break;
+      return {
+        hits: [{
+          collection: 'stub',
+          relPath: 'canned.md',
+          title: 'stub hit for ' + (params.term || ''),
+          snippet: 'a canned snippet',
+          score: 1,
+          docid: 'stub-1',
+          tags: ['stub'],
+        }],
+      };
     case 'health':
       if (toolMissing) {
-        reply(id, {
+        return {
           ready: false,
           readiness: {
-            toolInstalled: false,
-            modelsPresent: false,
-            indexBuilt: false,
-            docsIndexed: 0,
-            embeddingsPending: 0,
-            firstSearchCost: 'model-download',
+            toolInstalled: false, modelsPresent: false, indexBuilt: false,
+            docsIndexed: 0, embeddingsPending: 0, firstSearchCost: 'model-download',
           },
           diagnostics: [{ level: 'error', message: 'stub tool missing — install it' }],
-        });
-      } else {
-        reply(id, {
-          ready: true,
-          readiness: {
-            toolInstalled: true,
-            modelsPresent: true,
-            indexBuilt: true,
-            docsIndexed: 1,
-            embeddingsPending: 0,
-            firstSearchCost: 'instant',
-          },
-          diagnostics: [{ level: 'ok', message: 'stub ready' }],
-        });
+        };
       }
-      break;
-    case 'shutdown':
-      reply(id, {});
-      process.exit(0);
-      break;
+      return {
+        ready: true,
+        readiness: {
+          toolInstalled: true, modelsPresent: true, indexBuilt: true,
+          docsIndexed: 1, embeddingsPending: 0, firstSearchCost: 'instant',
+        },
+        diagnostics: [{ level: 'ok', message: 'stub ready' }],
+      };
     default:
-      process.stdout.write(JSON.stringify({ id, ok: false, error: { message: 'unknown op ' + op } }) + '\\n');
+      throw new Error('unknown op ' + op);
   }
 }
-
-const rl = createInterface({ input: process.stdin });
-rl.on('line', (line) => {
-  const trimmed = line.trim();
-  if (!trimmed) return;
-  let msg;
-  try {
-    msg = JSON.parse(trimmed);
-  } catch {
-    return;
-  }
-  handle(msg);
-});
 `;
 
 /** Probe for rg on PATH at module load time. */
@@ -163,48 +129,40 @@ afterEach(async () => {
 });
 
 describe('plugin lifecycle (fixture subprocess plugin, no npm/network)', () => {
-  it('register → list → doctor → index → query → default routing → remove', async () => {
-    // Seed a collection so setup/index/search have something to work with.
+  it('register -> list -> doctor -> index -> query -> default routing -> remove', async () => {
     expect((await run(['create', 'stub'])).ok).toBe(true);
 
-    // register spawns the plugin, validates the handshake, and runs setup.
     const reg = await run(['plugin', 'register', 'stub', '--command', 'node', scriptPath]);
     expect(reg.ok).toBe(true);
     expect(reg.out).toContain('Registered "stub"');
 
-    // list shows it enabled + spawnable.
     const list = await run(['plugin', 'list']);
     expect(list.ok).toBe(true);
     expect(list.out).toContain('stub');
     expect(list.out).toContain('enabled=true');
     expect(list.out).toContain('spawnable=true');
 
-    // doctor folds in the plugin's health diagnostics + readiness line.
     const doc = await run(['doctor']);
     expect(doc.ok).toBe(true);
     expect(doc.out).toContain('plugin "stub" enabled and spawnable');
     expect(doc.out).toContain('stub ready');
     expect(doc.out).toContain('first search is instant');
 
-    // index delegates to the plugin's reindex.
     const idx = await run(['index']);
     expect(idx.ok).toBe(true);
     expect(idx.out).toContain('Indexed');
 
-    // query --engine stub round-trips the canned hit + snippet.
     const q = await run(['query', 'hello', '--engine', 'stub']);
     expect(q.ok).toBe(true);
     expect(q.out).toContain('1 result(s)');
     expect(q.out).toContain('stub hit for hello');
     expect(q.out).toContain('a canned snippet');
 
-    // config-set defaultSearch stub → query with no --engine routes to the stub (core resolves).
     expect((await run(['config-set', 'defaultSearch', 'stub'])).ok).toBe(true);
     const q2 = await run(['query', 'hello']);
     expect(q2.ok).toBe(true);
     expect(q2.out).toContain('stub hit for hello');
 
-    // remove deregisters; list no longer shows an enabled plugin.
     const rm = await run(['plugin', 'remove', 'stub']);
     expect(rm.ok).toBe(true);
     const listAfter = await run(['plugin', 'list']);
@@ -215,7 +173,6 @@ describe('plugin lifecycle (fixture subprocess plugin, no npm/network)', () => {
     expect((await run(['create', 'stub'])).ok).toBe(true);
     expect((await run(['plugin', 'register', 'stub', '--command', 'node', scriptPath])).ok).toBe(true);
 
-    // The child inherits parent env; flip the fixture into tool-missing mode.
     process.env.DIFFWIKI_FIXTURE_TOOL_MISSING = '1';
     const doc = await run(['doctor']);
     expect(doc.ok).toBe(false);
@@ -224,7 +181,6 @@ describe('plugin lifecycle (fixture subprocess plugin, no npm/network)', () => {
 
   it('doctor warns when defaultSearch points at an uninstalled engine', async () => {
     expect((await run(['create', 'stub'])).ok).toBe(true);
-    // No plugin named "ghost" is installed; config-set stores it anyway (with a warn).
     expect((await run(['config-set', 'defaultSearch', 'ghost:semantic'])).ok).toBe(true);
 
     const doc = await run(['doctor']);
@@ -245,14 +201,12 @@ describe('plugin lifecycle (fixture subprocess plugin, no npm/network)', () => {
 describe.skipIf(!rgOnPath)('real ripgrep plugin e2e (rg on PATH)', () => {
   let externalDir: string;
 
-  it('register → query → doctor round-trip with real rg', async () => {
-    // Build the ripgrep adapter so dist/bin.js is available
+  it('register -> query -> doctor round-trip with real rg', async () => {
     execSync('pnpm --filter diffwiki-ripgrep run build', {
       cwd: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..'),
       stdio: 'ignore',
     });
 
-    // Seed a global collection with a searchable article
     expect((await run(['create', 'rg-test'])).ok).toBe(true);
     const collDir = path.join(home, 'collections', 'rg-test');
     await fs.writeFile(
@@ -261,7 +215,6 @@ describe.skipIf(!rgOnPath)('real ripgrep plugin e2e (rg on PATH)', () => {
       'utf8',
     );
 
-    // Also register a collection OUTSIDE ~/.diffwiki (in-repo wiki pattern)
     externalDir = await fs.mkdtemp(path.join(os.tmpdir(), 'diffwiki-rg-external-'));
     externalDir = await fs.realpath(externalDir);
     await fs.writeFile(
@@ -269,7 +222,6 @@ describe.skipIf(!rgOnPath)('real ripgrep plugin e2e (rg on PATH)', () => {
       '---\ntitle: External Quick Note\ntags: []\n---\n\nThis external note also mentions quick brown fox.\n',
       'utf8',
     );
-    // Register the external path as a collection via `init` (needs cwd in that dir)
     const origCwd = process.cwd();
     try {
       process.chdir(externalDir);
@@ -278,28 +230,23 @@ describe.skipIf(!rgOnPath)('real ripgrep plugin e2e (rg on PATH)', () => {
       process.chdir(origCwd);
     }
 
-    // Register diffwiki-ripgrep as a plugin
     const reg = await run(['plugin', 'register', 'diffwiki-ripgrep', '--command', 'node', RIPGREP_BIN]);
     expect(reg.ok).toBe(true);
     expect(reg.out).toContain('Registered "diffwiki-ripgrep"');
 
-    // Query with the ripgrep engine — should find real rg matches
     const q = await run(['query', 'quick brown fox', '--engine', 'diffwiki-ripgrep']);
     expect(q.ok).toBe(true);
     expect(q.out).toContain('result(s)');
     expect(q.out).toContain('Quick Brown Fox');
 
-    // Doctor should show the plugin as ready
     const doc = await run(['doctor']);
     expect(doc.ok).toBe(true);
     expect(doc.out).toContain('plugin "diffwiki-ripgrep" enabled and spawnable');
     expect(doc.out).toContain('ripgrep ready');
 
-    // Clean up the plugin registration
     const rm = await run(['plugin', 'remove', 'diffwiki-ripgrep']);
     expect(rm.ok).toBe(true);
 
-    // Clean up external dir
     if (externalDir) {
       await fs.rm(externalDir, { recursive: true, force: true });
     }
@@ -309,14 +256,12 @@ describe.skipIf(!rgOnPath)('real ripgrep plugin e2e (rg on PATH)', () => {
 describe.skipIf(!(process.env.DIFFWIKI_E2E_REAL && qmdOnPath))(
   'real qmd plugin e2e (DIFFWIKI_E2E_REAL + qmd on PATH)',
   () => {
-    it('register → index → keyword query round-trip with real qmd', async () => {
-      // Build the qmd adapter so dist/bin.js is available
+    it('register -> index -> keyword query round-trip with real qmd', async () => {
       execSync('pnpm --filter diffwiki-qmd run build', {
         cwd: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..'),
         stdio: 'ignore',
       });
 
-      // Seed a collection
       expect((await run(['create', 'qmd-test'])).ok).toBe(true);
       const collDir = path.join(home, 'collections', 'qmd-test');
       await fs.writeFile(
@@ -325,28 +270,23 @@ describe.skipIf(!(process.env.DIFFWIKI_E2E_REAL && qmdOnPath))(
         'utf8',
       );
 
-      // Register diffwiki-qmd as a plugin
       const reg = await run(['plugin', 'register', 'diffwiki-qmd', '--command', 'node', QMD_BIN]);
       expect(reg.ok).toBe(true);
       expect(reg.out).toContain('Registered "diffwiki-qmd"');
 
-      // Index the collection
       const idx = await run(['index']);
       expect(idx.ok).toBe(true);
       expect(idx.out).toContain('Indexed');
 
-      // Keyword query — should find the seeded article
       const q = await run(['query', 'quantum', '--engine', 'diffwiki-qmd', '-t', 'keyword']);
       expect(q.ok).toBe(true);
       expect(q.out).toContain('result(s)');
       expect(q.out).toContain('Quantum');
 
-      // Doctor should show qmd ready
       const doc = await run(['doctor']);
       expect(doc.ok).toBe(true);
       expect(doc.out).toContain('plugin "diffwiki-qmd" enabled and spawnable');
 
-      // Clean up
       const rm = await run(['plugin', 'remove', 'diffwiki-qmd']);
       expect(rm.ok).toBe(true);
     });
