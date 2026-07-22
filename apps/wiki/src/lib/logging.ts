@@ -12,7 +12,7 @@
  * @module
  */
 
-import { configureSync, getConsoleSink } from '@logtape/logtape';
+import { configureSync, getConsoleSink, getConfig } from '@logtape/logtape';
 
 /**
  * Web log level — read from Vite's build-time env (`VITE_DIFFWIKI_LOG`), default
@@ -24,15 +24,23 @@ import { configureSync, getConsoleSink } from '@logtape/logtape';
 type WebLogLevel = 'debug' | 'info' | 'warning' | 'error' | 'fatal';
 const WEB_LOG_LEVEL: WebLogLevel = (import.meta.env?.VITE_DIFFWIKI_LOG as WebLogLevel) || 'warning';
 
-/** Ensures LogTape is configured at most once per runtime. */
+/** Fast-path guard for repeat calls within the same module instance. */
 let configured = false;
 
 /**
  * Configure LogTape for the web app if it has not been configured yet.
  * Idempotent and side-effect-light: a no-op on every call after the first.
+ *
+ * The `getConfig()` check is load-bearing, not just the local flag: LogTape
+ * keeps its configuration in its own module's global state, which SURVIVES
+ * Vite's dev SSR module re-evaluation — whereas the module-level `configured`
+ * flag resets to `false` on every re-eval. Without the `getConfig()` guard, a
+ * re-eval would call `configureSync` a second time and throw
+ * `ConfigError: Already configured`, 500-ing every route until the dev server
+ * is restarted.
  */
 export function configureWebLogging(): void {
-  if (configured) return;
+  if (configured || getConfig() != null) return;
   configured = true;
 
   configureSync({

@@ -27,7 +27,7 @@
 import { mkdirSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { configureSync, type LogRecord } from '@logtape/logtape';
+import { configureSync, getConfig, type LogRecord } from '@logtape/logtape';
 import { getRotatingFileSink } from '@logtape/file';
 import { resolveLogLevel, type DiffwikiLogLevel } from 'diffwiki-core';
 
@@ -69,7 +69,10 @@ function formatLine(record: LogRecord): string {
  *   `-v`/`--verbose`/`--log` to pick the stderr verbosity.
  */
 export function configureCliLogging(argv: readonly string[] = process.argv): void {
-  if (configured) return;
+  // `getConfig()` guards against LogTape already being configured elsewhere in
+  // the runtime (its config is global and outlives this module's `configured`
+  // flag); a second `configureSync` would throw `ConfigError: Already configured`.
+  if (configured || getConfig() != null) return;
   configured = true;
 
   const level = resolveCliLevel(argv);
