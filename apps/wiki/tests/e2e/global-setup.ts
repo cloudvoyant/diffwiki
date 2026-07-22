@@ -18,8 +18,10 @@ export default async function globalSetup(): Promise<void> {
   const collectionsDir = path.join(E2E_DIFFWIKI_HOME, 'collections');
   const notesDir = path.join(collectionsDir, 'notes');
   const guideDir = path.join(notesDir, 'guide');
+  const devlogDir = path.join(collectionsDir, 'devlog');
 
   fs.mkdirSync(guideDir, { recursive: true });
+  fs.mkdirSync(devlogDir, { recursive: true });
 
   // ── intro.md ─────────────────────────────────────────────────────────────────
   // Contains: frontmatter title + tags, a TypeScript code fence, a mermaid fence.
@@ -71,6 +73,26 @@ This nested page renders from plain **markdown**.
     'utf8',
   );
 
+  // ── devlog/release.md ─────────────────────────────────────────────────────────
+  // A SECOND collection sharing the searchable term "diffwiki" with notes, so a
+  // collection filter can be proven to EXCLUDE the other collection's hits (the
+  // regression that leaked cross-collection results when the qmd warm path sent
+  // the wrong filter key).
+  fs.writeFileSync(
+    path.join(devlogDir, 'release.md'),
+    `---
+title: diffwiki release notes
+tags:
+  - changelog
+---
+
+# diffwiki release notes
+
+The diffwiki devlog tracks each release of the knowledge base.
+`,
+    'utf8',
+  );
+
   // ── registry.json ─────────────────────────────────────────────────────────────
   // diffwiki-core's registryPath() resolves to DIFFWIKI_HOME/registry.json.
   const registry = {
@@ -80,6 +102,12 @@ This nested page renders from plain **markdown**.
         name: 'notes',
         type: 'global',
         path: notesDir,
+        createdAt: new Date().toISOString(),
+      },
+      {
+        name: 'devlog',
+        type: 'global',
+        path: devlogDir,
         createdAt: new Date().toISOString(),
       },
     ],

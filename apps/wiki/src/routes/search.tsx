@@ -184,7 +184,7 @@ function SearchComponent() {
             ) : (
               <ul data-testid="search-results" className="flex flex-col divide-y divide-border">
                 {search.results.map((r: SearchResultItem) => (
-                  <li key={`${r.coll}/${r.slug}`} className="py-3">
+                  <li key={`${r.coll}/${r.slug}`} className="py-3" data-collection={r.coll}>
                     <Link
                       to="/$coll/$"
                       params={{ coll: r.coll, _splat: r.slug }}

@@ -13,6 +13,7 @@
   },
   "scripts": {
     "dev": "vite dev --port 3000",
+    "dev:e2e": "vite dev --port 3100",
     "build": "vite build",
     "preview": "vite preview",
     "start": "node bin/wiki-server.mjs",

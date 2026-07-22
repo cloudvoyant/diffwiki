@@ -61,6 +61,33 @@ test.describe('Search route (/search)', () => {
     await expect(results.or(noResults).first()).toBeVisible();
   });
 
+  test('a collection filter restricts results to that collection', async ({ page }) => {
+    // "diffwiki" appears in both the `notes` and `devlog` fixture collections, so
+    // an unfiltered search returns hits from both. The `c=` filter param (set by
+    // the collection dropdown) must drop every other collection's hit — the
+    // regression that leaked cross-collection results.
+    const results = page.getByTestId('search-results');
+
+    // Baseline: unfiltered search surfaces BOTH collections.
+    await page.goto('/search?q=diffwiki');
+    await expect(results).toBeVisible();
+    await expect(results.locator('li[data-collection="notes"]').first()).toBeVisible();
+    await expect(results.locator('li[data-collection="devlog"]').first()).toBeVisible();
+
+    // Filtered by `notes` (what the dropdown navigates to): only notes survives.
+    await page.goto('/search?q=diffwiki&c=notes');
+    await expect(results).toBeVisible();
+    await expect(results.locator('li[data-collection="notes"]').first()).toBeVisible();
+    await expect(results.locator('li[data-collection="devlog"]')).toHaveCount(0);
+
+    // And filtering by `devlog` excludes notes — proving the filter is real, not
+    // an artifact of notes happening to rank first.
+    await page.goto('/search?q=diffwiki&c=devlog');
+    await expect(results).toBeVisible();
+    await expect(results.locator('li[data-collection="devlog"]').first()).toBeVisible();
+    await expect(results.locator('li[data-collection="notes"]')).toHaveCount(0);
+  });
+
   test('shows a hint when the query is empty', async ({ page }) => {
     await page.goto('/search');
     await expect(page.getByText(/type a query and press enter/i)).toBeVisible();
