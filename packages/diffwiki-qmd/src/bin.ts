@@ -102,6 +102,21 @@ export async function newestMdMtime(dirs: string[], statFn: StatMtimeFn): Promis
   return newest;
 }
 
+/**
+ * Newest mtime (epoch ms) across the qmd index's sqlite files.
+ *
+ * qmd runs in WAL mode, so committed writes land in `diffwiki.sqlite-wal` (and
+ * `-shm`) while the base `.sqlite` mtime stays frozen. Staleness must therefore
+ * consider all three files, else the base mtime reads perpetually old and the
+ * index is judged stale on every search. Each path is stat'd via the injected
+ * `statMtime` (which returns 0 on ENOENT), so missing sidecar files are ignored.
+ */
+export async function qmdIndexMtime(home: string, statMtime: StatMtimeFn): Promise<number> {
+  const base = qmdIndexPath(home);
+  const mtimes = await Promise.all([statMtime(base), statMtime(`${base}-wal`), statMtime(`${base}-shm`)]);
+  return Math.max(...mtimes);
+}
+
 export interface QmdStatusInfo {
   docsIndexed: number;
   embeddingsPending: number;
@@ -237,7 +252,7 @@ export function makePluginDefinition(
       const roots = collections.map((c) => c.path);
       const contentMtime = await newestMdMtime(roots, statMtime);
       if (contentMtime === 0) return;
-      const indexMtime = await statMtime(qmdIndexPath(home));
+      const indexMtime = await qmdIndexMtime(home, statMtime);
       if (indexMtime >= contentMtime) return;
 
       const env = qmdEnv(home);

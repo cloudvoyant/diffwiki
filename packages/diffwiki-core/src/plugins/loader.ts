@@ -98,7 +98,7 @@ export async function loadSearchProvider(name?: string): Promise<SearchProvider 
       kind: string;
       version?: string;
       capabilities: PluginCapabilities;
-    }>(record.command, 'describe', {});
+    }>(record.command, 'describe', {}, { name: record.name });
 
     if (desc.kind !== 'search') {
       return null;
@@ -123,7 +123,7 @@ export async function loadSearchProvider(name?: string): Promise<SearchProvider 
           type: opts?.type,
           limit: opts?.limit,
         },
-        { timeoutMs: SEARCH_TIMEOUT_MS },
+        { timeoutMs: SEARCH_TIMEOUT_MS, name: record.name },
       );
       return mapHits(result, collections);
     },
@@ -136,7 +136,7 @@ export async function loadSearchProvider(name?: string): Promise<SearchProvider 
           collections: toWireCollections(collections),
           embed: opts?.embed,
         },
-        { timeoutMs: LONG_TIMEOUT_MS },
+        { timeoutMs: LONG_TIMEOUT_MS, name: record.name },
       );
       return result?.indexed ?? 0;
     },
@@ -144,12 +144,17 @@ export async function loadSearchProvider(name?: string): Promise<SearchProvider 
     async emitEvent(event, collection, relPath, collections) {
       try {
         const entry = collections.find((c) => c.name === collection);
-        await invokePlugin(record.command, 'event', {
-          event,
-          collection: entry ? { name: entry.name, path: entry.path } : { name: collection, path: '' },
-          relPath,
-          collections: toWireCollections(collections),
-        });
+        await invokePlugin(
+          record.command,
+          'event',
+          {
+            event,
+            collection: entry ? { name: entry.name, path: entry.path } : { name: collection, path: '' },
+            relPath,
+            collections: toWireCollections(collections),
+          },
+          { name: record.name },
+        );
       } catch {
         // hooks are best-effort -- never surface into a mutation
       }
@@ -160,7 +165,7 @@ export async function loadSearchProvider(name?: string): Promise<SearchProvider 
         ready?: boolean;
         readiness?: PluginReadiness;
         diagnostics?: PluginHealth['diagnostics'];
-      }>(record.command, 'health', { collections: toWireCollections(collections) });
+      }>(record.command, 'health', { collections: toWireCollections(collections) }, { name: record.name });
       return {
         ready: result?.ready === true,
         readiness: result?.readiness,

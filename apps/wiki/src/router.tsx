@@ -1,5 +1,8 @@
 import { createRouter as createTanStackRouter, type ErrorComponentProps } from '@tanstack/react-router';
 import { routeTree } from './routeTree.gen';
+// Side-effect import: configures LogTape once so diffwiki-core `getLogger`
+// calls in server functions and shared code emit. Guarded internally.
+import './lib/logging';
 
 function NotFound() {
   return (

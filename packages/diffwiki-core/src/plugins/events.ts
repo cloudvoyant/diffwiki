@@ -34,12 +34,17 @@ export async function emitPluginEvent(event: PluginEvent, collection: string, re
 
     const collections = await listCollections();
     const entry = collections.find((c) => c.name === collection);
-    await invokePlugin(record.command, 'event', {
-      event,
-      collection: entry ? { name: entry.name, path: entry.path } : { name: collection, path: '' },
-      relPath,
-      collections: collections.map((c) => ({ name: c.name, path: c.path })),
-    });
+    await invokePlugin(
+      record.command,
+      'event',
+      {
+        event,
+        collection: entry ? { name: entry.name, path: entry.path } : { name: collection, path: '' },
+        relPath,
+        collections: collections.map((c) => ({ name: c.name, path: c.path })),
+      },
+      { name: record.name },
+    );
   } catch {
     /* swallow -- events are an optimisation, never the correctness path */
   }

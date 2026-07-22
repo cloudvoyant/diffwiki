@@ -206,9 +206,10 @@ describe('search handler warm/cold routing', () => {
   it('skips qmd update when the daemon is holding the index (stale content)', async () => {
     const coll = await makeCollectionDir();
     collDirs.push(coll.path);
-    // statMtime: md content newer (2) than the index (1) -> stale, so ensureFresh
-    // would normally run `qmd update`. But the daemon is up, so it must NOT.
-    const statMtime = async (p: string) => (/\.sqlite$/.test(p) ? 1 : 2);
+    // statMtime: md content newer (2) than every index file (1) -> stale, so
+    // ensureFresh would normally run `qmd update`. But the daemon is up, so it
+    // must NOT. Match the base .sqlite plus its WAL/SHM sidecars.
+    const statMtime = async (p: string) => (/\.sqlite(-wal|-shm)?$/.test(p) ? 1 : 2);
     const { handlers } = makePluginDefinition({
       home: '/tmp/home',
       statMtime,
@@ -223,7 +224,7 @@ describe('search handler warm/cold routing', () => {
   it('runs qmd update when stale and no daemon is holding the index', async () => {
     const coll = await makeCollectionDir();
     collDirs.push(coll.path);
-    const statMtime = async (p: string) => (/\.sqlite$/.test(p) ? 1 : 2);
+    const statMtime = async (p: string) => (/\.sqlite(-wal|-shm)?$/.test(p) ? 1 : 2);
     // /health is down -> daemon not up; force cold (warm off) so no daemon spawn.
     process.env.DIFFWIKI_QMD_WARM = '0';
     const downFetch: FetchFn = async () => ({

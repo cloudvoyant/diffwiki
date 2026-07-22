@@ -104,8 +104,14 @@ async function discoverSearchPackage(dir: string): Promise<DiscoveredPackage | n
   return null;
 }
 
-/** Run a one-shot `describe` op to validate the plugin and return its capabilities. */
-async function describePlugin(command: string[]): Promise<{
+/**
+ * Run a one-shot `describe` op to validate the plugin and return its
+ * capabilities. `name`, when known, scopes forwarded plugin logs.
+ */
+async function describePlugin(
+  command: string[],
+  name?: string,
+): Promise<{
   name: string;
   kind: string;
   version?: string;
@@ -116,11 +122,11 @@ async function describePlugin(command: string[]): Promise<{
     kind: string;
     version?: string;
     capabilities: PluginCapabilities;
-  }>(command, 'describe', {});
+  }>(command, 'describe', {}, { name });
 }
 
-/** Run a plugin's `setup` op end-to-end, best-effort. */
-async function runSetup(command: string[]): Promise<void> {
+/** Run a plugin's `setup` op end-to-end, best-effort. `name` scopes forwarded logs. */
+async function runSetup(command: string[], name?: string): Promise<void> {
   try {
     const collections = await listCollections();
     await invokePlugin(
@@ -131,7 +137,7 @@ async function runSetup(command: string[]): Promise<void> {
         embed: false,
         prefetchModels: false,
       },
-      { timeoutMs: LONG_TIMEOUT_MS },
+      { timeoutMs: LONG_TIMEOUT_MS, name },
     );
   } catch {
     /* setup is best-effort; doctor reports readiness problems later */
@@ -165,7 +171,7 @@ export async function installPlugin(
   // Validate via describe and cache capabilities.
   let capabilities: PluginCapabilities;
   try {
-    const desc = await describePlugin(command);
+    const desc = await describePlugin(command, discovered.name);
     if (desc.kind !== 'search') {
       throw new PluginError(`plugin "${discovered.name}" reported kind "${desc.kind}", expected "search"`);
     }
@@ -187,7 +193,7 @@ export async function installPlugin(
   await upsertPlugin(record);
 
   if (opts?.setup !== false) {
-    await runSetup(command);
+    await runSetup(command, discovered.name);
   }
   return record;
 }
@@ -202,7 +208,7 @@ export async function registerPlugin(name: string, command: string[]): Promise<P
   // Validate via describe.
   let capabilities: PluginCapabilities;
   try {
-    const desc = await describePlugin(command);
+    const desc = await describePlugin(command, name);
     if (desc.kind !== 'search') {
       throw new PluginError(`plugin "${name}" reported kind "${desc.kind}", expected "search"`);
     }
@@ -222,7 +228,7 @@ export async function registerPlugin(name: string, command: string[]): Promise<P
   };
   await upsertPlugin(record);
 
-  await runSetup(command);
+  await runSetup(command, name);
   return record;
 }
 
@@ -242,9 +248,9 @@ export async function removePlugin(name: string): Promise<void> {
 }
 
 /** Attempt a one-shot `describe` to check if the plugin responds. */
-async function probeDescribable(command: string[]): Promise<boolean> {
+async function probeDescribable(command: string[], name?: string): Promise<boolean> {
   try {
-    await describePlugin(command);
+    await describePlugin(command, name);
     return true;
   } catch {
     return false;
@@ -256,7 +262,7 @@ export async function listPlugins(): Promise<Array<PluginRecord & { spawnable: b
   const registry = await readPluginRegistry();
   const out: Array<PluginRecord & { spawnable: boolean }> = [];
   for (const record of registry.plugins) {
-    const spawnable = record.enabled ? await probeDescribable(record.command) : false;
+    const spawnable = record.enabled ? await probeDescribable(record.command, record.name) : false;
     out.push({ ...record, spawnable });
   }
   return out;

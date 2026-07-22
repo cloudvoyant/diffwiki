@@ -17,10 +17,14 @@ import { listCollections } from './collections';
 import { parseArticle } from './frontmatter';
 import { readConfig } from './config';
 import { CollectionNotFoundError } from './errors';
+import { getLogger } from './logger';
 import { loadSearchProvider } from './plugins/loader';
 import { listEnabledPlugins } from './plugins/registry';
 import { NATIVE_ENGINE } from './types';
 import type { CollectionEntry, QueryHit, QueryOptions } from './types';
+
+/** Logger for search routing diagnostics. Silent until an app configures LogTape. */
+const log = getLogger('query');
 
 async function collectMarkdownFiles(dir: string): Promise<string[]> {
   let entries: Dirent[];
@@ -309,20 +313,24 @@ export interface SearchOutcome {
 export async function search(term: string, opts?: QueryOptions): Promise<SearchOutcome> {
   const collections = await listCollections();
   const engine = opts?.engine ?? (await resolveDefaultEngine());
+  log.debug(`resolved search engine "${engine}"`);
   if (engine === NATIVE_ENGINE) {
     const hits = await nativeSearch(term, collections, opts?.collection);
     return { hits, engine, fellBackToNative: false };
   }
   const provider = await loadSearchProvider(engine);
   if (!provider) {
+    const error = `no provider found for engine "${engine}"`;
+    log.warn(`engine "${engine}" unavailable, falling back to native: ${error}`);
     const hits = await nativeSearch(term, collections, opts?.collection);
-    return { hits, engine, fellBackToNative: true, error: `no provider found for engine "${engine}"` };
+    return { hits, engine, fellBackToNative: true, error };
   }
   try {
     const hits = await provider.handleSearch(term, collections, opts);
     return { hits, engine, fellBackToNative: false };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+    log.warn(`engine "${engine}" failed, falling back to native: ${message}`);
     const hits = await nativeSearch(term, collections, opts?.collection);
     return { hits, engine, fellBackToNative: true, error: message };
   }

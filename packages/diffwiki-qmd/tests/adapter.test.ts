@@ -323,9 +323,11 @@ describe('search handler — staleness check', () => {
       calls.push({ file: file as string, args: args as readonly string[] });
       return [];
     });
-    // Content is newer (2000) than the index (1000) — stale
+    // Content is newer (2000) than all index files (1000) — stale
+    const base = qmdIndexPath(HOME);
+    const indexPaths = new Set([base, `${base}-wal`, `${base}-shm`]);
     const statMtime: StatMtimeFn = async (filePath: string) => {
-      if (filePath === qmdIndexPath(HOME)) return 1000;
+      if (indexPaths.has(filePath)) return 1000;
       return 2000; // all content files are newer
     };
 
@@ -369,8 +371,10 @@ describe('search handler — staleness check', () => {
       return [];
     });
     // Index is newer (3000) than content (2000) — fresh
+    const base = qmdIndexPath(HOME);
+    const indexPaths = new Set([base, `${base}-wal`, `${base}-shm`]);
     const statMtime: StatMtimeFn = async (filePath: string) => {
-      if (filePath === qmdIndexPath(HOME)) return 3000;
+      if (indexPaths.has(filePath)) return 3000;
       return 2000;
     };
 
@@ -394,6 +398,84 @@ describe('search handler — staleness check', () => {
     await rm(tmpBase, { recursive: true, force: true });
   });
 
+  it('treats a fresh -wal file as fresh even when the base .sqlite is stale', async () => {
+    const calls: Array<{ file: string; args: readonly string[] }> = [];
+    mockRunProcess.mockImplementation(async (file, args) => {
+      calls.push({ file: file as string, args: args as readonly string[] });
+      return { stdout: '', stderr: '' };
+    });
+    mockRunProcessJson.mockImplementation(async (file, args) => {
+      calls.push({ file: file as string, args: args as readonly string[] });
+      return [];
+    });
+    // qmd runs in WAL mode: the base .sqlite mtime is frozen old (1000) but the
+    // committed writes land in -wal, whose mtime (3000) beats content (2000).
+    const base = qmdIndexPath(HOME);
+    const statMtime: StatMtimeFn = async (filePath: string) => {
+      if (filePath === base) return 1000;
+      if (filePath === `${base}-wal`) return 3000;
+      if (filePath === `${base}-shm`) return 3000;
+      return 2000; // content files
+    };
+
+    const { mkdtemp, writeFile, rm } = await import('node:fs/promises');
+    const { join } = await import('node:path');
+    const { tmpdir } = await import('node:os');
+    const tmpBase = await mkdtemp(join(tmpdir(), 'qmd-wal-fresh-test-'));
+    const docsDir = join(tmpBase, 'docs');
+    await import('node:fs/promises').then((fs) => fs.mkdir(docsDir, { recursive: true }));
+    await writeFile(join(docsDir, 'article.md'), '# test', 'utf8');
+
+    const collections = [{ name: 'docs', path: docsDir }];
+
+    const { handlers } = makePluginDefinition({ home: HOME, statMtime, fetchFn: coldOnlyFetch, spawnFn: neverSpawn });
+    await handlers.search({ term: 'foo', type: 'keyword', collections }, noopLog);
+
+    // The -wal mtime keeps the index fresh, so no update runs.
+    expect(calls.every((c) => !(c.args as string[]).includes('update'))).toBe(true);
+    expect(calls.some((c) => c.args[0] === 'search')).toBe(true);
+
+    await rm(tmpBase, { recursive: true, force: true });
+  });
+
+  it('runs qmd update when all three index files are older than content', async () => {
+    const calls: Array<{ file: string; args: readonly string[] }> = [];
+    mockRunProcess.mockImplementation(async (file, args) => {
+      calls.push({ file: file as string, args: args as readonly string[] });
+      return { stdout: '', stderr: '' };
+    });
+    mockRunProcessJson.mockImplementation(async (file, args) => {
+      calls.push({ file: file as string, args: args as readonly string[] });
+      return [];
+    });
+    // base=1000, -wal=1500, -shm=0 (absent); all below content (2000) — stale.
+    const base = qmdIndexPath(HOME);
+    const statMtime: StatMtimeFn = async (filePath: string) => {
+      if (filePath === base) return 1000;
+      if (filePath === `${base}-wal`) return 1500;
+      if (filePath === `${base}-shm`) return 0;
+      return 2000; // content files
+    };
+
+    const { mkdtemp, writeFile, rm } = await import('node:fs/promises');
+    const { join } = await import('node:path');
+    const { tmpdir } = await import('node:os');
+    const tmpBase = await mkdtemp(join(tmpdir(), 'qmd-wal-stale-test-'));
+    const docsDir = join(tmpBase, 'docs');
+    await import('node:fs/promises').then((fs) => fs.mkdir(docsDir, { recursive: true }));
+    await writeFile(join(docsDir, 'article.md'), '# test', 'utf8');
+
+    const collections = [{ name: 'docs', path: docsDir }];
+
+    const { handlers } = makePluginDefinition({ home: HOME, statMtime, fetchFn: coldOnlyFetch, spawnFn: neverSpawn });
+    await handlers.search({ term: 'foo', type: 'keyword', collections }, noopLog);
+
+    const updateIdx = calls.findIndex((c) => (c.args as string[]).includes('update'));
+    expect(updateIdx).toBeGreaterThanOrEqual(0);
+
+    await rm(tmpBase, { recursive: true, force: true });
+  });
+
   it('runs qmd embed after update for semantic search when embeddings pending', async () => {
     const calls: Array<{ file: string; args: readonly string[] }> = [];
     mockRunProcess.mockImplementation(async (file, args) => {
@@ -410,8 +492,10 @@ describe('search handler — staleness check', () => {
       calls.push({ file: file as string, args: args as readonly string[] });
       return [];
     });
+    const base = qmdIndexPath(HOME);
+    const indexPaths = new Set([base, `${base}-wal`, `${base}-shm`]);
     const statMtime: StatMtimeFn = async (filePath: string) => {
-      if (filePath === qmdIndexPath(HOME)) return 1000;
+      if (indexPaths.has(filePath)) return 1000;
       return 2000;
     };
 

@@ -33,7 +33,17 @@ const icon = (level: DiagnosticLevel): string => (level === 'ok' ? '✓' : level
 /** Build a fresh command tree. A new instance per call keeps e2e runs isolated. */
 export function createProgram(): Command {
   const program = new Command();
-  program.name('diffwiki').description('A git-based knowledge base').version(version).showHelpAfterError();
+  program
+    .name('diffwiki')
+    .description('A git-based knowledge base')
+    .version(version)
+    .showHelpAfterError()
+    .option('-v, --verbose', 'verbose logging (sets the log level to debug)')
+    .option('--log <level>', 'log level: trace|debug|info|warning|error|fatal');
+
+  // NOTE: these flags are actually applied by configureCliLogging() (in bin.ts),
+  // which reads process.argv at startup so logs are configured before any action
+  // runs. They are declared here so --help lists them and Commander accepts them.
 
   // No subcommand: show help and exit 0 (a bare invocation is not an error).
   program.action(() => {

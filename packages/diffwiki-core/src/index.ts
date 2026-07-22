@@ -31,6 +31,10 @@ export type { SearchOutcome } from './query';
 // Diagnostics
 export { doctor } from './doctor';
 
+// Logging (LogTape wrappers; core NEVER configures — apps do)
+export { getLogger, resolveLogLevel } from './logger';
+export type { DiffwikiLogLevel } from './logger';
+
 // Content rendering and browsing
 export * from './browse';
 export * from './render';
