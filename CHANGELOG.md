@@ -1,3 +1,10 @@
+# [0.4.0](https://github.com/cloudvoyant/diffwiki/compare/v0.3.0...v0.4.0) (2026-07-22)
+
+
+### Features
+
+* **wiki:** add local web UI (apps/wiki) + CLI up/down/open/status ([6430b97](https://github.com/cloudvoyant/diffwiki/commit/6430b977931850a03af2d7a208fd048b1fc54b54))
+
 # [0.3.0](https://github.com/cloudvoyant/diffwiki/compare/v0.2.0...v0.3.0) (2026-07-21)
 
 
