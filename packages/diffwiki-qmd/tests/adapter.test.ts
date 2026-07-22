@@ -7,7 +7,7 @@
 //
 // NOTE: Full test rewrite is deferred to Phase 5. This is the minimal update to make
 // tests compile and pass against the new `makePluginDefinition` + SDK-based qmd.ts.
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { afterEach, describe, expect, it, vi, beforeEach } from 'vitest';
 
 // Mock the SDK process utilities at the module level so qmd.ts (which imports them)
 // gets our fakes. Each test sets up its own return values via mockImplementation.
@@ -29,8 +29,17 @@ import {
   type StatMtimeFn,
 } from '../src/bin.js';
 import { qmdIndexPath } from '../src/qmd.js';
+import type { FetchFn, SpawnFn } from '../src/daemon.js';
 
 const noopLog = () => {};
+
+/** A fetch that always fails, making the warm path immediately fall back to cold. */
+const coldOnlyFetch: FetchFn = async () => {
+  throw new Error('no daemon');
+};
+
+/** A spawn that does nothing — prevents real process starts in cold-only tests. */
+const neverSpawn: SpawnFn = () => ({ unref: () => {} });
 
 const mockRunProcess = vi.mocked(runProcess);
 const mockRunProcessJson = vi.mocked(runProcessJson);
@@ -38,6 +47,12 @@ const mockCommandExists = vi.mocked(commandExists);
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // Disable warm mode so tests exercise only the cold CLI path.
+  process.env.DIFFWIKI_QMD_WARM = '0';
+});
+
+afterEach(() => {
+  delete process.env.DIFFWIKI_QMD_WARM;
 });
 
 const SAMPLE_ROWS: QmdRow[] = [
@@ -124,7 +139,7 @@ describe('search handler', () => {
     ['hybrid', 'query'],
   ])('type %s uses qmd %s and maps rows to hits', async (type, sub) => {
     mockRunProcessJson.mockResolvedValue(SAMPLE_ROWS);
-    const { handlers } = makePluginDefinition({ home: '/tmp/home' });
+    const { handlers } = makePluginDefinition({ home: '/tmp/home', fetchFn: coldOnlyFetch, spawnFn: neverSpawn });
     const result = await handlers.search(
       { term: 'foo', type, collections: [], collection: undefined, limit: undefined },
       noopLog,
@@ -160,7 +175,7 @@ describe('search handler', () => {
 
   it('applies the default limit of 20', async () => {
     mockRunProcessJson.mockResolvedValue([]);
-    const { handlers } = makePluginDefinition({ home: '/tmp/home' });
+    const { handlers } = makePluginDefinition({ home: '/tmp/home', fetchFn: coldOnlyFetch, spawnFn: neverSpawn });
     await handlers.search(
       { term: 'foo', type: 'keyword', collections: [], collection: undefined, limit: undefined },
       noopLog,
@@ -173,7 +188,7 @@ describe('search handler', () => {
 
   it('adds -c <collection> when a collection filter is set', async () => {
     mockRunProcessJson.mockResolvedValue([]);
-    const { handlers } = makePluginDefinition({ home: '/tmp/home' });
+    const { handlers } = makePluginDefinition({ home: '/tmp/home', fetchFn: coldOnlyFetch, spawnFn: neverSpawn });
     await handlers.search(
       { term: 'foo', type: 'keyword', collection: 'docs', collections: [], limit: undefined },
       noopLog,
@@ -192,7 +207,7 @@ describe('health handler', () => {
       stdout: '  Total:    128 files indexed\n  Vectors:  128 embedded\n  Pending:  0 need embedding\n',
       stderr: '',
     });
-    const { handlers } = makePluginDefinition({ home: '/tmp/home' });
+    const { handlers } = makePluginDefinition({ home: '/tmp/home', fetchFn: coldOnlyFetch, spawnFn: neverSpawn });
     const result = await handlers.health({ collections: [] }, noopLog);
 
     expect(result.ready).toBe(true);
@@ -205,7 +220,7 @@ describe('health handler', () => {
 
   it('reports firstSearchCost model-download and a diagnostic when tool missing', async () => {
     mockCommandExists.mockResolvedValue(false);
-    const { handlers } = makePluginDefinition({ home: '/tmp/home' });
+    const { handlers } = makePluginDefinition({ home: '/tmp/home', fetchFn: coldOnlyFetch, spawnFn: neverSpawn });
     const result = await handlers.health({ collections: [] }, noopLog);
 
     expect(result.ready).toBe(false);
@@ -219,7 +234,7 @@ describe('setup handler', () => {
   it('returns ready:false and a diagnostic log when qmd is missing', async () => {
     mockCommandExists.mockResolvedValue(false);
     const log = vi.fn();
-    const { handlers } = makePluginDefinition({ home: '/tmp/home' });
+    const { handlers } = makePluginDefinition({ home: '/tmp/home', fetchFn: coldOnlyFetch, spawnFn: neverSpawn });
     const result = await handlers.setup(
       { collections: [{ name: 'docs', path: '/abs/docs' }], embed: undefined, prefetchModels: undefined },
       log,
@@ -238,7 +253,7 @@ describe('setup handler', () => {
       }
       return { stdout: 'ok', stderr: '' };
     });
-    const { handlers } = makePluginDefinition({ home: '/tmp/home' });
+    const { handlers } = makePluginDefinition({ home: '/tmp/home', fetchFn: coldOnlyFetch, spawnFn: neverSpawn });
     const result = await handlers.setup(
       { collections: [{ name: 'docs', path: '/abs/docs' }], embed: undefined, prefetchModels: undefined },
       noopLog,
@@ -256,7 +271,7 @@ describe('setup handler', () => {
 describe('index and onEvent handlers', () => {
   it('index returns the collection count and runs update', async () => {
     mockRunProcess.mockResolvedValue({ stdout: 'ok', stderr: '' });
-    const { handlers } = makePluginDefinition({ home: '/tmp/home' });
+    const { handlers } = makePluginDefinition({ home: '/tmp/home', fetchFn: coldOnlyFetch, spawnFn: neverSpawn });
     const result = await handlers.index(
       {
         collections: [
@@ -274,7 +289,7 @@ describe('index and onEvent handlers', () => {
 
   it('onEvent is best-effort and returns accepted even when update fails', async () => {
     mockRunProcess.mockRejectedValue(new Error('transient failure'));
-    const { handlers } = makePluginDefinition({ home: '/tmp/home' });
+    const { handlers } = makePluginDefinition({ home: '/tmp/home', fetchFn: coldOnlyFetch, spawnFn: neverSpawn });
     const result = await handlers.onEvent(
       { event: 'article-updated', collection: { name: 'docs', path: '/abs/docs' }, collections: [] },
       noopLog,
@@ -286,7 +301,7 @@ describe('index and onEvent handlers', () => {
 
 describe('describe via definition', () => {
   it('advertises capabilities', () => {
-    const { definition } = makePluginDefinition({ home: '/custom/home' });
+    const { definition } = makePluginDefinition({ home: '/custom/home', fetchFn: coldOnlyFetch, spawnFn: neverSpawn });
     expect(definition.name).toBe('diffwiki-qmd');
     expect(definition.kind).toBe('search');
     expect(definition.capabilities.searchTypes).toEqual(['keyword', 'semantic', 'hybrid']);
@@ -329,7 +344,7 @@ describe('search handler — staleness check', () => {
       { name: 'notes', path: notesDir },
     ];
 
-    const { handlers } = makePluginDefinition({ home: HOME, statMtime });
+    const { handlers } = makePluginDefinition({ home: HOME, statMtime, fetchFn: coldOnlyFetch, spawnFn: neverSpawn });
     await handlers.search({ term: 'foo', type: 'keyword', collections }, noopLog);
 
     // qmd update should have been called BEFORE the search subcommand
@@ -369,7 +384,7 @@ describe('search handler — staleness check', () => {
 
     const collections = [{ name: 'docs', path: docsDir }];
 
-    const { handlers } = makePluginDefinition({ home: HOME, statMtime });
+    const { handlers } = makePluginDefinition({ home: HOME, statMtime, fetchFn: coldOnlyFetch, spawnFn: neverSpawn });
     await handlers.search({ term: 'foo', type: 'keyword', collections }, noopLog);
 
     // Only the search subcommand should have been called — no update
@@ -410,7 +425,7 @@ describe('search handler — staleness check', () => {
 
     const collections = [{ name: 'docs', path: docsDir }];
 
-    const { handlers } = makePluginDefinition({ home: HOME, statMtime });
+    const { handlers } = makePluginDefinition({ home: HOME, statMtime, fetchFn: coldOnlyFetch, spawnFn: neverSpawn });
     await handlers.search({ term: 'foo', type: 'semantic', collections }, noopLog);
 
     const updateIdx = calls.findIndex((c) => (c.args as string[]).includes('update'));

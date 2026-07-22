@@ -5,6 +5,11 @@
  * Drives the `qmd` CLI for keyword, semantic, and hybrid search with automatic
  * on-search staleness detection and incremental reindex.
  *
+ * Warm mode (Phase 6): the `search` handler first tries the long-lived
+ * `qmd mcp --http --daemon` over MCP HTTP (warm models → fast), and falls back
+ * to the cold `qmd <sub> --format json` CLI path on any failure. Warm mode is
+ * a pure optimisation, gated off entirely by `DIFFWIKI_QMD_WARM=0`.
+ *
  * @module
  */
 
@@ -15,7 +20,6 @@ import { join } from 'node:path';
 import { definePlugin } from 'diffwiki-core/plugin';
 import type {
   PluginLogFn,
-  PluginDefinition,
   SearchParams,
   IndexParams,
   SetupParams,
@@ -28,6 +32,8 @@ import type {
   HealthHandlerResult,
 } from 'diffwiki-core/plugin';
 import { INDEX, modelsDir, qmdEnv, qmdIndexPath, qmdOnPath, runQmd, runQmdJson } from './qmd.js';
+import { ensureDaemon, mcpBaseUrl, probeHealth, type FetchFn, type SpawnFn } from './daemon.js';
+import { mcpSearch } from './mcp.js';
 
 const VERSION = '0.3.0';
 
@@ -122,8 +128,6 @@ export function splitQmdPath(row: QmdRow): { collection: string; relPath: string
   } else if (typeof row.displayPath === 'string') {
     raw = row.displayPath;
   }
-  // qmd appends a `?index=<name>` query (and may add a `#fragment`) to the URI
-  // when a named index is used -- strip it so the relPath is a clean file path.
   raw = raw.replace(/[?#].*$/, '');
   raw = raw.replace(/^\/+/, '');
   const slash = raw.indexOf('/');
@@ -142,6 +146,21 @@ export function searchSubcommand(type: string | undefined): string {
     default:
       return 'search';
   }
+}
+
+/** Map an array of qmd rows to diffwiki hits. Shared by the warm and cold paths. */
+export function rowsToHits(rows: QmdRow[]): Hit[] {
+  return (Array.isArray(rows) ? rows : []).map((row) => {
+    const { collection, relPath } = splitQmdPath(row);
+    return {
+      collection,
+      relPath,
+      title: typeof row.title === 'string' ? row.title : relPath,
+      snippet: row.bestChunk || undefined,
+      score: typeof row.score === 'number' ? row.score : undefined,
+      docid: typeof row.docid === 'string' ? row.docid : undefined,
+    };
+  });
 }
 
 function isAlreadyExists(err: unknown): boolean {
@@ -171,9 +190,23 @@ async function addCollections(env: NodeJS.ProcessEnv, collections: Collection[],
   }
 }
 
-/** Build the plugin definition, closing over a mutable home and injectable stat function. */
-export function makePluginDefinition(deps: { home?: string; statMtime?: StatMtimeFn } = {}): {
-  definition: PluginDefinition;
+/** True unless `DIFFWIKI_QMD_WARM` is explicitly set to `0`. */
+export function warmEnabled(env: NodeJS.ProcessEnv): boolean {
+  return env.DIFFWIKI_QMD_WARM !== '0';
+}
+
+/** Build the plugin definition, closing over a mutable home and injectable seams. */
+export function makePluginDefinition(
+  deps: {
+    home?: string;
+    statMtime?: StatMtimeFn;
+    /** Injected fetch for warm mode. Defaults to global fetch. */
+    fetchFn?: FetchFn;
+    /** Injected spawn for the warm daemon. Defaults to child_process.spawn. */
+    spawnFn?: SpawnFn;
+  } = {},
+): {
+  definition: ReturnType<typeof definePlugin>['definition'];
   handlers: {
     search: (params: SearchParams, log: PluginLogFn) => Promise<SearchHandlerResult>;
     index: (params: IndexParams, log: PluginLogFn) => Promise<IndexHandlerResult>;
@@ -184,11 +217,14 @@ export function makePluginDefinition(deps: { home?: string; statMtime?: StatMtim
 } {
   const home = deps.home ?? join(homedir(), '.diffwiki');
   const statMtime = deps.statMtime ?? realStatMtime;
+  const fetchFn = deps.fetchFn ?? (globalThis.fetch as unknown as FetchFn);
+  const spawnFn = deps.spawnFn;
 
   /**
    * Best-effort staleness check: if the newest md/mdx file is newer than the
    * qmd index, run `qmd update` before searching. For semantic/hybrid, also
-   * run `qmd embed` when pending.
+   * run `qmd embed` when pending. Runs regardless of warm/cold mode -- the
+   * daemon reads the same on-disk index, so it picks up the update.
    */
   async function ensureFresh(collections: Collection[], searchType: string, log: PluginLogFn): Promise<void> {
     try {
@@ -218,35 +254,75 @@ export function makePluginDefinition(deps: { home?: string; statMtime?: StatMtim
     }
   }
 
+  /**
+   * Cold search path: shell `qmd <sub> --format json`. This is the fallback
+   * used whenever warm mode is disabled, the daemon can't start, or HTTP fails.
+   */
+  async function coldSearch(
+    env: NodeJS.ProcessEnv,
+    term: string,
+    type: string,
+    limit: number,
+    collection: string | undefined,
+  ): Promise<Hit[]> {
+    const sub = searchSubcommand(type);
+    const args = [sub, '--index', INDEX, '--format', 'json', '-n', String(limit)];
+    if (collection && collection.length > 0) {
+      args.push('-c', collection);
+    }
+    // `--` terminates flag parsing so a term starting with `-` isn't read as a qmd flag.
+    args.push('--', term);
+    const rows = await runQmdJson<QmdRow[]>(args, { env });
+    return rowsToHits(Array.isArray(rows) ? rows : []);
+  }
+
+  /**
+   * Warm search path: ensure the MCP daemon is up, then run the query over
+   * HTTP. Returns the hits, or `null` to signal the caller should fall back to
+   * the cold path (daemon unavailable, HTTP/JSON error, etc.). Never throws.
+   */
+  async function warmSearch(
+    env: NodeJS.ProcessEnv,
+    term: string,
+    type: string,
+    limit: number,
+    collection: string | undefined,
+    log: PluginLogFn,
+  ): Promise<Hit[] | null> {
+    try {
+      const baseUrl = await ensureDaemon(env, { fetchFn, spawnFn });
+      if (!baseUrl) {
+        log('warn', 'qmd warm daemon unavailable — falling back to cold search');
+        return null;
+      }
+      const rows = await mcpSearch(baseUrl, { term, type, collection, limit, minScore: 0 }, fetchFn);
+      return rowsToHits(rows);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      log('warn', `qmd warm search failed (${message}) — falling back to cold search`);
+      return null;
+    }
+  }
+
   const handlers = {
     async search(params: SearchParams, log: PluginLogFn): Promise<SearchHandlerResult> {
       const env = qmdEnv(home);
       const term = params.term ?? '';
       const type = params.type ?? 'keyword';
       const limit = params.limit && params.limit > 0 ? params.limit : 20;
-      const sub = searchSubcommand(type);
+      const collection = params.collection && params.collection.length > 0 ? params.collection : undefined;
 
       const collections = asCollections(params.collections);
       await ensureFresh(collections, type, log);
 
-      const args = [sub, '--index', INDEX, '--format', 'json', '-n', String(limit)];
-      if (params.collection && params.collection.length > 0) {
-        args.push('-c', params.collection);
+      if (warmEnabled(env)) {
+        const warmHits = await warmSearch(env, term, type, limit, collection, log);
+        if (warmHits !== null) {
+          return { hits: warmHits };
+        }
       }
-      args.push('--', term);
 
-      const rows = await runQmdJson<QmdRow[]>(args, { env });
-      const hits: Hit[] = (Array.isArray(rows) ? rows : []).map((row) => {
-        const { collection, relPath } = splitQmdPath(row);
-        return {
-          collection,
-          relPath,
-          title: typeof row.title === 'string' ? row.title : relPath,
-          snippet: row.bestChunk || undefined,
-          score: typeof row.score === 'number' ? row.score : undefined,
-          docid: typeof row.docid === 'string' ? row.docid : undefined,
-        };
-      });
+      const hits = await coldSearch(env, term, type, limit, collection);
       return { hits };
     },
 
@@ -377,6 +453,19 @@ export function makePluginDefinition(deps: { home?: string; statMtime?: StatMtim
         });
       }
 
+      // Warm-daemon readiness line: best-effort probe, never starts it.
+      if (warmEnabled(env)) {
+        const daemonUp = await probeHealth(mcpBaseUrl(env), fetchFn, 1000);
+        diagnostics.push({
+          level: 'ok',
+          message: daemonUp
+            ? `qmd warm daemon running at ${mcpBaseUrl(env)} — searches use resident models`
+            : 'qmd warm daemon not running — first search will start it (cold fallback meanwhile)',
+        });
+      } else {
+        diagnostics.push({ level: 'ok', message: 'qmd warm daemon disabled (DIFFWIKI_QMD_WARM=0) — cold CLI search' });
+      }
+
       return {
         ready: indexBuilt || toolInstalled,
         readiness: {
@@ -392,7 +481,7 @@ export function makePluginDefinition(deps: { home?: string; statMtime?: StatMtim
     },
   };
 
-  const definition: PluginDefinition = {
+  const definition = {
     name: 'diffwiki-qmd',
     kind: 'search' as const,
     version: VERSION,
@@ -408,12 +497,15 @@ export function makePluginDefinition(deps: { home?: string; statMtime?: StatMtim
 }
 
 /**
- * Create the defined plugin instance. Used by the binary entry point and tests.
- *
- * @param deps - Optional overrides for home directory and stat function.
- * @returns A `DefinedPlugin` whose `.run()` method serves one request.
+ * Build the plugin. `home` is set via the injected dep (tests) or
+ * `process.env.DIFFWIKI_HOME` / `~/.diffwiki` (the running binary).
  */
-export function createPlugin(deps?: { home?: string; statMtime?: StatMtimeFn }): ReturnType<typeof definePlugin> {
+export function createPlugin(deps?: {
+  home?: string;
+  statMtime?: StatMtimeFn;
+  fetchFn?: FetchFn;
+  spawnFn?: SpawnFn;
+}): ReturnType<typeof definePlugin> {
   const { definition } = makePluginDefinition(deps);
   return definePlugin(definition);
 }
