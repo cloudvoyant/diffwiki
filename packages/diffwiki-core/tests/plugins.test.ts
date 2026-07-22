@@ -189,10 +189,13 @@ describe('native search (no plugin)', () => {
 
     // Whole-collection query must not throw, and must still return the good file.
     const all = await query('', { collection: 'router' });
-    expect(all.map((h) => h.title).sort()).toEqual(['Clean note', 'auth-guards']);
-    // The malformed file degrades to its filename and stays findable by it.
-    const byName = await query('auth-guards', { collection: 'router' });
-    expect(byName.map((h) => h.path)).toEqual([path.join(entry.path, 'auth-guards.md')]);
+    expect(all.map((h) => h.title).sort()).toEqual([
+      'Clean note',
+      'TanStack Router: Protecting Routes with Auth Guards',
+    ]);
+    // The malformed file is now parsed leniently (title extracted by regex).
+    const byName = await query('auth', { collection: 'router' });
+    expect(byName.some((h) => h.path === path.join(entry.path, 'auth-guards.md'))).toBe(true);
   });
 
   it('searches a collection whose path lives OUTSIDE ~/.diffwiki (registry path)', async () => {
