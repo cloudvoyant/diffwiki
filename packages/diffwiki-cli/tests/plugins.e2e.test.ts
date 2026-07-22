@@ -230,6 +230,16 @@ describe('plugin lifecycle (fixture subprocess plugin, no npm/network)', () => {
     const doc = await run(['doctor']);
     expect(doc.out).toContain('defaultSearch "ghost:semantic" is not installed/enabled — using native');
   });
+
+  it('list shows the available plugin catalog even with none installed', async () => {
+    const list = await run(['plugin', 'list']);
+    expect(list.ok).toBe(true);
+    expect(list.out).toContain('Installed:');
+    expect(list.out).toContain('(none)');
+    expect(list.out).toContain('Available');
+    expect(list.out).toContain('diffwiki-qmd');
+    expect(list.out).toContain('diffwiki-ripgrep');
+  });
 });
 
 describe.skipIf(!rgOnPath)('real ripgrep plugin e2e (rg on PATH)', () => {

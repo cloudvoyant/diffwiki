@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   createArticle,
   createCollection,
+  listAvailablePlugins,
   listSearchModes,
   loadSearchProvider,
   query,
@@ -158,6 +159,19 @@ describe('protocol client + loader', () => {
   it('lists only native when no plugin is registered', async () => {
     const modes = await listSearchModes();
     expect(modes).toEqual([{ plugin: 'native', type: 'basic', label: 'native · bm25' }]);
+  });
+});
+
+describe('available plugins catalog', () => {
+  it('lists the official plugins available to install', () => {
+    const names = listAvailablePlugins().map((k) => k.name);
+    expect(names).toContain('diffwiki-qmd');
+    expect(names).toContain('diffwiki-ripgrep');
+    for (const k of listAvailablePlugins()) {
+      expect(k.kind).toBe('search');
+      expect(k.spec.length).toBeGreaterThan(0);
+      expect(k.description.length).toBeGreaterThan(0);
+    }
   });
 });
 

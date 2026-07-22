@@ -8,6 +8,7 @@ import {
   initRepoWiki,
   installPlugin,
   listCollections,
+  listAvailablePlugins,
   listPlugins,
   listSearchModes,
   loadSearchProvider,
@@ -199,18 +200,30 @@ export function createProgram(): Command {
 
   plugin
     .command('list')
-    .description('List registered search plugins')
+    .description('List installed and available search plugins')
     .action(
       withErrors(async () => {
-        const plugins = await listPlugins();
-        if (plugins.length === 0) {
-          console.log('No plugins registered. Install one with: diffwiki plugin install <spec>');
-          return;
+        const installed = await listPlugins();
+        const installedNames = new Set(installed.map((p) => p.name));
+
+        console.log('Installed:');
+        if (installed.length === 0) {
+          console.log('  (none)');
+        } else {
+          for (const p of installed) {
+            console.log(
+              `  ${p.name}\t${p.kind}\t${p.version ?? '-'}\tenabled=${p.enabled}\tmanaged=${!!p.managed}\tspawnable=${p.spawnable}`,
+            );
+          }
         }
-        for (const p of plugins) {
-          console.log(
-            `${p.name}\t${p.kind}\t${p.version ?? '-'}\tenabled=${p.enabled}\tmanaged=${!!p.managed}\tspawnable=${p.spawnable}`,
-          );
+
+        const available = listAvailablePlugins().filter((k) => !installedNames.has(k.name));
+        if (available.length > 0) {
+          console.log('\nAvailable (install with: diffwiki plugin install <name>):');
+          for (const k of available) {
+            console.log(`  ${k.name}\t[${k.kind}]\t${k.description}`);
+            console.log(`    requires ${k.requires ?? 'nothing'}`);
+          }
         }
       }),
     );

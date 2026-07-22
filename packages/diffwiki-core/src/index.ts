@@ -17,3 +17,4 @@ export * from './plugins/client';
 export * from './plugins/loader';
 export * from './plugins/manager';
 export * from './plugins/events';
+export * from './plugins/catalog';
