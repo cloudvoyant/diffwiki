@@ -1,20 +1,33 @@
+/**
+ * diffwiki-qmd plugin binary.
+ *
+ * Implements the diffwiki plugin protocol via `definePlugin()` from the SDK.
+ * Drives the `qmd` CLI for keyword, semantic, and hybrid search with automatic
+ * on-search staleness detection and incremental reindex.
+ *
+ * @module
+ */
+
 import { existsSync, readdirSync } from 'node:fs';
 import { stat, readdir } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { serve, type HandlerMap, type LogFn } from './protocol.js';
-import {
-  execFileAsync,
-  INDEX,
-  modelsDir,
-  qmdEnv,
-  qmdOnPath,
-  runQmd,
-  runQmdJson,
-  type Env,
-  type ExecFileFn,
-} from './qmd.js';
+import { definePlugin } from 'diffwiki-core/plugin';
+import type {
+  PluginLogFn,
+  PluginDefinition,
+  SearchParams,
+  IndexParams,
+  SetupParams,
+  EventParams,
+  HealthParams,
+  SearchHandlerResult,
+  IndexHandlerResult,
+  SetupHandlerResult,
+  EventHandlerResult,
+  HealthHandlerResult,
+} from 'diffwiki-core/plugin';
+import { INDEX, modelsDir, qmdEnv, qmdIndexPath, qmdOnPath, runQmd, runQmdJson } from './qmd.js';
 
 const VERSION = '0.3.0';
 
@@ -57,7 +70,6 @@ export const realStatMtime: StatMtimeFn = async (filePath: string): Promise<numb
 /**
  * Recursively find the newest mtime (epoch ms) among `*.md` / `*.mdx` files
  * under `dirs`. Returns 0 if no markdown files are found or all stats fail.
- * Bounded and best-effort: unreadable dirs are silently skipped.
  */
 export async function newestMdMtime(dirs: string[], statFn: StatMtimeFn): Promise<number> {
   let newest = 0;
@@ -84,20 +96,13 @@ export async function newestMdMtime(dirs: string[], statFn: StatMtimeFn): Promis
   return newest;
 }
 
-/** Path to the qmd index sqlite3 file under the relocated cache. */
-export function qmdIndexPath(home: string): string {
-  // qmd stores a named index as `<XDG_CACHE_HOME>/qmd/<name>.sqlite`
-  // (XDG_CACHE_HOME is relocated to `<home>/qmd`).
-  return join(home, 'qmd', 'qmd', `${INDEX}.sqlite`);
-}
-
 export interface QmdStatusInfo {
   docsIndexed: number;
   embeddingsPending: number;
 }
 
 /**
- * Parse the human output of `qmd status` — it does NOT honour `--format json`,
+ * Parse the human output of `qmd status` -- it does NOT honour `--format json`,
  * so we scrape the "Total: N files indexed" / "Pending: N need embedding" lines.
  */
 export function parseQmdStatus(text: string): QmdStatusInfo {
@@ -109,14 +114,6 @@ export function parseQmdStatus(text: string): QmdStatusInfo {
   };
 }
 
-export interface Deps {
-  exec: ExecFileFn;
-  /** Initial home; overridden by `initialize.params.home` when provided. */
-  home?: string;
-  /** Injectable stat function for mtime checks. Defaults to real fs.stat. */
-  statMtime?: StatMtimeFn;
-}
-
 /** Derive collection + relPath from a qmd row's `file` (strip `qmd://`) or `displayPath`. */
 export function splitQmdPath(row: QmdRow): { collection: string; relPath: string } {
   let raw = '';
@@ -126,7 +123,7 @@ export function splitQmdPath(row: QmdRow): { collection: string; relPath: string
     raw = row.displayPath;
   }
   // qmd appends a `?index=<name>` query (and may add a `#fragment`) to the URI
-  // when a named index is used — strip it so the relPath is a clean file path.
+  // when a named index is used -- strip it so the relPath is a clean file path.
   raw = raw.replace(/[?#].*$/, '');
   raw = raw.replace(/^\/+/, '');
   const slash = raw.indexOf('/');
@@ -152,21 +149,20 @@ function isAlreadyExists(err: unknown): boolean {
   return /already exists/i.test(msg);
 }
 
-function asCollections(params: Record<string, unknown>): Collection[] {
-  const raw = params.collections;
+function asCollections(raw: unknown): Collection[] {
   if (!Array.isArray(raw)) return [];
   return raw
     .filter(
       (c): c is Collection =>
         !!c && typeof (c as Collection).name === 'string' && typeof (c as Collection).path === 'string',
     )
-    .map((c) => ({ name: c.name, path: c.path }));
+    .map((c) => ({ name: (c as Collection).name, path: (c as Collection).path }));
 }
 
-async function addCollections(exec: ExecFileFn, env: Env, collections: Collection[], log: LogFn): Promise<void> {
+async function addCollections(env: NodeJS.ProcessEnv, collections: Collection[], log: PluginLogFn): Promise<void> {
   for (const c of collections) {
     try {
-      await runQmd(exec, ['collection', 'add', c.path, '--name', c.name, '--index', INDEX], env);
+      await runQmd(['collection', 'add', c.path, '--name', c.name, '--index', INDEX], { env });
       log('info', `added collection ${c.name} (${c.path})`);
     } catch (err) {
       if (!isAlreadyExists(err)) throw err;
@@ -175,40 +171,43 @@ async function addCollections(exec: ExecFileFn, env: Env, collections: Collectio
   }
 }
 
-/** Build the op handler map, closing over the injected exec and a mutable home. */
-export function makeHandlers(deps: Deps): HandlerMap {
-  let home = deps.home ?? join(homedir(), '.diffwiki');
-  const exec = deps.exec;
+/** Build the plugin definition, closing over a mutable home and injectable stat function. */
+export function makePluginDefinition(deps: { home?: string; statMtime?: StatMtimeFn } = {}): {
+  definition: PluginDefinition;
+  handlers: {
+    search: (params: SearchParams, log: PluginLogFn) => Promise<SearchHandlerResult>;
+    index: (params: IndexParams, log: PluginLogFn) => Promise<IndexHandlerResult>;
+    setup: (params: SetupParams, log: PluginLogFn) => Promise<SetupHandlerResult>;
+    onEvent: (params: EventParams, log: PluginLogFn) => Promise<EventHandlerResult>;
+    health: (params: HealthParams, log: PluginLogFn) => Promise<HealthHandlerResult>;
+  };
+} {
+  const home = deps.home ?? join(homedir(), '.diffwiki');
   const statMtime = deps.statMtime ?? realStatMtime;
 
   /**
-   * Best-effort staleness check: if the newest `*.md/*.mdx` file across
-   * collection roots is newer than the qmd index file (or the index is
-   * missing), run `qmd update` before searching. For semantic/hybrid
-   * searches, also run `qmd embed` when status shows pending embeddings.
-   * All errors are swallowed -- search must proceed regardless.
+   * Best-effort staleness check: if the newest md/mdx file is newer than the
+   * qmd index, run `qmd update` before searching. For semantic/hybrid, also
+   * run `qmd embed` when pending.
    */
-  async function ensureFresh(collections: Collection[], searchType: string, log: LogFn): Promise<void> {
+  async function ensureFresh(collections: Collection[], searchType: string, log: PluginLogFn): Promise<void> {
     try {
       const roots = collections.map((c) => c.path);
       const contentMtime = await newestMdMtime(roots, statMtime);
-      if (contentMtime === 0) return; // no markdown files found
+      if (contentMtime === 0) return;
       const indexMtime = await statMtime(qmdIndexPath(home));
-      if (indexMtime >= contentMtime) return; // index is up to date
+      if (indexMtime >= contentMtime) return;
 
       const env = qmdEnv(home);
       log('info', 'index stale — running qmd update');
-      await runQmd(exec, ['update', '--index', INDEX], env);
+      await runQmd(['update', '--index', INDEX], { env });
 
-      // For semantic/hybrid, ensure vectors exist (embed downloads the model on
-      // first run, then is incremental). `qmd status --format json` is not JSON,
-      // so scrape the human output for the pending count.
       if (searchType === 'semantic' || searchType === 'hybrid') {
         try {
-          const { embeddingsPending } = parseQmdStatus(await runQmd(exec, ['status', '--index', INDEX], env));
+          const { embeddingsPending } = parseQmdStatus(await runQmd(['status', '--index', INDEX], { env }));
           if (embeddingsPending > 0) {
             log('info', `${embeddingsPending} doc(s) need embedding — running qmd embed`);
-            await runQmd(exec, ['embed', '--index', INDEX], env);
+            await runQmd(['embed', '--index', INDEX], { env });
           }
         } catch {
           // status/embed failure is non-fatal
@@ -219,109 +218,24 @@ export function makeHandlers(deps: Deps): HandlerMap {
     }
   }
 
-  return {
-    initialize(params) {
-      if (typeof params.home === 'string' && params.home.length > 0) {
-        home = params.home;
-      }
-      return {
-        name: 'diffwiki-qmd',
-        kind: 'search',
-        version: VERSION,
-        capabilities: {
-          searchTypes: ['keyword', 'semantic', 'hybrid'],
-          collectionFilter: true,
-          hooks: true,
-          setup: true,
-        },
-      };
-    },
-
-    async setup(params, log) {
+  const handlers = {
+    async search(params: SearchParams, log: PluginLogFn): Promise<SearchHandlerResult> {
       const env = qmdEnv(home);
-      const steps: Array<{ step: string; ok: boolean; message?: string }> = [];
-      const installed = await qmdOnPath(exec, env);
-      if (!installed) {
-        log('error', 'qmd not found on PATH — install with: npm i -g @tobilu/qmd');
-        steps.push({ step: 'verify-qmd', ok: false, message: 'qmd not on PATH' });
-        return { ready: false, steps };
-      }
-      steps.push({ step: 'verify-qmd', ok: true });
-
-      const collections = asCollections(params);
-      await addCollections(exec, env, collections, log);
-      steps.push({
-        step: 'add-collections',
-        ok: true,
-        message: `${collections.length} collection(s)`,
-      });
-
-      try {
-        await runQmd(exec, ['update', '--index', INDEX], env);
-        steps.push({ step: 'index', ok: true });
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        steps.push({ step: 'index', ok: false, message });
-      }
-
-      if (params.embed === true || params.prefetchModels === true) {
-        log('info', 'embedding index (may download models on first run)');
-        try {
-          await runQmd(exec, ['embed', '--index', INDEX], env);
-          steps.push({ step: 'embed', ok: true });
-        } catch (err) {
-          const message = err instanceof Error ? err.message : String(err);
-          steps.push({ step: 'embed', ok: false, message });
-        }
-      }
-
-      return { ready: true, steps };
-    },
-
-    async index(params, log) {
-      const env = qmdEnv(home);
-      const collections = asCollections(params);
-      await addCollections(exec, env, collections, log);
-      await runQmd(exec, ['update', '--index', INDEX], env);
-      if (params.embed === true) {
-        log('info', 'embedding index');
-        await runQmd(exec, ['embed', '--index', INDEX], env);
-      }
-      return { indexed: collections.length };
-    },
-
-    async notify(params, log) {
-      const env = qmdEnv(home);
-      const collection = params.collection as Collection | undefined;
-      if (collection && typeof collection.name === 'string' && typeof collection.path === 'string') {
-        try {
-          await runQmd(exec, ['update', '--index', INDEX, '-c', collection.name], env);
-        } catch (err) {
-          const message = err instanceof Error ? err.message : String(err);
-          log('warn', `notify update failed for ${collection.name}: ${message}`);
-        }
-      }
-      return { accepted: true };
-    },
-
-    async search(params, log) {
-      const env = qmdEnv(home);
-      const term = typeof params.term === 'string' ? params.term : '';
-      const type = typeof params.type === 'string' ? params.type : 'keyword';
-      const limit = typeof params.limit === 'number' && params.limit > 0 ? params.limit : 20;
+      const term = params.term ?? '';
+      const type = params.type ?? 'keyword';
+      const limit = params.limit && params.limit > 0 ? params.limit : 20;
       const sub = searchSubcommand(type);
 
-      const collections = asCollections(params);
+      const collections = asCollections(params.collections);
       await ensureFresh(collections, type, log);
 
       const args = [sub, '--index', INDEX, '--format', 'json', '-n', String(limit)];
-      if (typeof params.collection === 'string' && params.collection.length > 0) {
+      if (params.collection && params.collection.length > 0) {
         args.push('-c', params.collection);
       }
-      // `--` terminates flag parsing so a term starting with `-` isn't read as a qmd flag.
       args.push('--', term);
 
-      const rows = await runQmdJson<QmdRow[]>(exec, args, env);
+      const rows = await runQmdJson<QmdRow[]>(args, { env });
       const hits: Hit[] = (Array.isArray(rows) ? rows : []).map((row) => {
         const { collection, relPath } = splitQmdPath(row);
         return {
@@ -336,10 +250,77 @@ export function makeHandlers(deps: Deps): HandlerMap {
       return { hits };
     },
 
-    async health(params, log) {
+    async index(params: IndexParams, log: PluginLogFn): Promise<IndexHandlerResult> {
+      const env = qmdEnv(home);
+      const collections = asCollections(params.collections);
+      await addCollections(env, collections, log);
+      await runQmd(['update', '--index', INDEX], { env });
+      if (params.embed === true) {
+        log('info', 'embedding index');
+        await runQmd(['embed', '--index', INDEX], { env });
+      }
+      return { indexed: collections.length };
+    },
+
+    async setup(params: SetupParams, log: PluginLogFn): Promise<SetupHandlerResult> {
+      const env = qmdEnv(home);
+      const steps: Array<{ step: string; ok: boolean; message?: string }> = [];
+      const installed = await qmdOnPath();
+      if (!installed) {
+        log('error', 'qmd not found on PATH — install with: npm i -g @tobilu/qmd');
+        steps.push({ step: 'verify-qmd', ok: false, message: 'qmd not on PATH' });
+        return { ready: false, steps };
+      }
+      steps.push({ step: 'verify-qmd', ok: true });
+
+      const collections = asCollections(params.collections);
+      await addCollections(env, collections, log);
+      steps.push({
+        step: 'add-collections',
+        ok: true,
+        message: `${collections.length} collection(s)`,
+      });
+
+      try {
+        await runQmd(['update', '--index', INDEX], { env });
+        steps.push({ step: 'index', ok: true });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        steps.push({ step: 'index', ok: false, message });
+      }
+
+      if (params.embed === true || params.prefetchModels === true) {
+        log('info', 'embedding index (may download models on first run)');
+        try {
+          await runQmd(['embed', '--index', INDEX], { env });
+          steps.push({ step: 'embed', ok: true });
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          steps.push({ step: 'embed', ok: false, message });
+        }
+      }
+
+      return { ready: true, steps };
+    },
+
+    async onEvent(params: EventParams, log: PluginLogFn): Promise<EventHandlerResult> {
+      const env = qmdEnv(home);
+      const collection = params.collection;
+      if (collection && typeof collection.name === 'string' && typeof collection.path === 'string') {
+        try {
+          await runQmd(['update', '--index', INDEX, '-c', collection.name], { env });
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          log('warn', `event update failed for ${collection.name}: ${message}`);
+        }
+      }
+      return { accepted: true };
+    },
+
+    async health(_params: HealthParams, log: PluginLogFn): Promise<HealthHandlerResult> {
       const env = qmdEnv(home);
       const diagnostics: Array<{ level: 'ok' | 'warn' | 'error'; message: string }> = [];
-      const toolInstalled = await qmdOnPath(exec, env);
+      const toolInstalled = await qmdOnPath();
       if (!toolInstalled) {
         log('error', 'qmd not on PATH');
         diagnostics.push({
@@ -371,7 +352,7 @@ export function makeHandlers(deps: Deps): HandlerMap {
       let docsIndexed = 0;
       let embeddingsPending = 0;
       try {
-        ({ docsIndexed, embeddingsPending } = parseQmdStatus(await runQmd(exec, ['status', '--index', INDEX], env)));
+        ({ docsIndexed, embeddingsPending } = parseQmdStatus(await runQmd(['status', '--index', INDEX], { env })));
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         diagnostics.push({ level: 'warn', message: `qmd status unavailable: ${message}` });
@@ -379,9 +360,6 @@ export function makeHandlers(deps: Deps): HandlerMap {
 
       const indexBuilt = docsIndexed > 0;
 
-      // Keyword search is instant once the index is built (no model). Semantic/hybrid
-      // pay a model load (cached) or a multi-GB download (first ever run) — surface that.
-      // 'instant' overall once keyword is ready; else model-load if cached, model-download if not.
       const firstSearchCost: 'instant' | 'model-load' | 'model-download' = indexBuilt
         ? 'instant'
         : modelsPresent
@@ -412,26 +390,34 @@ export function makeHandlers(deps: Deps): HandlerMap {
         diagnostics,
       };
     },
-
-    shutdown() {
-      return {};
-    },
   };
+
+  const definition: PluginDefinition = {
+    name: 'diffwiki-qmd',
+    kind: 'search' as const,
+    version: VERSION,
+    capabilities: {
+      searchTypes: ['keyword', 'semantic', 'hybrid'],
+      collectionFilter: true,
+      events: true,
+    },
+    handlers,
+  };
+
+  return { definition, handlers };
 }
 
-const isMain = (() => {
-  try {
-    return process.argv[1] === fileURLToPath(import.meta.url);
-  } catch {
-    return false;
-  }
-})();
-
-if (isMain) {
-  serve(makeHandlers({ exec: execFileAsync }))
-    .then(() => process.exit(0))
-    .catch((err: unknown) => {
-      process.stderr.write(`diffwiki-qmd: fatal: ${String(err)}\n`);
-      process.exit(1);
-    });
+/**
+ * Create the defined plugin instance. Used by the binary entry point and tests.
+ *
+ * @param deps - Optional overrides for home directory and stat function.
+ * @returns A `DefinedPlugin` whose `.run()` method serves one request.
+ */
+export function createPlugin(deps?: { home?: string; statMtime?: StatMtimeFn }): ReturnType<typeof definePlugin> {
+  const { definition } = makePluginDefinition(deps);
+  return definePlugin(definition);
 }
+
+// Run when invoked as a binary.
+const home = process.env.DIFFWIKI_HOME || join(homedir(), '.diffwiki');
+createPlugin({ home }).run();
