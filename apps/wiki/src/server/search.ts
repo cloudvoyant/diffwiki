@@ -37,7 +37,7 @@ export const runSearch = createServerFn({ method: 'GET' })
 /**
  * Return the available search modes from `listSearchModes()`.
  *
- * Always includes at minimum `{ plugin: 'native', type: 'basic', label: 'native · title/tags' }`
+ * Always includes at minimum `{ plugin: 'native', type: 'basic', label: 'native · bm25' }`
  * prepended before any installed plugin modes. The `/search` route renders
  * these as `<option>` elements so the dropdown reflects exactly what is installed.
  */

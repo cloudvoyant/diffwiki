@@ -14,7 +14,7 @@ export async function loadSearchProvider(name?: string): Promise<SearchProvider 
 }
 
 export async function listSearchModes(): Promise<SearchMode[]> {
-  const modes: SearchMode[] = [{ plugin: NATIVE_ENGINE, type: 'basic', label: 'native · title/tags' }];
+  const modes: SearchMode[] = [{ plugin: NATIVE_ENGINE, type: 'basic', label: 'native · bm25' }];
   const plugins = await listEnabledPlugins('search');
   for (const record of plugins) {
     let provider: SearchProvider | null = null;

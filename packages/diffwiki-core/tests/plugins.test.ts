@@ -147,7 +147,7 @@ describe('protocol client + loader', () => {
   it('lists native FIRST, then the plugin modes', async () => {
     await registerStubPlugin();
     const modes = await listSearchModes();
-    expect(modes[0]).toEqual({ plugin: 'native', type: 'basic', label: 'native · title/tags' });
+    expect(modes[0]).toEqual({ plugin: 'native', type: 'basic', label: 'native · bm25' });
     expect(modes).toContainEqual({
       plugin: 'stub-plugin',
       type: 'stub',
@@ -157,7 +157,7 @@ describe('protocol client + loader', () => {
 
   it('lists only native when no plugin is registered', async () => {
     const modes = await listSearchModes();
-    expect(modes).toEqual([{ plugin: 'native', type: 'basic', label: 'native · title/tags' }]);
+    expect(modes).toEqual([{ plugin: 'native', type: 'basic', label: 'native · bm25' }]);
   });
 });
 
@@ -219,5 +219,60 @@ describe('native search (no plugin)', () => {
     expect(hits).toHaveLength(1);
     expect(hits[0].title).toBe('External Article');
     expect(hits[0].path).toBe(path.join(wikiDir, 'external.md'));
+  });
+
+  it('ranks a title match above a body-only match (BM25)', async () => {
+    await createCollection('ranking');
+    await createArticle({
+      target: 'ranking:Kubernetes Setup Guide',
+      tags: [],
+      body: '# Setting up k8s\n\nGeneral instructions for deployment.',
+    });
+    await createArticle({
+      target: 'ranking:Grocery List',
+      tags: [],
+      body: '# Shopping\n\nBuy some kubernetes stickers from the store.',
+    });
+    const hits = await query('kubernetes', { collection: 'ranking' });
+    expect(hits.length).toBe(2);
+    // The article with "kubernetes" in the title should rank first
+    expect(hits[0].title).toBe('Kubernetes Setup Guide');
+    expect(hits[1].title).toBe('Grocery List');
+    // Both should have populated scores
+    expect(typeof hits[0].score).toBe('number');
+    expect(typeof hits[1].score).toBe('number');
+    expect(hits[0].score!).toBeGreaterThan(hits[1].score!);
+  });
+
+  it('ranks a tag match above a body-only match (BM25)', async () => {
+    await createCollection('tagrank');
+    await createArticle({ target: 'tagrank:Note A', tags: ['docker'], body: '# A\n\nSome random content.' });
+    await createArticle({
+      target: 'tagrank:Note B',
+      tags: ['misc'],
+      body: '# B\n\nThis article mentions docker in passing.',
+    });
+    const hits = await query('docker', { collection: 'tagrank' });
+    expect(hits.length).toBe(2);
+    expect(hits[0].title).toBe('Note A');
+    expect(hits[1].title).toBe('Note B');
+  });
+
+  it('empty query returns all articles without scores', async () => {
+    await createCollection('browseall');
+    await createArticle({ target: 'browseall:First', tags: [], body: '# 1' });
+    await createArticle({ target: 'browseall:Second', tags: [], body: '# 2' });
+    const hits = await query('', { collection: 'browseall' });
+    expect(hits.length).toBe(2);
+    // No scores on unranked results
+    expect(hits[0].score).toBeUndefined();
+    expect(hits[1].score).toBeUndefined();
+  });
+
+  it('returns no results when no document matches the query term (BM25)', async () => {
+    await createCollection('nomatch');
+    await createArticle({ target: 'nomatch:Hello World', tags: ['greeting'], body: '# Hi there' });
+    const hits = await query('zzzznonexistent', { collection: 'nomatch' });
+    expect(hits).toHaveLength(0);
   });
 });

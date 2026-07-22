@@ -18,12 +18,12 @@ test.describe('Search route (/search)', () => {
     await expect(filter.getByRole('option', { name: /all collections/i })).toHaveCount(1);
   });
 
-  test('mode dropdown always contains the native · title/tags option', async ({ page }) => {
+  test('mode dropdown always contains the native · bm25 option', async ({ page }) => {
     await page.goto('/search?q=intro');
     const modeSelect = page.getByLabel(/search mode/i);
     await expect(modeSelect).toBeVisible();
-    // listSearchModes() always prepends native · title/tags regardless of installed plugins.
-    await expect(modeSelect.getByRole('option', { name: /native · title\/tags/i })).toHaveCount(1);
+    // listSearchModes() always prepends native · bm25 regardless of installed plugins.
+    await expect(modeSelect.getByRole('option', { name: /native · bm25/i })).toHaveCount(1);
   });
 
   test('mode dropdown value matches the engine and type params when provided', async ({ page }) => {
