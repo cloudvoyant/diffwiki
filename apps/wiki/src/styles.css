@@ -278,12 +278,20 @@
   font-size: inherit;
 }
 
-/* Keep the center content lane fixed when the sidebar is toggled. shadcn shrinks
-   the in-flow "sidebar-gap" to 0 on collapse, which resizes the inset and shifts
-   the content. Pin the gap to the sidebar width so a collapsed sidebar just
-   leaves an empty gutter in its place — the content never moves. */
-[data-slot='sidebar-gap'] {
-  width: var(--sidebar-width) !important;
+/* Desktop only (>=1024px): keep the center content lane fixed when the sidebar
+   is toggled. shadcn shrinks the in-flow "sidebar-gap" to 0 on collapse, which
+   resizes the inset and shifts the content. Pin the gap to the sidebar width so
+   a collapsed sidebar just leaves an empty gutter in its place — the content
+   never moves.
+
+   Below 1024px (tablet) the pin is deliberately NOT applied: the sidebar stays
+   inline (no overlay), but collapsing it lets the gap fall to its natural 0 so
+   the content reflows to fill the freed space instead of stranding an empty
+   sidebar-width gutter. */
+@media (min-width: 1024px) {
+  [data-slot='sidebar-gap'] {
+    width: var(--sidebar-width) !important;
+  }
 }
 
 /* The top bar spans the full width; the fixed sidebar rail starts below it. */

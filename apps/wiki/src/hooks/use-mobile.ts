@@ -1,5 +1,8 @@
 import * as React from 'react';
 
+// 768px: only phones use the overlay (Sheet) sidebar. Tablet keeps the inline
+// rail (it pushes content when open and reflows when collapsed — see the
+// sidebar-gap rule in styles.css, which pins the gap on desktop only).
 const MOBILE_BREAKPOINT = 768;
 
 export function useIsMobile() {
