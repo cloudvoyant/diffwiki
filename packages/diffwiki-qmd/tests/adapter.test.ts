@@ -8,6 +8,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   makeHandlers,
   newestMdMtime,
+  parseQmdStatus,
   qmdIndexPath,
   searchSubcommand,
   splitQmdPath,
@@ -81,6 +82,23 @@ describe('splitQmdPath', () => {
       collection: 'notes',
       relPath: 'todo.md',
     });
+  });
+});
+
+describe('parseQmdStatus', () => {
+  it('scrapes docs indexed and pending embeddings from human status text', () => {
+    const text = '  Total:    110 files indexed\n  Vectors:  0 embedded\n  Pending:  110 need embedding\n';
+    expect(parseQmdStatus(text)).toEqual({ docsIndexed: 110, embeddingsPending: 110 });
+  });
+
+  it('returns zeros when the lines are absent', () => {
+    expect(parseQmdStatus('nothing here')).toEqual({ docsIndexed: 0, embeddingsPending: 0 });
+  });
+});
+
+describe('qmdIndexPath', () => {
+  it('points at <home>/qmd/qmd/<index>.sqlite', () => {
+    expect(qmdIndexPath('/home/u/.diffwiki')).toBe('/home/u/.diffwiki/qmd/qmd/diffwiki.sqlite');
   });
 });
 
@@ -159,14 +177,8 @@ describe('health handler', () => {
     const { exec } = fakeExec((_file, args) => {
       if (args[0] === '--version') return { stdout: 'qmd 2.5.3' };
       if (args[0] === 'status') {
-        return {
-          stdout: JSON.stringify({
-            totalDocuments: 128,
-            needsEmbedding: 0,
-            hasVectorIndex: true,
-            collections: [],
-          }),
-        };
+        // qmd status prints human text (it does not honour --format json).
+        return { stdout: '  Total:    128 files indexed\n  Vectors:  128 embedded\n  Pending:  0 need embedding\n' };
       }
       return { stdout: '' };
     });
@@ -381,7 +393,8 @@ describe('search handler — staleness check', () => {
       calls.push([file, ...args]);
       if (args[0] === 'vsearch') return { stdout: '[]', stderr: '' };
       if (args[0] === 'status') {
-        return { stdout: JSON.stringify({ totalDocuments: 5, needsEmbedding: 3 }), stderr: '' };
+        // Human-format status: 3 of 5 pending embedding.
+        return { stdout: '  Total:    5 files indexed\n  Pending:  3 need embedding\n', stderr: '' };
       }
       return { stdout: '', stderr: '' };
     };

@@ -32,13 +32,6 @@ export interface QmdRow {
   docid?: string;
 }
 
-export interface QmdStatus {
-  totalDocuments?: number;
-  needsEmbedding?: number;
-  hasVectorIndex?: boolean;
-  collections?: unknown[];
-}
-
 export interface Hit {
   collection: string;
   relPath: string;
@@ -93,7 +86,27 @@ export async function newestMdMtime(dirs: string[], statFn: StatMtimeFn): Promis
 
 /** Path to the qmd index sqlite3 file under the relocated cache. */
 export function qmdIndexPath(home: string): string {
-  return join(home, 'qmd', 'qmd', INDEX, 'index.sqlite3');
+  // qmd stores a named index as `<XDG_CACHE_HOME>/qmd/<name>.sqlite`
+  // (XDG_CACHE_HOME is relocated to `<home>/qmd`).
+  return join(home, 'qmd', 'qmd', `${INDEX}.sqlite`);
+}
+
+export interface QmdStatusInfo {
+  docsIndexed: number;
+  embeddingsPending: number;
+}
+
+/**
+ * Parse the human output of `qmd status` — it does NOT honour `--format json`,
+ * so we scrape the "Total: N files indexed" / "Pending: N need embedding" lines.
+ */
+export function parseQmdStatus(text: string): QmdStatusInfo {
+  const total = /Total:\s*(\d+)/i.exec(text);
+  const pending = /Pending:\s*(\d+)/i.exec(text);
+  return {
+    docsIndexed: total ? Number(total[1]) : 0,
+    embeddingsPending: pending ? Number(pending[1]) : 0,
+  };
 }
 
 export interface Deps {
@@ -187,12 +200,14 @@ export function makeHandlers(deps: Deps): HandlerMap {
       log('info', 'index stale — running qmd update');
       await runQmd(exec, ['update', '--index', INDEX], env);
 
-      // For semantic/hybrid, check if embeddings are needed
+      // For semantic/hybrid, ensure vectors exist (embed downloads the model on
+      // first run, then is incremental). `qmd status --format json` is not JSON,
+      // so scrape the human output for the pending count.
       if (searchType === 'semantic' || searchType === 'hybrid') {
         try {
-          const status = await runQmdJson<QmdStatus>(exec, ['status', '--index', INDEX, '--format', 'json'], env);
-          if (typeof status.needsEmbedding === 'number' && status.needsEmbedding > 0) {
-            log('info', `${status.needsEmbedding} doc(s) need embedding — running qmd embed`);
+          const { embeddingsPending } = parseQmdStatus(await runQmd(exec, ['status', '--index', INDEX], env));
+          if (embeddingsPending > 0) {
+            log('info', `${embeddingsPending} doc(s) need embedding — running qmd embed`);
             await runQmd(exec, ['embed', '--index', INDEX], env);
           }
         } catch {
@@ -353,16 +368,15 @@ export function makeHandlers(deps: Deps): HandlerMap {
         modelsPresent = false;
       }
 
-      let status: QmdStatus = {};
+      let docsIndexed = 0;
+      let embeddingsPending = 0;
       try {
-        status = await runQmdJson<QmdStatus>(exec, ['status', '--index', INDEX, '--format', 'json'], env);
+        ({ docsIndexed, embeddingsPending } = parseQmdStatus(await runQmd(exec, ['status', '--index', INDEX], env)));
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         diagnostics.push({ level: 'warn', message: `qmd status unavailable: ${message}` });
       }
 
-      const docsIndexed = typeof status.totalDocuments === 'number' ? status.totalDocuments : 0;
-      const embeddingsPending = typeof status.needsEmbedding === 'number' ? status.needsEmbedding : 0;
       const indexBuilt = docsIndexed > 0;
 
       // Keyword search is instant once the index is built (no model). Semantic/hybrid
