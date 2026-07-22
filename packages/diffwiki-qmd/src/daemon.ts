@@ -1,12 +1,20 @@
 /**
- * qmd warm-daemon lifecycle.
+ * qmd warm-daemon lifecycle — cooperative "ensure it's up, never own it".
  *
  * The diffwiki-qmd plugin binary is one-shot, but the expensive GGUF embedding
  * models can stay resident in an external, long-lived
- * `qmd mcp --http --daemon --index diffwiki` process. This module ensures that
+ * `qmd mcp --http --daemon --index diffwiki` process. This module *ensures* that
  * daemon is running (spinning it up fully detached if it is down) and returns
- * its base URL so the MCP client (`./mcp`) can run searches against warm
- * models.
+ * its base URL so the MCP client (`./mcp`) can run searches against warm models.
+ *
+ * **Isolation — diffwiki never interferes with your own qmd usage.** qmd may be
+ * used directly, outside diffwiki (its own daemon, its own indexes). So diffwiki
+ * runs its *own* daemon serving a *private* named index (`diffwiki`) on a
+ * *private* port (`DEFAULT_MCP_PORT`, deliberately NOT qmd's own `8181` default),
+ * and only ever *starts* it — it never stops, kills, or restarts the process.
+ * That keeps diffwiki a cooperative client: it owns its index, not the daemon's
+ * lifecycle, and it can never pick up (or collide with) a daemon you started for
+ * a different index.
  *
  * `fetch` and `spawn` are injected (`FetchFn` / `SpawnFn`) so unit tests can
  * drive the health probe and the detached start without touching the network
@@ -23,8 +31,13 @@
 /** Default host the qmd MCP daemon binds. Overridable via `DIFFWIKI_QMD_MCP_HOST`. */
 export const DEFAULT_MCP_HOST = '127.0.0.1';
 
-/** Default port the qmd MCP daemon binds. Overridable via `DIFFWIKI_QMD_MCP_PORT`. */
-export const DEFAULT_MCP_PORT = 8181;
+/**
+ * Default port for diffwiki's *private* qmd daemon. Deliberately NOT qmd's own
+ * `8181` default, so diffwiki never collides with — or accidentally reuses — a
+ * daemon you started yourself for a different index. Overridable via
+ * `DIFFWIKI_QMD_MCP_PORT`.
+ */
+export const DEFAULT_MCP_PORT = 8191;
 
 /**
  * A minimal `fetch`-shaped function: enough of the WHATWG fetch surface for the
@@ -165,11 +178,13 @@ async function startAndPoll(
   timing: { maxPolls: number; pollIntervalMs: number; probeTimeoutMs: number; sleep: (ms: number) => Promise<void> },
 ): Promise<string | null> {
   try {
-    const child = spawnFn('qmd', ['mcp', '--http', '--daemon', '--index', 'diffwiki'], {
-      env,
-      detached: true,
-      stdio: 'ignore',
-    });
+    // Bind diffwiki's OWN private index + port so this daemon never collides
+    // with a qmd daemon the user runs themselves (different index/port).
+    const child = spawnFn(
+      'qmd',
+      ['mcp', '--http', '--daemon', '--index', 'diffwiki', '--host', mcpHost(env), '--port', String(mcpPort(env))],
+      { env, detached: true, stdio: 'ignore' },
+    );
     child.unref();
   } catch {
     return null;
