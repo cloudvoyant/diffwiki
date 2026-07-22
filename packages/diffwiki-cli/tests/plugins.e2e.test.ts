@@ -1,6 +1,8 @@
+import { execSync } from 'node:child_process';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { run } from './helpers';
 
@@ -116,6 +118,32 @@ rl.on('line', (line) => {
 });
 `;
 
+/** Probe for rg on PATH at module load time. */
+const rgOnPath = (() => {
+  try {
+    execSync('rg --version', { stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
+  }
+})();
+
+/** Probe for qmd on PATH at module load time. */
+const qmdOnPath = (() => {
+  try {
+    execSync('qmd --version', { stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
+  }
+})();
+
+/** Absolute path to the built diffwiki-ripgrep bin. */
+const RIPGREP_BIN = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../diffwiki-ripgrep/dist/bin.js');
+
+/** Absolute path to the built diffwiki-qmd bin. */
+const QMD_BIN = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../diffwiki-qmd/dist/bin.js');
+
 beforeEach(async () => {
   home = await fs.mkdtemp(path.join(os.tmpdir(), 'diffwiki-plugin-e2e-'));
   scriptDir = await fs.mkdtemp(path.join(os.tmpdir(), 'diffwiki-fixture-'));
@@ -203,3 +231,114 @@ describe('plugin lifecycle (fixture subprocess plugin, no npm/network)', () => {
     expect(doc.out).toContain('defaultSearch "ghost:semantic" is not installed/enabled — using native');
   });
 });
+
+describe.skipIf(!rgOnPath)('real ripgrep plugin e2e (rg on PATH)', () => {
+  let externalDir: string;
+
+  it('register → query → doctor round-trip with real rg', async () => {
+    // Build the ripgrep adapter so dist/bin.js is available
+    execSync('pnpm --filter diffwiki-ripgrep run build', {
+      cwd: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..'),
+      stdio: 'ignore',
+    });
+
+    // Seed a global collection with a searchable article
+    expect((await run(['create', 'rg-test'])).ok).toBe(true);
+    const collDir = path.join(home, 'collections', 'rg-test');
+    await fs.writeFile(
+      path.join(collDir, 'searchable.md'),
+      '---\ntitle: The Quick Brown Fox\ntags:\n  - animals\n---\n\nThe quick brown fox jumps over the lazy dog.\n',
+      'utf8',
+    );
+
+    // Also register a collection OUTSIDE ~/.diffwiki (in-repo wiki pattern)
+    externalDir = await fs.mkdtemp(path.join(os.tmpdir(), 'diffwiki-rg-external-'));
+    externalDir = await fs.realpath(externalDir);
+    await fs.writeFile(
+      path.join(externalDir, 'external-note.md'),
+      '---\ntitle: External Quick Note\ntags: []\n---\n\nThis external note also mentions quick brown fox.\n',
+      'utf8',
+    );
+    // Register the external path as a collection via `init` (needs cwd in that dir)
+    const origCwd = process.cwd();
+    try {
+      process.chdir(externalDir);
+      await run(['init', '--collection', 'external-rg', '--path', '.']);
+    } finally {
+      process.chdir(origCwd);
+    }
+
+    // Register diffwiki-ripgrep as a plugin
+    const reg = await run(['plugin', 'register', 'diffwiki-ripgrep', '--command', 'node', RIPGREP_BIN]);
+    expect(reg.ok).toBe(true);
+    expect(reg.out).toContain('Registered "diffwiki-ripgrep"');
+
+    // Query with the ripgrep engine — should find real rg matches
+    const q = await run(['query', 'quick brown fox', '--engine', 'diffwiki-ripgrep']);
+    expect(q.ok).toBe(true);
+    expect(q.out).toContain('result(s)');
+    expect(q.out).toContain('Quick Brown Fox');
+
+    // Doctor should show the plugin as ready
+    const doc = await run(['doctor']);
+    expect(doc.ok).toBe(true);
+    expect(doc.out).toContain('plugin "diffwiki-ripgrep" enabled and spawnable');
+    expect(doc.out).toContain('ripgrep ready');
+
+    // Clean up the plugin registration
+    const rm = await run(['plugin', 'remove', 'diffwiki-ripgrep']);
+    expect(rm.ok).toBe(true);
+
+    // Clean up external dir
+    if (externalDir) {
+      await fs.rm(externalDir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe.skipIf(!(process.env.DIFFWIKI_E2E_REAL && qmdOnPath))(
+  'real qmd plugin e2e (DIFFWIKI_E2E_REAL + qmd on PATH)',
+  () => {
+    it('register → index → keyword query round-trip with real qmd', async () => {
+      // Build the qmd adapter so dist/bin.js is available
+      execSync('pnpm --filter diffwiki-qmd run build', {
+        cwd: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..'),
+        stdio: 'ignore',
+      });
+
+      // Seed a collection
+      expect((await run(['create', 'qmd-test'])).ok).toBe(true);
+      const collDir = path.join(home, 'collections', 'qmd-test');
+      await fs.writeFile(
+        path.join(collDir, 'qmd-article.md'),
+        '---\ntitle: Quantum Computing Basics\ntags:\n  - physics\n  - computing\n---\n\nQuantum computing uses qubits instead of classical bits.\n',
+        'utf8',
+      );
+
+      // Register diffwiki-qmd as a plugin
+      const reg = await run(['plugin', 'register', 'diffwiki-qmd', '--command', 'node', QMD_BIN]);
+      expect(reg.ok).toBe(true);
+      expect(reg.out).toContain('Registered "diffwiki-qmd"');
+
+      // Index the collection
+      const idx = await run(['index']);
+      expect(idx.ok).toBe(true);
+      expect(idx.out).toContain('Indexed');
+
+      // Keyword query — should find the seeded article
+      const q = await run(['query', 'quantum', '--engine', 'diffwiki-qmd', '-t', 'keyword']);
+      expect(q.ok).toBe(true);
+      expect(q.out).toContain('result(s)');
+      expect(q.out).toContain('Quantum');
+
+      // Doctor should show qmd ready
+      const doc = await run(['doctor']);
+      expect(doc.ok).toBe(true);
+      expect(doc.out).toContain('plugin "diffwiki-qmd" enabled and spawnable');
+
+      // Clean up
+      const rm = await run(['plugin', 'remove', 'diffwiki-qmd']);
+      expect(rm.ok).toBe(true);
+    });
+  },
+);
