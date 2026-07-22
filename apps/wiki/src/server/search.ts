@@ -6,6 +6,8 @@ import type { SearchResultItem } from '../lib/types';
 export interface SearchResponse {
   q: string;
   results: SearchResultItem[];
+  /** Wall-clock time the search took on the server, in milliseconds. */
+  tookMs: number;
 }
 
 export interface SearchModesResponse {
@@ -29,15 +31,17 @@ export const runSearch = createServerFn({ method: 'GET' })
   .validator((d: { q: string; collection?: string; engine?: string; type?: string }) => d)
   .handler(async ({ data }): Promise<SearchResponse> => {
     const q = data.q.trim();
-    if (!q) return { q: data.q, results: [] };
+    if (!q) return { q: data.q, results: [], tookMs: 0 };
 
+    const started = Date.now();
     const [hits, collections] = await Promise.all([
       query(q, { engine: data.engine, collection: data.collection, type: data.type }),
       listCollections(),
     ]);
+    const tookMs = Date.now() - started;
 
     const results = hits.map((hit) => hitToResult(hit, collections));
-    return { q: data.q, results };
+    return { q: data.q, results, tookMs };
   });
 
 /**

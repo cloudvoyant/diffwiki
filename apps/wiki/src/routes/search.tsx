@@ -29,7 +29,55 @@ export const Route = createFileRoute('/search')({
     return { search, collections, modes: searchModes.modes, defaultMode: searchModes.default };
   },
   component: SearchComponent,
+  // Semantic/hybrid searches can take several seconds (the qmd model loads per
+  // query), so show a spinner while the loader runs instead of freezing the UI.
+  pendingComponent: SearchPending,
+  pendingMs: 150,
 });
+
+const QUERY_INPUT_CLASS =
+  'w-full rounded-lg border border-input bg-background px-4 py-2.5 text-sm text-foreground shadow-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring';
+
+/** Human-friendly search duration: sub-second in ms, else seconds with one decimal. */
+function formatDuration(ms: number): string {
+  return ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(1)} s`;
+}
+
+/** Shown while the search loader is in flight — keeps the query bar usable. */
+function SearchPending() {
+  const params = Route.useSearch();
+  const navigate = Route.useNavigate();
+  const [term, setTerm] = useState(params.q);
+
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    void navigate({ to: '/search', search: (prev) => ({ ...prev, q: term.trim() }) });
+  };
+
+  return (
+    <PageLayout>
+      <div className="flex w-full max-w-3xl flex-col gap-6">
+        <form onSubmit={submit} role="search">
+          <input
+            type="search"
+            value={term}
+            onChange={(e) => setTerm(e.target.value)}
+            placeholder="Search…"
+            aria-label="Search"
+            className={QUERY_INPUT_CLASS}
+          />
+        </form>
+        <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground" role="status" aria-live="polite">
+          <span
+            className="inline-block size-4 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent"
+            aria-hidden
+          />
+          Searching…
+        </div>
+      </div>
+    </PageLayout>
+  );
+}
 
 function SearchComponent() {
   const { search, collections, modes, defaultMode } = Route.useLoaderData();
@@ -74,7 +122,7 @@ function SearchComponent() {
             onChange={(e) => setTerm(e.target.value)}
             placeholder="Search…"
             aria-label="Search"
-            className="w-full rounded-lg border border-input bg-background px-4 py-2.5 text-sm text-foreground shadow-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+            className={QUERY_INPUT_CLASS}
           />
         </form>
 
@@ -119,28 +167,35 @@ function SearchComponent() {
         {/* Results region */}
         {q === '' ? (
           <p className="text-sm text-muted-foreground">Type a query and press Enter.</p>
-        ) : search.results.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No results for &ldquo;{q}&rdquo;.</p>
         ) : (
-          <ul data-testid="search-results" className="flex flex-col divide-y divide-border">
-            {search.results.map((r: SearchResultItem) => (
-              <li key={`${r.coll}/${r.slug}`} className="py-3">
-                <Link
-                  to="/$coll/$"
-                  params={{ coll: r.coll, _splat: r.slug }}
-                  className={cn('group block focus:outline-none')}
-                >
-                  <span className="text-base font-medium text-foreground group-hover:underline">{r.title}</span>
-                  <span className="mt-0.5 block text-xs text-muted-foreground">
-                    {r.coll}/{r.slug}
-                  </span>
-                  {r.snippet && (
-                    <span className="mt-1 block text-sm text-muted-foreground line-clamp-2">{r.snippet}</span>
-                  )}
-                </Link>
-              </li>
-            ))}
-          </ul>
+          <div className="flex flex-col gap-3">
+            <p className="text-xs text-muted-foreground" data-testid="search-meta">
+              {search.results.length} result{search.results.length === 1 ? '' : 's'} · {formatDuration(search.tookMs)}
+            </p>
+            {search.results.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No results for &ldquo;{q}&rdquo;.</p>
+            ) : (
+              <ul data-testid="search-results" className="flex flex-col divide-y divide-border">
+                {search.results.map((r: SearchResultItem) => (
+                  <li key={`${r.coll}/${r.slug}`} className="py-3">
+                    <Link
+                      to="/$coll/$"
+                      params={{ coll: r.coll, _splat: r.slug }}
+                      className={cn('group block focus:outline-none')}
+                    >
+                      <span className="text-base font-medium text-foreground group-hover:underline">{r.title}</span>
+                      <span className="mt-0.5 block text-xs text-muted-foreground">
+                        {r.coll}/{r.slug}
+                      </span>
+                      {r.snippet && (
+                        <span className="mt-1 block text-sm text-muted-foreground line-clamp-2">{r.snippet}</span>
+                      )}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         )}
       </div>
     </PageLayout>
