@@ -1,3 +1,10 @@
+# [0.5.0](https://github.com/cloudvoyant/diffwiki/compare/v0.4.0...v0.5.0) (2026-07-22)
+
+
+### Features
+
+* local search — plugin system (qmd + ripgrep), native BM25, web UI ([e6a7914](https://github.com/cloudvoyant/diffwiki/commit/e6a79148c295fb971e55064cdbf371a8a472bd0e))
+
 # [0.4.0](https://github.com/cloudvoyant/diffwiki/compare/v0.3.0...v0.4.0) (2026-07-22)
 
 
