@@ -21,6 +21,8 @@
   },
   "dependencies": {
     "diffwiki-core": "workspace:*",
+    "@logtape/logtape": "^2.2.4",
+    "@logtape/file": "^2.2.4",
     "commander": "^13.0.0"
   },
   "devDependencies": {

@@ -1,7 +1,7 @@
 import { Link } from '@tanstack/react-router';
 import { Sidebar, SidebarContent, SidebarGroup, SidebarGroupLabel, SidebarHeader } from '@/components/ui/sidebar';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Input } from '@/components/ui/input';
+import { SearchBox } from './search-box';
 import { Logo } from './logo';
 import { NavTree } from './nav-tree';
 import type { CollectionTree, TreeNode } from '../lib/types';
@@ -34,13 +34,7 @@ export function AppSidebar({ tree }: { tree: CollectionTree[] }) {
           <Logo className="size-6 shrink-0" />
           <span className="text-lg font-bold tracking-tight">diffwiki</span>
         </Link>
-        <Input
-          type="search"
-          placeholder="Search…"
-          disabled
-          className="h-8 cursor-not-allowed text-sm"
-          aria-label="Search (not yet functional)"
-        />
+        <SearchBox placeholder="Search…" className="h-8 text-sm" />
       </SidebarHeader>
 
       <SidebarContent>

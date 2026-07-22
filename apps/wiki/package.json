@@ -13,6 +13,7 @@
   },
   "scripts": {
     "dev": "vite dev --port 3000",
+    "dev:e2e": "vite dev --port 3100",
     "build": "vite build",
     "preview": "vite preview",
     "start": "node bin/wiki-server.mjs",
@@ -23,6 +24,7 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
+    "@logtape/logtape": "^2.2.4",
     "@tailwindcss/vite": "^4.1.18",
     "@tanstack/react-router": "^1.170.18",
     "@tanstack/react-start": "^1.168.32",

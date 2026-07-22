@@ -17,9 +17,9 @@ The repository is a pnpm workspace with two packages:
 - **`diffwiki-core`** — plain, Promise-based TypeScript. Owns all state and filesystem logic:
   path resolution (`paths.ts`), the JSON config store (`config.ts`), the collection registry
   (`registry.ts`), collection creation (`collections.ts`), article CRUD and tag operations
-  (`articles.ts`), in-repo `init` with `diffwiki.yaml` and conflict detection (`repo.ts`), a
-  placeholder `query.ts`, and `doctor.ts` diagnostics. It throws typed `DiffwikiError`
-  subclasses.
+  (`articles.ts`), in-repo `init` with `diffwiki.yaml` and conflict detection (`repo.ts`),
+  search (`query.ts` — a zero-dependency BM25 native engine plus routing to subprocess search
+  plugins), and `doctor.ts` diagnostics. It throws typed `DiffwikiError` subclasses.
 - **`diffwiki`** — the CLI, built with `commander`. Each subcommand's async action calls a
   core function directly and is wrapped by a `withErrors` helper that maps `DiffwikiError` to
   a clean stderr message and a non-zero exit code. `cli.ts` exports a `createProgram()`
@@ -39,6 +39,42 @@ state logic synchronously testable.
   version. semantic-release computes the version at the root and `@semantic-release/exec`
   stamps and builds both packages before publish.
 
+## Search & Plugins
+
+> **See also:** [docs/plugins.md](plugins.md) — plugin protocol, lifecycle, dependency resolution, and authoring guide. [docs/search.md](search.md) — engine routing, native BM25, qmd keyword/semantic/hybrid, ripgrep, and the web search route.
+
+Search has two layers, both reached through `query(term, opts)` in `query.ts`:
+
+- **Native BM25 engine** — a zero-dependency, cross-platform full-text search built into
+  `diffwiki-core`. It walks every registered collection's absolute path, parses frontmatter,
+  and ranks with BM25 over four weighted fields (title ×3, tags ×2, collection ×1.5, body ×1).
+  An empty term returns all articles unranked (browse-all). This is the default engine and the
+  fallback whenever a plugin is unavailable or errors.
+- **Subprocess search plugins** — external engines (e.g. `diffwiki-qmd` for semantic/hybrid
+  search, `diffwiki-ripgrep` for fast keyword search) registered in `~/.diffwiki/plugins.json`.
+
+### Plugin protocol
+
+Plugins are standalone executables that speak a newline-delimited JSON protocol over
+stdin/stdout. `plugins/client.ts` spawns the process and issues requests
+(`{ id, op, params }`) that the plugin answers with `{ id, ok, result }` or an error; log lines
+are ignored. The handshake is `initialize` (protocol version + `home`), which returns the
+plugin `name`, `kind` (must be `search`), `version`, and `capabilities` (advertised
+`searchTypes`, `collectionFilter`, `hooks`, `setup`). Other ops are `setup`, `index`,
+`search`, `notify` (lifecycle hooks), `health`, and `shutdown`. A failed handshake or spawn
+kills the child and contributes no search modes.
+
+### Engine resolution & flow
+
+`query()` picks the engine as: explicit `opts.engine` → `config.defaultSearch`
+(`"<plugin>[:<type>]"`) when it names an enabled plugin → the first enabled search plugin →
+native. `resolveDefaultSearchMode()` computes the same default engine+type for UIs to
+pre-select. `diffwiki index` (re)builds a plugin's index via its `index` op; article
+mutations fire best-effort `notify` hooks (`plugins/events.ts`) so plugins can incrementally
+reindex. `listSearchModes()` enumerates native + each enabled plugin's advertised types for
+the CLI and web dropdown. `doctor` calls each plugin's `health` op to report readiness
+(tool installed, index built, models present, first-search cost).
+
 ## apps/wiki — Local UI
 
 `apps/wiki` (`diffwiki-app`) is a **TanStack Start** SSR application that provides
@@ -54,7 +90,8 @@ context, so TanStack Start (Vite + `@tanstack/react-start`) is used; route loade
 
 | Route | File | Description |
 |---|---|---|
-| `/` | `src/routes/index.tsx` | Logo, non-functional search bar, collection pills |
+| `/` | `src/routes/index.tsx` | Logo, search bar (submits to `/search`), collection pills |
+| `/search` | `src/routes/search.tsx` | Query results via `runSearch`; collection filter + a search-mode dropdown (`getSearchModes`) whose selection reflects the engine actually run (`resolveDefaultSearchMode`) |
 | `/$coll/$` | `src/routes/$coll.$.tsx` | Renders an article, an authored index page, or a generated directory listing; params `coll` + `_splat` |
 
 ### Server Functions (`src/server/`)
@@ -126,5 +163,4 @@ Dark mode = `.dark` class on `<html>`, persisted to `localStorage` (`diffwiki:co
 
 ## Future Work
 
-- Real QMD-based search replaces the dummy `query`.
 - CI publish-gating and per-package release artifacts (see the plan's Future Work).

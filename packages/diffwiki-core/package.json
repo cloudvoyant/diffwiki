@@ -12,6 +12,11 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
+    },
+    "./plugin": {
+      "types": "./dist/plugin.d.ts",
+      "import": "./dist/plugin.js",
+      "require": "./dist/plugin.cjs"
     }
   },
   "files": [
@@ -27,6 +32,7 @@
     "lint:fix": "eslint src tests --no-error-on-unmatched-pattern --fix"
   },
   "dependencies": {
+    "@logtape/logtape": "^2.2.4",
     "@shikijs/rehype": "^3.0.0",
     "gray-matter": "^4.0.3",
     "hast-util-to-string": "^3.0.0",

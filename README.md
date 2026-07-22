@@ -1,14 +1,24 @@
 # diffwiki
 
-diffwiki is [add your project description here].
+diffwiki is a git-based personal knowledge base: manage topic-specific markdown wikis
+("collections") from your terminal — globally or attached to any repository — with real
+full-text search and a local web UI.
 
 ## Features
 
-- [List key features of your project]
+- **Git-based collections** — markdown/mdx notes organized into named collections under
+  `~/.diffwiki`, tracked in a single registry so the CLI can find them all.
+- **In-repo wikis** — `diffwiki init` attaches a wiki to any repository so its notes travel
+  with the code, while still appearing alongside your global collections.
+- **Plugin-based search** — a built-in zero-dependency BM25 engine, plus optional subprocess
+  search plugins: `diffwiki-ripgrep` (fast keyword) and `diffwiki-qmd` (semantic/hybrid). Pick
+  a default with `config-set defaultSearch`; `query` falls back to native automatically.
+- **Local web UI** — a TanStack Start app (`apps/wiki`) for browsing collections, reading
+  rendered articles, and searching, launched with `diffwiki up`/`open`.
 
 ## Requirements
 
-- bash 3.2+
+- Node.js (LTS)
 - [mise](https://mise.jdx.dev/getting-started.html)
 
 Run `mise install` to install all tools, then `mise run install` for any additional dependencies.

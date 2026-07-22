@@ -5,7 +5,22 @@ import { findCollection } from './collections';
 import { slugify } from './slugify';
 import { parseArticle, serializeArticle } from './frontmatter';
 import { ArticleNotFoundError, CollectionNotFoundError, InvalidTargetError, NoDefaultCollectionError } from './errors';
-import type { Article } from './types';
+import type { Article, PluginEvent } from './types';
+
+/**
+ * Fire a lifecycle hook without adding a static import edge into the plugin
+ * loader graph (which would create a `collections <-> events` cycle). The dynamic
+ * import resolves lazily and the whole call is swallowed -- hooks are best-effort.
+ * Callers invoke this fire-and-forget: `void fireHook(...)`.
+ */
+async function fireHook(event: PluginEvent, collection: string, relPath?: string): Promise<void> {
+  try {
+    const { emitPluginEvent } = await import('./plugins/events');
+    await emitPluginEvent(event, collection, relPath);
+  } catch {
+    /* never let a hook failure surface into a mutation */
+  }
+}
 
 /** Parse "[collection:]title" (collection optional) for `add`. */
 export function parseAddTarget(target: string): { collection?: string; title: string } {
@@ -64,15 +79,18 @@ export async function createArticle(opts: { target: string; tags: string[]; body
   const body = opts.body ?? `# ${title}\n`;
   await fs.mkdir(dir, { recursive: true });
   await fs.writeFile(filePath, serializeArticle({ title, tags: opts.tags, created: now, updated: now, body }), 'utf8');
+  void fireHook('article-created', name, path.relative(dir, filePath));
   return { title, tags: opts.tags, path: filePath, collection: name };
 }
 
-async function loadArticle(target: string): Promise<{ filePath: string; raw: string; collection: string }> {
+async function loadArticle(
+  target: string,
+): Promise<{ filePath: string; dir: string; raw: string; collection: string }> {
   const { collection, file } = parsePathTarget(target);
   const { dir } = await resolveCollectionDir(collection);
   const filePath = path.join(dir, ensureMdPath(file));
   try {
-    return { filePath, raw: await fs.readFile(filePath, 'utf8'), collection };
+    return { filePath, dir, raw: await fs.readFile(filePath, 'utf8'), collection };
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === 'ENOENT') throw new ArticleNotFoundError(target);
     throw err;
@@ -80,7 +98,7 @@ async function loadArticle(target: string): Promise<{ filePath: string; raw: str
 }
 
 export async function updateArticleBody(target: string, body: string): Promise<Article> {
-  const { filePath, raw, collection } = await loadArticle(target);
+  const { filePath, dir, raw, collection } = await loadArticle(target);
   const parsed = parseArticle(raw);
   await fs.writeFile(
     filePath,
@@ -93,11 +111,12 @@ export async function updateArticleBody(target: string, body: string): Promise<A
     }),
     'utf8',
   );
+  void fireHook('article-updated', collection, path.relative(dir, filePath));
   return { title: parsed.title, tags: parsed.tags, path: filePath, collection };
 }
 
 async function mutateTags(target: string, fn: (tags: string[]) => string[]): Promise<Article> {
-  const { filePath, raw, collection } = await loadArticle(target);
+  const { filePath, dir, raw, collection } = await loadArticle(target);
   const parsed = parseArticle(raw);
   const tags = fn(parsed.tags);
   await fs.writeFile(
@@ -111,6 +130,7 @@ async function mutateTags(target: string, fn: (tags: string[]) => string[]): Pro
     }),
     'utf8',
   );
+  void fireHook('article-updated', collection, path.relative(dir, filePath));
   return { title: parsed.title, tags, path: filePath, collection };
 }
 
@@ -128,7 +148,8 @@ export function setTags(target: string, tags: string[]): Promise<Article> {
 }
 
 export async function removeArticle(target: string): Promise<string> {
-  const { filePath } = await loadArticle(target);
+  const { filePath, dir, collection } = await loadArticle(target);
   await fs.rm(filePath);
+  void fireHook('article-removed', collection, path.relative(dir, filePath));
   return filePath;
 }

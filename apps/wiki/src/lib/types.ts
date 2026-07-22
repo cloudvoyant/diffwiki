@@ -48,3 +48,18 @@ export interface ListingEntry {
  */
 export type PageData =
   ({ kind: 'doc' } & DocData) | { kind: 'listing'; coll: string; slug: string; title: string; entries: ListingEntry[] };
+
+/** One ranked search result, already mapped to route-link params. */
+export interface SearchResultItem {
+  coll: string;
+  slug: string;
+  title: string;
+  snippet?: string;
+  /**
+   * Relevance score from the search engine, when it provides one (plugins do;
+   * native BM25 does too). Scale is engine/mode-dependent — keyword, semantic,
+   * and hybrid are not directly comparable — so it's shown as a raw value to
+   * help judge a per-mode cutoff, not as an absolute quality bar.
+   */
+  score?: number;
+}

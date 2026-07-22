@@ -15,6 +15,7 @@ export interface Registry {
 
 export interface Config {
   defaultCollection?: string;
+  defaultSearch?: string;
 }
 
 export interface Article {
@@ -56,4 +57,93 @@ export interface ArticleContent {
   body: string;
   /** Absolute path to the file on disk. */
   path: string;
+}
+
+export type PluginKind = 'search';
+export const NATIVE_ENGINE = 'native';
+export interface QueryOptions {
+  engine?: string;
+  collection?: string;
+  type?: string;
+  limit?: number;
+}
+export interface QueryHit {
+  collection: string;
+  path: string;
+  title: string;
+  tags: string[];
+  snippet?: string;
+  score?: number;
+  docid?: string;
+}
+export type DiagnosticLevel = 'ok' | 'warn' | 'error';
+export interface Diagnostic {
+  level: DiagnosticLevel;
+  message: string;
+}
+export interface PluginRecord {
+  name: string;
+  kind: PluginKind;
+  command: string[];
+  version?: string;
+  /** Capabilities cached at install/register time via the `describe` op. */
+  capabilities?: PluginCapabilities;
+  enabled: boolean;
+  managed?: boolean;
+}
+export interface PluginRegistryFile {
+  version: number;
+  plugins: PluginRecord[];
+}
+/** Capabilities a plugin advertises via the `describe` op, cached in the registry. */
+export interface PluginCapabilities {
+  /** Search types the plugin supports (e.g. `['keyword', 'semantic', 'hybrid']`). */
+  searchTypes: string[];
+  /** Whether the plugin supports filtering results by collection. */
+  collectionFilter: boolean;
+  /** Whether the plugin handles lifecycle events (article/collection mutations). */
+  events: boolean;
+}
+export interface PluginReadiness {
+  toolInstalled: boolean;
+  modelsPresent: boolean;
+  indexBuilt: boolean;
+  docsIndexed: number;
+  embeddingsPending: number;
+  firstSearchCost: 'instant' | 'model-load' | 'model-download';
+}
+export interface PluginHealth {
+  ready: boolean;
+  readiness?: PluginReadiness;
+  diagnostics: Diagnostic[];
+}
+export interface SearchMode {
+  plugin: string;
+  type: string;
+  label: string;
+}
+export type PluginEvent =
+  'collection-added' | 'collection-removed' | 'article-created' | 'article-updated' | 'article-removed';
+/**
+ * Host-side facade for a search plugin. Each method is backed by a one-shot
+ * subprocess invocation -- there is no persistent process and no `close()`.
+ */
+export interface SearchProvider {
+  /** Plugin name. */
+  name: string;
+  /** Plugin capabilities (cached from the `describe` op). */
+  capabilities: PluginCapabilities;
+  /** Run a search query and return hits with absolute paths. */
+  handleSearch(term: string, collections: CollectionEntry[], opts?: QueryOptions): Promise<QueryHit[]>;
+  /** Rebuild the search index. Returns the number of documents indexed. */
+  reindex(collections: CollectionEntry[], opts?: { embed?: boolean }): Promise<number>;
+  /** Emit a lifecycle event to the plugin (best-effort). */
+  emitEvent(
+    event: PluginEvent,
+    collection: string,
+    relPath: string | undefined,
+    collections: CollectionEntry[],
+  ): Promise<void>;
+  /** Check plugin health and readiness. */
+  health(collections: CollectionEntry[]): Promise<PluginHealth>;
 }

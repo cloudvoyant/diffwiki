@@ -1,0 +1,34 @@
+{
+  "name": "diffwiki-ripgrep",
+  "version": "0.3.0",
+  "description": "diffwiki search plugin driving ripgrep (rg) — instant literal/regex search, no index",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "diffwiki-ripgrep": "./dist/bin.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "diffwiki": {
+    "kind": "search"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest run --passWithNoTests",
+    "lint": "eslint src tests --no-error-on-unmatched-pattern && tsc --noEmit",
+    "lint:fix": "eslint src tests --no-error-on-unmatched-pattern --fix"
+  },
+  "dependencies": {
+    "diffwiki-core": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0"
+  }
+}
