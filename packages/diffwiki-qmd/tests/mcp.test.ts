@@ -127,7 +127,10 @@ describe('mcpSearch', () => {
       { type: 'vec', query: 'physics' },
     ]);
     expect(callParams.arguments.rerank).toBe(true);
-    expect(callParams.arguments.collection).toBe('knowledge-base');
+    // qmd's `query` tool filters via `collections` (plural array); a singular
+    // `collection` key is silently ignored and leaks other collections' hits.
+    expect(callParams.arguments.collections).toEqual(['knowledge-base']);
+    expect(callParams.arguments.collection).toBeUndefined();
   });
 
   it('parses structuredContent.results into QmdRows (snippet -> bestChunk)', async () => {

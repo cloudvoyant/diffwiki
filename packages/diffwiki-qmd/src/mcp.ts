@@ -145,7 +145,10 @@ export async function mcpSearch(baseUrl: string, args: McpSearchArgs, fetchFn: F
     rerank,
   };
   if (args.collection && args.collection.length > 0) {
-    queryArgs.collection = args.collection;
+    // qmd's `query` tool filters via `collections` (a plural array). A singular
+    // `collection` key is silently ignored, so results leak from every
+    // collection — the filter must be sent as a one-element array.
+    queryArgs.collections = [args.collection];
   }
 
   const callRes = await fetchFn(`${baseUrl}/mcp`, {
