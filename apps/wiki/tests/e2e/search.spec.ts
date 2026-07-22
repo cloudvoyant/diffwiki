@@ -1,5 +1,24 @@
 // apps/wiki/tests/e2e/search.spec.ts
-import { test, expect } from '@playwright/test';
+import { test as base, expect } from '@playwright/test';
+
+/**
+ * Every test in this file also fails on any uncaught client-side error. The old
+ * suite only asserted on SSR-rendered DOM, so a client-only crash (e.g. a Node
+ * built-in like `child_process` leaking into the browser bundle and throwing on
+ * hydration) left the server-rendered elements visible and the tests green. This
+ * auto-fixture collects `pageerror` events and asserts none occurred.
+ */
+const test = base.extend<{ noClientErrors: void }>({
+  noClientErrors: [
+    async ({ page }, use) => {
+      const errors: string[] = [];
+      page.on('pageerror', (err) => errors.push(err.message));
+      await use();
+      expect(errors, `uncaught client-side errors:\n${errors.join('\n')}`).toEqual([]);
+    },
+    { auto: true },
+  ],
+});
 
 test.describe('Search route (/search)', () => {
   test('reflects the query term from the URL in the search bar', async ({ page }) => {

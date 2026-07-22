@@ -13,7 +13,16 @@
  */
 
 import { configureSync, getConsoleSink } from '@logtape/logtape';
-import { resolveLogLevel } from 'diffwiki-core';
+
+/**
+ * Web log level — read from Vite's build-time env (`VITE_DIFFWIKI_LOG`), default
+ * `warning`. This module deliberately does NOT import from `diffwiki-core`: that
+ * barrel pulls in the Node-only plugin subsystem (`child_process`), which cannot
+ * be bundled into the browser client. Core's own `getLogger` calls share this
+ * same LogTape global once configured, so server-side core logs still route.
+ */
+type WebLogLevel = 'debug' | 'info' | 'warning' | 'error' | 'fatal';
+const WEB_LOG_LEVEL: WebLogLevel = (import.meta.env?.VITE_DIFFWIKI_LOG as WebLogLevel) || 'warning';
 
 /** Ensures LogTape is configured at most once per runtime. */
 let configured = false;
@@ -29,7 +38,7 @@ export function configureWebLogging(): void {
   configureSync({
     sinks: { console: getConsoleSink() },
     loggers: [
-      { category: ['diffwiki'], lowestLevel: resolveLogLevel(), sinks: ['console'] },
+      { category: ['diffwiki'], lowestLevel: WEB_LOG_LEVEL, sinks: ['console'] },
       // Silence LogTape's own meta logs.
       { category: [], lowestLevel: 'fatal', sinks: [] },
     ],
