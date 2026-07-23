@@ -112,10 +112,17 @@ Article markdown is rendered to HTML **server-side** by `diffwiki-core`'s
 → `rehype-slug` (heading anchor ids) → a custom `rehypeCollectToc` (extracts h2/h3 for
 the TOC) → `rehypeStripLeadingH1` (drops the body's leading h1; the route renders the
 frontmatter title) → `rehypeMarkMermaid` (turns ```mermaid fences into `<pre class="mermaid">`)
+→ `rehypeRewriteLinks` (rewrites relative inter-page markdown links to in-app route paths
+`/{coll}/{slug}`, resolved against the article's folder — a folder-index source page resolves
+against its own folder — with `.md`/`.mdx` stripped and a trailing `index`/`readme` dropped;
+`#hash`/`?query` preserved, collection-escaping/absolute/anchor links untouched)
 → `@shikijs/rehype` (dual `github-light`/`github-dark` highlighting, `defaultColor:false`)
 → `rehype-stringify`. `readPage` returns that `html` string; the client `<ArticleBody>`
 mounts it directly via `dangerouslySetInnerHTML` — **no `run()`/`eval`**, so article prose
 and code render under a strict CSP. (The content is the user's own trusted local files.)
+The client `<ArticleBody>` also intercepts clicks on the rewritten internal links and routes
+them through the router (client-side navigation, basepath-aware); self-referential
+`#fragment` links scroll in-page instead of navigating.
 
 ### Code Blocks and Mermaid
 
