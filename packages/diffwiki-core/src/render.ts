@@ -1,3 +1,4 @@
+import path from 'node:path';
 import { unified } from 'unified';
 import remarkParse from 'remark-parse';
 import remarkGfm from 'remark-gfm';
@@ -11,6 +12,64 @@ import type { Root, Element } from 'hast';
 import type { TocItem } from './types';
 
 export type { TocItem };
+
+/** Route context for an article being rendered — used to resolve relative links. */
+export interface RenderContext {
+  /** Collection name (first route segment). */
+  coll: string;
+  /** Article route slug (path within the collection, no extension), e.g. "a/b/deep". */
+  slug: string;
+}
+
+/** True for hrefs that must pass through untouched: empty, root-absolute, pure
+ *  anchor/query, protocol-relative, or any `scheme:` URL (http, mailto, tel, …). */
+function isNonRelativeHref(href: string): boolean {
+  if (href === '') return true;
+  if (href.startsWith('/') || href.startsWith('#') || href.startsWith('?')) return true;
+  if (href.startsWith('//')) return true;
+  return /^[a-z][a-z0-9+.-]*:/i.test(href);
+}
+
+/**
+ * rehype plugin: rewrite relative links between wiki pages into in-app route
+ * paths `/{coll}/{slug}`. A relative href is resolved against the current
+ * article's slug directory, has its `.md`/`.mdx` extension stripped, and a
+ * trailing `index`/`readme` segment dropped (folder index → folder route).
+ * Any `#hash`/`?query` suffix is preserved. Hrefs that escape the collection
+ * root, or that are absolute / protocol / pure-anchor, are left unchanged.
+ */
+function rehypeRewriteLinks(ctx: RenderContext) {
+  const slugDir = path.posix.dirname(ctx.slug || '.'); // "a/b/deep" -> "a/b"; "" -> "."
+  return (tree: Root) => {
+    visit(tree, 'element', (node: Element) => {
+      if (node.tagName !== 'a') return;
+      const raw = node.properties?.href;
+      if (typeof raw !== 'string' || isNonRelativeHref(raw)) return;
+
+      // Split off a trailing #hash or ?query so it survives the rewrite.
+      const suffixMatch = /[#?].*$/.exec(raw);
+      const suffix = suffixMatch ? suffixMatch[0] : '';
+      const pathPart = suffix ? raw.slice(0, raw.length - suffix.length) : raw;
+      if (pathPart === '') return; // bare "#frag" already handled, but be safe
+
+      // Resolve relative to the article's directory, keeping it POSIX.
+      const joined = path.posix.join(slugDir === '.' ? '' : slugDir, pathPart);
+      const normalized = path.posix.normalize(joined);
+      // Escapes the collection root — can't map to a route; leave as-is.
+      if (normalized.startsWith('..')) return;
+
+      // Strip extension, then drop a trailing index/readme (folder index page).
+      let resolved = normalized.replace(/\.(mdx?)$/i, '');
+      resolved = resolved.replace(/(^|\/)(index|readme)$/i, '$1');
+      resolved = resolved.replace(/\/+$/, '').replace(/^\/+/, '');
+
+      node.properties = {
+        ...node.properties,
+        href: `/${ctx.coll}${resolved ? `/${resolved}` : ''}${suffix}`,
+      };
+    });
+  };
+}
 
 /** The result of rendering an article body to HTML. */
 export interface RenderedArticle {
@@ -76,12 +135,13 @@ function rehypeMarkMermaid() {
 
 /**
  * Render an article body (markdown) to Shiki-highlighted HTML plus its table of
- * contents. Runs entirely server-side; the client mounts the HTML directly with
+ * contents, rewriting relative links to in-app routes via `ctx`.
+ * Runs entirely server-side; the client mounts the HTML directly with
  * no `eval`/`new Function`, so it works under a strict CSP. Code is highlighted
  * here (dual github-light/github-dark via CSS variables); mermaid fences are
  * marked for client rendering.
  */
-export async function renderArticle(body: string): Promise<RenderedArticle> {
+export async function renderArticle(body: string, ctx: RenderContext): Promise<RenderedArticle> {
   const toc: TocItem[] = [];
   const file = await unified()
     .use(remarkParse)
@@ -91,6 +151,7 @@ export async function renderArticle(body: string): Promise<RenderedArticle> {
     .use(rehypeCollectToc, toc)
     .use(rehypeStripLeadingH1)
     .use(rehypeMarkMermaid)
+    .use(rehypeRewriteLinks, ctx)
     .use(rehypeShiki, {
       themes: { light: 'github-light', dark: 'github-dark' },
       defaultColor: false,

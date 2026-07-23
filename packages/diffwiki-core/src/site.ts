@@ -76,7 +76,7 @@ function findNode(nodes: ArticleNode[], slug: string): ArticleNode | undefined {
 export async function resolvePage(coll: string, slug: string): Promise<PageData | null> {
   try {
     const art = await readArticle(coll, slug);
-    const { html, toc } = await renderArticle(art.body);
+    const { html, toc } = await renderArticle(art.body, { coll: art.coll, slug: art.slug });
     return {
       kind: 'doc',
       coll: art.coll,
