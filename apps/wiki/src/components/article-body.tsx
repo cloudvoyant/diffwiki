@@ -32,6 +32,17 @@ export function ArticleBody({ html }: { html: string }) {
       // Only internal route paths ("/coll/slug…"); leave anchors, external, and
       // protocol-relative ("//host") links to native handling.
       if (!href || !href.startsWith('/') || href.startsWith('//')) return;
+      // A self-referential link to the current page (same path, differing only by
+      // #fragment) should scroll in-page, not trigger a full router navigation.
+      const [linkPath, linkHash] = href.split('#');
+      if (linkHash !== undefined && linkPath === window.location.pathname) {
+        event.preventDefault();
+        const el = linkHash ? document.getElementById(decodeURIComponent(linkHash)) : null;
+        if (el) el.scrollIntoView();
+        else window.scrollTo({ top: 0 });
+        history.replaceState(null, '', href);
+        return;
+      }
       event.preventDefault();
       void router.navigate({ to: href });
     };

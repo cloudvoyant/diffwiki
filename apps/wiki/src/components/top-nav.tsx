@@ -55,7 +55,17 @@ function Breadcrumbs({ tree }: { tree: CollectionTree[] }) {
         const isLast = i === crumbs.length - 1;
         // Collection crumb → splat "". Intermediate crumb with a path → the path
         // after the collection segment. Others render as plain text.
-        const splat = c.coll ? '' : c.path ? c.path.replace(new RegExp(`^/${collName}/?`), '') : undefined;
+        // Strip the "/{coll}/" prefix by literal string ops — collName is
+        // user-supplied and may contain regex metacharacters, so never build a
+        // RegExp from it.
+        const prefix = `/${collName}/`;
+        const splat = c.coll
+          ? ''
+          : c.path
+            ? c.path.startsWith(prefix)
+              ? c.path.slice(prefix.length)
+              : c.path.replace(/^\//, '')
+            : undefined;
         const isLink = !isLast && splat !== undefined;
         return (
           <Fragment key={`${i}-${c.label}`}>

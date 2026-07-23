@@ -117,18 +117,36 @@ function isEpochish(d: Date): boolean {
 }
 
 /**
+ * Per-path memo of resolved timestamps. `fileTimestamps` runs in the per-render
+ * request path, so caching by absolute path avoids re-spawning git for repeated
+ * views of the same file within a process. Timestamps come from committed git
+ * history (or stat at first read) and don't change often enough to warrant
+ * invalidation for a long-lived dev server; the cache is process-scoped only.
+ */
+const timestampCache = new Map<string, FileTimestamps>();
+
+/**
  * Creation/update timestamps for a file, preferring git history (stable across
  * clones and worktrees) and falling back to filesystem stat. Git created date is
  * the earliest add-commit (`--follow` tracks renames); updated is the latest
  * commit touching the file. When git yields nothing (untracked / no repo), uses
  * birthtime/mtime. Never throws — returns `{}` if even stat fails.
+ *
+ * Results are memoised per absolute path (process-scoped) and the two git
+ * `log` execs run concurrently, since this runs in the render request path.
  */
 export async function fileTimestamps(absPath: string): Promise<FileTimestamps> {
+  const cached = timestampCache.get(absPath);
+  if (cached) return cached;
+
   const dir = path.dirname(absPath);
   const base = path.basename(absPath);
 
-  const addLog = await git(dir, ['log', '--follow', '--diff-filter=A', '--format=%aI', '--', base]);
-  const lastLog = await git(dir, ['log', '-1', '--format=%aI', '--', base]);
+  // The two log queries are independent — run them concurrently.
+  const [addLog, lastLog] = await Promise.all([
+    git(dir, ['log', '--follow', '--diff-filter=A', '--format=%aI', '--', base]),
+    git(dir, ['log', '-1', '--format=%aI', '--', base]),
+  ]);
 
   const gitCreated = addLog ? addLog.split('\n').filter(Boolean).pop() : undefined;
   const gitUpdated = lastLog || undefined;
@@ -146,5 +164,7 @@ export async function fileTimestamps(absPath: string): Promise<FileTimestamps> {
     }
   }
 
-  return { created, updated };
+  const result: FileTimestamps = { created, updated };
+  timestampCache.set(absPath, result);
+  return result;
 }
