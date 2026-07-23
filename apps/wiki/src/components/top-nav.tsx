@@ -12,6 +12,8 @@ interface Crumb {
   label: string;
   /** Collection slug — set only on the (linkable) collection crumb. */
   coll?: string;
+  /** Route path for an intermediate/leaf node, e.g. "/docs/guide/setup". */
+  path?: string;
 }
 
 /** Resolve the breadcrumb trail for a pathname from the collection nav tree. */
@@ -33,7 +35,7 @@ function buildCrumbs(tree: CollectionTree[], pathname: string): Crumb[] {
   };
   walk(ct.nodes);
 
-  return [{ label: collName, coll: collName }, ...chain.map((n) => ({ label: n.title ?? n.name }))];
+  return [{ label: collName, coll: collName }, ...chain.map((n) => ({ label: n.title ?? n.name, path: n.path }))];
 }
 
 function Breadcrumbs({ tree }: { tree: CollectionTree[] }) {
@@ -41,6 +43,9 @@ function Breadcrumbs({ tree }: { tree: CollectionTree[] }) {
   const crumbs = buildCrumbs(tree, pathname);
   if (crumbs.length === 0) return null;
 
+  // The first crumb always carries the collection name; intermediate crumbs are
+  // links whose splat is their route path minus the leading "/{coll}/".
+  const collName = crumbs[0]?.coll ?? '';
   return (
     <nav
       aria-label="Breadcrumb"
@@ -48,13 +53,17 @@ function Breadcrumbs({ tree }: { tree: CollectionTree[] }) {
     >
       {crumbs.map((c, i) => {
         const isLast = i === crumbs.length - 1;
+        // Collection crumb → splat "". Intermediate crumb with a path → the path
+        // after the collection segment. Others render as plain text.
+        const splat = c.coll ? '' : c.path ? c.path.replace(new RegExp(`^/${collName}/?`), '') : undefined;
+        const isLink = !isLast && splat !== undefined;
         return (
           <Fragment key={`${i}-${c.label}`}>
             {i > 0 && <ChevronRight className="size-3.5 shrink-0 opacity-50" aria-hidden />}
-            {c.coll && !isLast ? (
+            {isLink ? (
               <Link
                 to="/$coll/$"
-                params={{ coll: c.coll, _splat: '' }}
+                params={{ coll: collName, _splat: splat }}
                 className="shrink-0 whitespace-nowrap transition-colors hover:text-foreground"
               >
                 {c.label}
