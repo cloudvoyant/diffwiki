@@ -1,6 +1,6 @@
 {
   "name": "diffwiki-core",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Core configuration, registry, and article management for diffwiki",
   "license": "MIT",
   "type": "module",

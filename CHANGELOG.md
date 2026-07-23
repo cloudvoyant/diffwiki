@@ -1,3 +1,10 @@
+# [0.6.0](https://github.com/cloudvoyant/diffwiki/compare/v0.5.0...v0.6.0) (2026-07-23)
+
+
+### Features
+
+* static site export with external collections and search ([ff042d8](https://github.com/cloudvoyant/diffwiki/commit/ff042d817fe3680bd257ce652f12b556f845443e))
+
 # [0.5.0](https://github.com/cloudvoyant/diffwiki/compare/v0.4.0...v0.5.0) (2026-07-22)
 
 
