@@ -19,6 +19,12 @@ export interface RenderContext {
   coll: string;
   /** Article route slug (path within the collection, no extension), e.g. "a/b/deep". */
   slug: string;
+  /**
+   * True when the source file is a folder-index page (`<slug>/index.md`). Such a
+   * page shares its route slug with the folder, so relative links must resolve
+   * against the folder itself, not its parent. Defaults to false (leaf page).
+   */
+  isIndex?: boolean;
 }
 
 /** True for hrefs that must pass through untouched: empty, root-absolute, pure
@@ -39,7 +45,10 @@ function isNonRelativeHref(href: string): boolean {
  * root, or that are absolute / protocol / pure-anchor, are left unchanged.
  */
 function rehypeRewriteLinks(ctx: RenderContext) {
-  const slugDir = path.posix.dirname(ctx.slug || '.'); // "a/b/deep" -> "a/b"; "" -> "."
+  // A folder-index page (`guide/index.md`, slug "guide") resolves relative links
+  // against its own folder ("guide"); a leaf page (`guide.md`, slug "guide")
+  // resolves against its parent (dirname -> ".").
+  const slugDir = ctx.isIndex ? ctx.slug || '.' : path.posix.dirname(ctx.slug || '.');
   return (tree: Root) => {
     visit(tree, 'element', (node: Element) => {
       if (node.tagName !== 'a') return;

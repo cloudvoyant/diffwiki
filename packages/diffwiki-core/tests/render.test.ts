@@ -7,6 +7,8 @@ function hrefs(html: string): string[] {
 }
 
 const ctx = (slug: string) => ({ coll: 'docs', slug });
+/** Context for a folder-index source page (`<slug>/index.md`, route slug `<slug>`). */
+const indexCtx = (slug: string) => ({ coll: 'docs', slug, isIndex: true });
 
 describe('renderArticle link rewriting', () => {
   it('rewrites a sibling .md link to a route path', async () => {
@@ -43,5 +45,23 @@ describe('renderArticle link rewriting', () => {
   it('leaves a link that escapes the collection root unchanged', async () => {
     const { html } = await renderArticle('[up](../../outside.md)', ctx('intro'));
     expect(hrefs(html)).toEqual(['../../outside.md']);
+  });
+
+  it('resolves relative links against the folder for a folder-index source page', async () => {
+    // `guide/index.md` has route slug "guide"; `./setup.md` must resolve inside
+    // the folder (/docs/guide/setup), not the parent (/docs/setup).
+    const { html } = await renderArticle('[s](./setup.md)', indexCtx('guide'));
+    expect(hrefs(html)).toEqual(['/docs/guide/setup']);
+  });
+
+  it('resolves a bare filename against the folder for a folder-index source page', async () => {
+    const { html } = await renderArticle('[s](setup.md)', indexCtx('guide'));
+    expect(hrefs(html)).toEqual(['/docs/guide/setup']);
+  });
+
+  it('resolves ../ against the folder for a nested folder-index source page', async () => {
+    // `a/b/index.md` (slug "a/b"): ../c.md → /docs/a/c.
+    const { html } = await renderArticle('[c](../c.md)', indexCtx('a/b'));
+    expect(hrefs(html)).toEqual(['/docs/a/c']);
   });
 });

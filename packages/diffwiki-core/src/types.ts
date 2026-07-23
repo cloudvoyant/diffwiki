@@ -63,6 +63,13 @@ export interface ArticleContent {
   body: string;
   /** Absolute path to the file on disk. */
   path: string;
+  /**
+   * True when the resolved file is a folder-index page (`<slug>/index.md` or
+   * `<slug>/README.md`) rather than a leaf `<slug>.md`. The route slug is the
+   * same for both, so this flag is needed to resolve folder-local relative
+   * links against the article's own folder.
+   */
+  isIndex: boolean;
 }
 
 export type PluginKind = 'search';

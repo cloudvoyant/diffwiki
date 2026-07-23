@@ -190,6 +190,7 @@ export async function readArticle(coll: string, slug: string): Promise<ArticleCo
   // Resolution order: the file itself (.mdx then .md), then the directory's
   // index page. An empty slug resolves the collection-root index.
   let abs: string | undefined;
+  let isIndex = false;
   for (const rel of safeSlug ? [`${safeSlug}.mdx`, `${safeSlug}.md`] : []) {
     const candidate = path.resolve(collDir, rel);
     if (!inJail(candidate)) throw new InvalidTargetError(slug, 'path traversal detected');
@@ -208,12 +209,15 @@ export async function readArticle(coll: string, slug: string): Promise<ArticleCo
     const dir = path.resolve(collDir, safeSlug);
     if (inJail(dir)) {
       const idx = pickIndexFile(await readdirSafe(dir));
-      if (idx) abs = path.join(dir, idx);
+      if (idx) {
+        abs = path.join(dir, idx);
+        isIndex = true;
+      }
     }
   }
   if (!abs) throw new ArticleNotFoundError(`${coll}/${safeSlug}`);
 
   const parsed = parseArticle(await fs.readFile(abs, 'utf8'));
   const title = parsed.title?.trim() || (safeSlug ? (safeSlug.split('/').pop() ?? safeSlug) : coll);
-  return { coll, slug: safeSlug, title, tags: parsed.tags, body: parsed.body, path: abs };
+  return { coll, slug: safeSlug, title, tags: parsed.tags, body: parsed.body, path: abs, isIndex };
 }
