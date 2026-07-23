@@ -62,10 +62,11 @@ Capabilities are cached in `~/.diffwiki/plugins.json` at install/register time s
 
 `diffwiki plugin install <spec>` installs an npm package into an isolated managed root at `~/.diffwiki/plugins/` (an independent `package.json`; not entangled with any project's `node_modules`). After the npm install:
 
-1. The host scans `node_modules` for a package whose `package.json` has `diffwiki.kind === "search"` and a `bin` entry.
+1. The host resolves the package **name** from the spec (`name`, `name@version`, `@scope/name`, or a local path) and targets that specific package in `node_modules`, requiring `diffwiki.kind === "search"` and a `bin` entry. Targeting the installed package (rather than the first search package found) is what lets **multiple search plugins coexist** in the managed root — installing a second plugin registers that plugin, not whichever was installed first. (Specs whose name can't be resolved statically — e.g. a git URL — fall back to a first-match scan.)
 2. It runs `describe` to validate the plugin responds and caches its capabilities.
 3. It writes a `PluginRecord` (`{name, kind, command, version, capabilities, enabled:true, managed:true}`) to `~/.diffwiki/plugins.json`.
 4. It runs `setup` with the current collection list (best-effort; a setup failure leaves the plugin registered but not yet ready — search degrades to native until resolved).
+5. Unless `--no-default` is passed, it sets the new plugin as the default engine (`config.defaultSearch`) so search uses it immediately. This is skipped when `setup` reported the plugin not-ready, so a broken install can't displace a working default (change it any time with `config-set defaultSearch <engine[:type]>`).
 
 ### Register
 

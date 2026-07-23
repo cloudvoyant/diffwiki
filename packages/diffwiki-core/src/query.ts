@@ -21,6 +21,7 @@ import { getLogger } from './logger';
 import { loadSearchProvider } from './plugins/host';
 import { listEnabledPlugins } from './plugins/registry';
 import { NATIVE_ENGINE } from './types';
+import { tokenize, rankDocs, type RankableFields } from './bm25';
 import type { CollectionEntry, QueryHit, QueryOptions } from './types';
 
 /** Logger for search routing diagnostics. Silent until an app configures LogTape. */
@@ -45,73 +46,15 @@ async function collectMarkdownFiles(dir: string): Promise<string[]> {
   return files;
 }
 
-// -- BM25 scoring helpers (zero dependencies) ---------------------------------
-
-/** BM25 parameters. */
-const K1 = 1.5;
-const B = 0.75;
-
-/** Field-level boost weights. */
-const FIELD_WEIGHTS = { title: 3.0, tags: 2.0, collection: 1.5, body: 1.0 } as const;
-
-/** Tokenize a string: lowercase, split on non-alphanumeric, drop empties. */
-function tokenize(text: string): string[] {
-  return text
-    .toLowerCase()
-    .split(/[^a-z0-9]+/)
-    .filter((t) => t.length > 0);
-}
-
-/** Count term frequencies in a token array. */
-function termFreqs(tokens: string[]): Map<string, number> {
-  const freqs = new Map<string, number>();
-  for (const t of tokens) {
-    freqs.set(t, (freqs.get(t) ?? 0) + 1);
-  }
-  return freqs;
-}
-
-interface DocFields {
-  title: string[];
-  tags: string[];
-  collection: string[];
-  body: string[];
-}
+// -- Native doc collection (BM25 scoring lives in ./bm25, shared with the browser
+// static search so the ranking never diverges) -------------------------------
 
 interface DocEntry {
   collectionName: string;
   filePath: string;
   title: string;
   tags: string[];
-  fields: DocFields;
-}
-
-/**
- * Compute BM25 score for a single field given query terms.
- * @param queryTerms tokenized query
- * @param fieldTokens tokenized field content
- * @param avgFieldLen average field length across all docs
- * @param idf IDF map for each query term
- */
-function bm25FieldScore(
-  queryTerms: string[],
-  fieldTokens: string[],
-  avgFieldLen: number,
-  idf: Map<string, number>,
-): number {
-  const tf = termFreqs(fieldTokens);
-  const dl = fieldTokens.length;
-  const avgDl = avgFieldLen || 1;
-  let score = 0;
-  for (const term of queryTerms) {
-    const freq = tf.get(term) ?? 0;
-    if (freq === 0) continue;
-    const termIdf = idf.get(term) ?? 0;
-    const numerator = freq * (K1 + 1);
-    const denominator = freq + K1 * (1 - B + B * (dl / avgDl));
-    score += termIdf * (numerator / denominator);
-  }
-  return score;
+  fields: RankableFields;
 }
 
 /**
@@ -166,72 +109,13 @@ export async function nativeSearch(
     }
   }
 
-  // Empty term: return all articles unranked (preserve browse-all behavior)
-  if (!term.trim()) {
-    return docs.map((d) => ({
-      collection: d.collectionName,
-      path: d.filePath,
-      title: d.title,
-      tags: d.tags,
-    }));
-  }
-
-  const queryTerms = tokenize(term);
-  if (queryTerms.length === 0) {
-    return docs.map((d) => ({
-      collection: d.collectionName,
-      path: d.filePath,
-      title: d.title,
-      tags: d.tags,
-    }));
-  }
-
-  const docTokenSets = docs.map(
-    (doc) => new Set<string>([...doc.fields.title, ...doc.fields.tags, ...doc.fields.collection, ...doc.fields.body]),
-  );
-
-  // Compute IDF for each query term across the corpus
-  const N = docs.length;
-  const idf = new Map<string, number>();
-  for (const qt of queryTerms) {
-    let docFreq = 0;
-    for (const tokenSet of docTokenSets) {
-      if (tokenSet.has(qt)) docFreq++;
-    }
-    idf.set(qt, Math.log((N - docFreq + 0.5) / (docFreq + 0.5) + 1));
-  }
-
-  // Compute average field lengths
-  const avgLens = {
-    title: docs.reduce((sum, d) => sum + d.fields.title.length, 0) / (N || 1),
-    tags: docs.reduce((sum, d) => sum + d.fields.tags.length, 0) / (N || 1),
-    collection: docs.reduce((sum, d) => sum + d.fields.collection.length, 0) / (N || 1),
-    body: docs.reduce((sum, d) => sum + d.fields.body.length, 0) / (N || 1),
-  };
-
-  // Score each document
-  const scored: Array<{ doc: DocEntry; score: number }> = [];
-  for (const doc of docs) {
-    const titleScore = bm25FieldScore(queryTerms, doc.fields.title, avgLens.title, idf) * FIELD_WEIGHTS.title;
-    const tagsScore = bm25FieldScore(queryTerms, doc.fields.tags, avgLens.tags, idf) * FIELD_WEIGHTS.tags;
-    const collScore =
-      bm25FieldScore(queryTerms, doc.fields.collection, avgLens.collection, idf) * FIELD_WEIGHTS.collection;
-    const bodyScore = bm25FieldScore(queryTerms, doc.fields.body, avgLens.body, idf) * FIELD_WEIGHTS.body;
-    const total = titleScore + tagsScore + collScore + bodyScore;
-    if (total > 0) {
-      scored.push({ doc, score: total });
-    }
-  }
-
-  // Sort by score descending
-  scored.sort((a, b) => b.score - a.score);
-
-  return scored.map((s) => ({
-    collection: s.doc.collectionName,
-    path: s.doc.filePath,
-    title: s.doc.title,
-    tags: s.doc.tags,
-    score: s.score,
+  // Rank with the shared BM25 scorer (empty term → all docs unranked).
+  return rankDocs(term, docs).map((d) => ({
+    collection: d.collectionName,
+    path: d.filePath,
+    title: d.title,
+    tags: d.tags,
+    ...(d.score === undefined ? {} : { score: d.score }),
   }));
 }
 

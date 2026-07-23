@@ -1,14 +1,25 @@
+export interface NodeMeta {
+  branch?: string;
+  behind?: number;
+}
+
 export interface TreeNode {
   name: string;
   title?: string;
   path?: string;
   children?: TreeNode[];
+  /** Set only on top-level collection rows: git branch/behind badge data (omitted in static export). */
+  meta?: NodeMeta;
 }
 
 export interface CollectionInfo {
   name: string;
-  type: 'global' | 'repo';
+  type: 'global' | 'repo' | 'external';
   path: string;
+  /** External collections only: checked-out branch (live builds; omitted in static export). */
+  branch?: string;
+  /** External collections only: commits behind upstream (live builds). */
+  behind?: number;
 }
 
 export interface CollectionTree {

@@ -192,12 +192,18 @@ function Sidebar({
       data-side={side}
       data-slot="sidebar"
     >
-      {/* This is what handles the sidebar gap on desktop */}
+      {/* Sidebar layout regime (see docs/architecture/app-shell.md):
+          - tablet (md..desk): the gap reserves --sidebar-width, so the rail PUSHES
+            content (and reflows to 0 when collapsed) — the tablet "layout shift".
+          - desktop (>=desk / 84rem): the gap is forced to 0 so content centres in
+            the full viewport with symmetric gutters; the fixed rail then OVERLAYS
+            the left gutter instead of pushing. */}
       <div
         data-slot="sidebar-gap"
         className={cn(
           'relative w-(--sidebar-width) bg-transparent transition-[width] duration-200 ease-linear',
           'group-data-[collapsible=offcanvas]:w-0',
+          'min-[84rem]:w-0!',
           'group-data-[side=right]:rotate-180',
           variant === 'floating' || variant === 'inset'
             ? 'group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)+(--spacing(4)))]'
@@ -208,6 +214,8 @@ function Sidebar({
         data-slot="sidebar-container"
         className={cn(
           'fixed inset-y-0 z-10 hidden h-svh w-(--sidebar-width) transition-[left,right,width] duration-200 ease-linear md:flex',
+          // The fixed rail starts below the full-width TopNav (app customization).
+          'top-(--nav-h) bottom-auto h-[calc(100svh-var(--nav-h))]',
           side === 'left'
             ? 'left-0 group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)]'
             : 'right-0 group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)]',

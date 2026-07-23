@@ -1,6 +1,7 @@
 // apps/wiki/tests/e2e/global-setup.ts
 import fs from 'node:fs';
-import path from 'node:path';
+// @ts-expect-error — plain-JS ESM sibling; shared with the static-export webServer.
+import { seedFixtureHome } from './seed-fixture.mjs';
 
 /**
  * Fixed temp home for e2e tests. Using a fixed path (not os.tmpdir()+random) lets
@@ -10,116 +11,12 @@ import path from 'node:path';
 export const E2E_DIFFWIKI_HOME = '/tmp/diffwiki-e2e-home';
 
 export default async function globalSetup(): Promise<void> {
-  // Clean slate on every run.
+  // Clean slate on every run, then seed via the shared module. The static-export
+  // webServer seeds itself too (it boots before globalSetup runs), so this is only
+  // the coordinator for the dev/prod webServers and the browser specs.
   if (fs.existsSync(E2E_DIFFWIKI_HOME)) {
     fs.rmSync(E2E_DIFFWIKI_HOME, { recursive: true, force: true });
   }
 
-  const collectionsDir = path.join(E2E_DIFFWIKI_HOME, 'collections');
-  const notesDir = path.join(collectionsDir, 'notes');
-  const guideDir = path.join(notesDir, 'guide');
-  const devlogDir = path.join(collectionsDir, 'devlog');
-
-  fs.mkdirSync(guideDir, { recursive: true });
-  fs.mkdirSync(devlogDir, { recursive: true });
-
-  // ── intro.md ─────────────────────────────────────────────────────────────────
-  // Contains: frontmatter title + tags, a TypeScript code fence, a mermaid fence.
-  fs.writeFileSync(
-    path.join(notesDir, 'intro.md'),
-    `---
-title: Introduction to diffwiki
-tags:
-  - overview
-  - getting-started
----
-
-# Introduction to diffwiki
-
-Welcome to diffwiki — your local, git-friendly knowledge base.
-
-\`\`\`ts
-import { listCollections } from 'diffwiki-core';
-
-const cols = await listCollections();
-console.log(cols.map((c) => c.name));
-\`\`\`
-
-\`\`\`mermaid
-flowchart LR
-  A[diffwiki add] --> B[(~/.diffwiki)]
-  B --> C[UI]
-\`\`\`
-`,
-    'utf8',
-  );
-
-  // ── guide/setup.mdx ──────────────────────────────────────────────────────────
-  // A nested file to verify the splat route handles subdirectories.
-  fs.writeFileSync(
-    path.join(guideDir, 'setup.mdx'),
-    `---
-title: Setting Up
-tags:
-  - setup
----
-
-# Setting Up
-
-Run \`mise run dev\` to start the UI.
-
-This nested page renders from plain **markdown**.
-`,
-    'utf8',
-  );
-
-  // ── devlog/release.md ─────────────────────────────────────────────────────────
-  // A SECOND collection sharing the searchable term "diffwiki" with notes, so a
-  // collection filter can be proven to EXCLUDE the other collection's hits (the
-  // regression that leaked cross-collection results when the qmd warm path sent
-  // the wrong filter key).
-  fs.writeFileSync(
-    path.join(devlogDir, 'release.md'),
-    `---
-title: diffwiki release notes
-tags:
-  - changelog
----
-
-# diffwiki release notes
-
-The diffwiki devlog tracks each release of the knowledge base.
-`,
-    'utf8',
-  );
-
-  // ── registry.json ─────────────────────────────────────────────────────────────
-  // diffwiki-core's registryPath() resolves to DIFFWIKI_HOME/registry.json.
-  const registry = {
-    version: '1',
-    collections: [
-      {
-        name: 'notes',
-        type: 'global',
-        path: notesDir,
-        createdAt: new Date().toISOString(),
-      },
-      {
-        name: 'devlog',
-        type: 'global',
-        path: devlogDir,
-        createdAt: new Date().toISOString(),
-      },
-    ],
-  };
-
-  fs.writeFileSync(path.join(E2E_DIFFWIKI_HOME, 'registry.json'), JSON.stringify(registry, null, 2), 'utf8');
-
-  // ── config.json ───────────────────────────────────────────────────────────────
-  // Optional; needed if any code path reads defaultCollection.
-  fs.writeFileSync(
-    path.join(E2E_DIFFWIKI_HOME, 'config.json'),
-    JSON.stringify({ defaultCollection: 'notes' }, null, 2),
-    'utf8',
-  );
+  seedFixtureHome(E2E_DIFFWIKI_HOME);
 }

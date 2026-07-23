@@ -37,3 +37,21 @@ export class InvalidTargetError extends DiffwikiError {
 }
 
 export class PluginError extends DiffwikiError {}
+
+export class WorktreeNotAllowedError extends DiffwikiError {
+  constructor(root: string) {
+    super(`refusing to add a linked worktree — add the source repository instead (${root})`);
+  }
+}
+
+export class CollectionAlreadyAddedError extends DiffwikiError {
+  constructor(name: string) {
+    super(`this repository is already added as collection "${name}"`);
+  }
+}
+
+export class InvalidExportSelectionError extends DiffwikiError {
+  constructor(problems: string[]) {
+    super(`export aborted — ${problems.length} selection problem(s):\n${problems.map((p) => `  - ${p}`).join('\n')}`);
+  }
+}

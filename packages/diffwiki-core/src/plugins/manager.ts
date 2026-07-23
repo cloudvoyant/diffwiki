@@ -10,10 +10,12 @@
  */
 
 import fs from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import { pluginsDir } from '../paths';
 import { PluginError } from '../errors';
 import { listCollections } from '../collections';
+import { setConfigValue } from '../config';
 import { deregisterPlugin, readPluginRegistry, upsertPlugin } from './registry';
 import { invokePlugin, LONG_TIMEOUT_MS } from './host';
 import type { PluginCapabilities, PluginRecord } from '../types';
@@ -91,15 +93,58 @@ interface DiscoveredPackage {
   binAbs: string;
 }
 
-/** Scan the managed node_modules for a `diffwiki.kind === 'search'` package with a bin. */
+/** Turn a package dir into a search plugin descriptor, or null if it is not one. */
+async function asSearchPackage(pkgDir: string): Promise<DiscoveredPackage | null> {
+  const manifest = await readPackageJson(path.join(pkgDir, 'package.json'));
+  if (!manifest?.name || manifest.diffwiki?.kind !== 'search') return null;
+  const bin = binOf(manifest);
+  if (!bin) return null;
+  return { name: manifest.name, version: manifest.version, binAbs: path.resolve(pkgDir, bin) };
+}
+
+/**
+ * Resolve the npm package name from an install spec so install can target the
+ * package the user actually asked for (not whichever search package it scans
+ * first). Handles `name`, `name@version`, `@scope/name[@version]`, and local
+ * paths (`.`/`/`/`~`/`file:`, whose name is read from the package's own manifest).
+ * Returns null for specs whose name can't be determined statically (e.g. a git or
+ * tarball URL), in which case the caller falls back to a node_modules scan.
+ */
+async function packageNameFromSpec(spec: string): Promise<string | null> {
+  const looksLikePath =
+    spec.startsWith('.') || spec.startsWith('/') || spec.startsWith('~') || spec.startsWith('file:');
+  if (looksLikePath) {
+    const raw = spec.startsWith('file:') ? spec.slice('file:'.length) : spec;
+    const abs = path.resolve(raw.replace(/^~(?=$|\/)/, os.homedir()));
+    return (await readPackageJson(path.join(abs, 'package.json')))?.name ?? null;
+  }
+  if (/^(git\+|git:|https?:|ssh:)/.test(spec)) return null;
+  // Registry spec. Scoped `@scope/name[@version]`: the version `@` is the one
+  // after the scope. Unscoped `name[@version]`: split on the first `@`.
+  if (spec.startsWith('@')) {
+    const at = spec.indexOf('@', 1);
+    return at === -1 ? spec : spec.slice(0, at);
+  }
+  const at = spec.indexOf('@');
+  return at <= 0 ? spec : spec.slice(0, at);
+}
+
+/**
+ * Resolve a specific installed package (by name) as a search plugin. This is what
+ * lets multiple search plugins coexist in the managed root: install targets the
+ * package matching the spec instead of the first `diffwiki.kind === 'search'`
+ * package found. Returns null if it is absent, has no bin, or is not a search plugin.
+ */
+async function resolveSearchPackage(dir: string, name: string): Promise<DiscoveredPackage | null> {
+  return asSearchPackage(path.join(dir, 'node_modules', ...name.split('/')));
+}
+
+/** Scan the managed node_modules for the first `diffwiki.kind === 'search'` package with a bin. */
 async function discoverSearchPackage(dir: string): Promise<DiscoveredPackage | null> {
   const nodeModules = path.join(dir, 'node_modules');
   for (const pkgDir of await pluginManifestDirs(nodeModules)) {
-    const manifest = await readPackageJson(path.join(pkgDir, 'package.json'));
-    if (!manifest?.name || manifest.diffwiki?.kind !== 'search') continue;
-    const bin = binOf(manifest);
-    if (!bin) continue;
-    return { name: manifest.name, version: manifest.version, binAbs: path.resolve(pkgDir, bin) };
+    const found = await asSearchPackage(pkgDir);
+    if (found) return found;
   }
   return null;
 }
@@ -145,6 +190,8 @@ export interface InstallOutcome {
   record: PluginRecord;
   /** The setup result, or undefined when setup was skipped (`opts.setup === false`). */
   setup?: SetupOutcome;
+  /** True when this install was made the default search engine (`config.defaultSearch`). */
+  defaulted?: boolean;
 }
 
 /**
@@ -177,10 +224,14 @@ async function runSetup(command: string[], name?: string): Promise<SetupOutcome>
  * Install an npm spec into the managed root, register the discovered search bin,
  * run a `describe` to validate and cache capabilities, then (unless `opts.setup
  * === false`) run the plugin's `setup` op so the user lands on a working search.
+ * Unless `opts.setDefault === false`, the freshly-installed engine becomes the
+ * default (`config.defaultSearch`) so search uses it immediately — skipped when
+ * setup reported the plugin not-ready, so a broken install can't hijack a working
+ * default (it would only degrade to native).
  */
 export async function installPlugin(
   spec: string,
-  opts?: { setup?: boolean; prefetchModels?: boolean },
+  opts?: { setup?: boolean; prefetchModels?: boolean; setDefault?: boolean },
 ): Promise<InstallOutcome> {
   const dir = await ensurePluginRoot();
   try {
@@ -188,10 +239,17 @@ export async function installPlugin(
   } catch (err) {
     throw new PluginError(`npm install ${spec} failed: ${(err as Error).message}`);
   }
-  const discovered = await discoverSearchPackage(dir);
+  // Target the package the spec installed, so a second `plugin install` registers
+  // THAT plugin rather than whichever search package is scanned first (which would
+  // otherwise make it impossible to install more than one search plugin). Only fall
+  // back to a first-match scan for specs whose name can't be resolved statically.
+  const installedName = await packageNameFromSpec(spec);
+  const discovered = installedName ? await resolveSearchPackage(dir, installedName) : await discoverSearchPackage(dir);
   if (!discovered) {
     throw new PluginError(
-      `no diffwiki search plugin found in "${spec}" (need package.json diffwiki.kind === "search" + bin)`,
+      installedName
+        ? `"${installedName}" (from "${spec}") is not a diffwiki search plugin (need package.json diffwiki.kind === "search" + a bin)`
+        : `no diffwiki search plugin found in "${spec}" (need package.json diffwiki.kind === "search" + bin)`,
     );
   }
 
@@ -222,7 +280,16 @@ export async function installPlugin(
   await upsertPlugin(record);
 
   const setup = opts?.setup !== false ? await runSetup(command, discovered.name) : undefined;
-  return { record, setup };
+
+  // Make the freshly-installed engine the default so search uses it immediately.
+  // Skip when setup reported not-ready: a plugin that would only degrade to native
+  // shouldn't displace a working default.
+  let defaulted = false;
+  if (opts?.setDefault !== false && (!setup || setup.ready)) {
+    await setConfigValue('defaultSearch', discovered.name);
+    defaulted = true;
+  }
+  return { record, setup, defaulted };
 }
 
 /**

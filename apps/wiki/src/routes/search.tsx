@@ -1,7 +1,6 @@
 import { createFileRoute, Link } from '@tanstack/react-router';
-import { useState } from 'react';
-import { runSearch, getSearchModes } from '../server/search';
-import { getCollections } from '../server/collections';
+import { useEffect, useState } from 'react';
+import { loadSearch, loadCollections, loadSearchModes } from '../lib/data-source';
 import { PageLayout } from '../components/page-layout';
 import { cn } from '../lib/utils';
 import type { CollectionInfo, SearchResultItem } from '../lib/types';
@@ -22,9 +21,9 @@ export const Route = createFileRoute('/search')({
   }),
   loader: async ({ deps }) => {
     const [search, collections, searchModes] = await Promise.all([
-      runSearch({ data: { q: deps.q, collection: deps.c, engine: deps.engine, type: deps.type } }),
-      getCollections(),
-      getSearchModes(),
+      loadSearch({ q: deps.q, c: deps.c, engine: deps.engine, type: deps.type }),
+      loadCollections(),
+      loadSearchModes(),
     ]);
     return { search, collections, modes: searchModes.modes, defaultMode: searchModes.default };
   },
@@ -80,11 +79,31 @@ function SearchPending() {
 }
 
 function SearchComponent() {
-  const { search, collections, modes, defaultMode } = Route.useLoaderData();
+  const loader = Route.useLoaderData();
+  const { collections, modes, defaultMode } = loader;
   const params = Route.useSearch();
   const navigate = Route.useNavigate();
 
   const [term, setTerm] = useState(params.q);
+
+  // Static builds have no server: prerendered `/search` ships an empty result set,
+  // so compute results on the client whenever the query/collection changes — this
+  // covers both in-app navigation AND a direct load of `/search?q=…` (refresh /
+  // shared link). The index fetch is memoised, so this is just a re-rank. Live
+  // builds render the server loader's results directly.
+  const isStatic = import.meta.env.VITE_DIFFWIKI_STATIC === '1';
+  const [clientSearch, setClientSearch] = useState(loader.search);
+  useEffect(() => {
+    if (!isStatic) return;
+    let cancelled = false;
+    void loadSearch({ q: params.q, c: params.c }).then((r) => {
+      if (!cancelled) setClientSearch(r);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [isStatic, params.q, params.c]);
+  const search = isStatic ? clientSearch : loader.search;
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();

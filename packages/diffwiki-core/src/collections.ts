@@ -26,6 +26,10 @@ export async function findCollection(name: string): Promise<CollectionEntry | un
   return (await readRegistry()).collections.find((c) => c.name === name);
 }
 
+export async function findCollectionById(id: string): Promise<CollectionEntry | undefined> {
+  return (await readRegistry()).collections.find((c) => c.id === id);
+}
+
 export async function createCollection(name: string): Promise<CollectionEntry> {
   if (await findCollection(name)) throw new CollectionExistsError(name);
   const dir = collectionDir(name);

@@ -4,3 +4,5 @@ set -euo pipefail
 cd "${MISE_PROJECT_ROOT:-$PWD}"
 pnpm -r run build
 echo "Built workspace packages: $(pnpm -r list --depth -1 2>/dev/null | tr '\n' ' ')"
+DIFFWIKI_BASE=/ VITE_DIFFWIKI_STATIC=1 pnpm --filter diffwiki-app exec vite build --outDir dist-static
+echo "Built static bundle: apps/wiki/dist-static"

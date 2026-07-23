@@ -27,7 +27,7 @@ diffwiki create notes
 diffwiki config-set defaultCollection notes
 
 # 2. Add an article (returns the file path it wrote)
-diffwiki add -p "notes:Setting up mise" -t tooling,setup "# Setting up mise
+diffwiki add-article -p "notes:Setting up mise" -t tooling,setup "# Setting up mise
 
 Install mise, then run \`mise install\`."
 # → ~/.diffwiki/collections/notes/setting-up-mise.md
@@ -39,12 +39,12 @@ diffwiki query mise
 
 ## Primary Use Case — capturing a note
 
-`diffwiki add` is the fast path. `-p` takes `[collection:]title`; if you omit `collection:`
+`diffwiki add-article` is the fast path. `-p` takes `[collection:]title`; if you omit `collection:`
 it uses `config.defaultCollection`. `-t` may be repeated and accepts comma-separated tags.
 The trailing argument is the optional markdown body.
 
 ```bash
-diffwiki add -p "Rebasing safely" -t git,notes "# Rebasing safely
+diffwiki add-article -p "Rebasing safely" -t git,notes "# Rebasing safely
 
 Always \`git pull --rebase\` before pushing to avoid clobbering remote commits."
 ```
@@ -71,13 +71,13 @@ Lists every registered collection (global and repo) with its type and path.
 
 Creates a global collection directory and registers it. **Errors** if the name is taken.
 
-### `diffwiki add -p "[coll:]title" [-t tags]… [body]`
+### `diffwiki add-article -p "[coll:]title" [-t tags]… [body]`
 
 Creates an article. `-p` → `[collection:]title` (collection optional → default). `-t` →
 repeatable, comma-split tags. `body` → optional markdown (defaults to `# <title>`).
 **Returns** the article path on stdout.
 
-### `diffwiki update -p "coll:path" <body>`
+### `diffwiki update-article -p "coll:path" <body>`
 
 Replaces an article's body, preserving its title and tags.
 
@@ -90,7 +90,7 @@ Replaces an article's body, preserving its title and tags.
 
 Adds, removes, or replaces (`update-tags`) an article's tags.
 
-### `diffwiki remove -p "coll:path"`
+### `diffwiki remove-article -p "coll:path"`
 
 Deletes an article file.
 
@@ -115,10 +115,13 @@ Search can be extended with subprocess plugins (e.g. `diffwiki-qmd` for semantic
 `diffwiki-ripgrep` for fast keyword search).
 
 ```bash
-# Install a plugin from an npm spec (or a local path) and provision it
+# Install a plugin from an npm spec (or a local path) and provision it.
+# Multiple search plugins can be installed side by side; each install makes
+# itself the default engine (opt out with --no-default).
 diffwiki plugin install diffwiki-ripgrep
 diffwiki plugin install diffwiki-qmd --prefetch-models   # heavy: pre-download models
 diffwiki plugin install ./path/to/plugin --no-setup      # skip setup; run `diffwiki index` later
+diffwiki plugin install diffwiki-qmd --no-default        # install without changing the default
 
 # Register an already-installed executable as a plugin
 diffwiki plugin register my-engine --command node /abs/adapter.js
@@ -134,8 +137,9 @@ diffwiki index
 diffwiki index --embed
 ```
 
-Make a plugin the default engine with `diffwiki config-set defaultSearch <engine[:type]>`
-(e.g. `diffwiki-qmd:semantic`). `diffwiki query` then uses it unless you pass `--engine`.
+Installing a plugin makes it the default engine automatically; change it any time with
+`diffwiki config-set defaultSearch <engine[:type]>` (e.g. `diffwiki-qmd:semantic`).
+`diffwiki query` then uses the default unless you pass `--engine`.
 
 ### `diffwiki init [-c collection] [-p path]`
 
@@ -281,6 +285,20 @@ the SSE connection.
 
 > **Note:** Live reload is a dev-server feature. The production build (`mise run build` +
 > `pnpm preview`) does not watch the filesystem. Use `mise run dev` during active writing.
+
+## External collections & static export
+
+### `diffwiki add [-d <dir>]`
+
+Register the current git repo as an **external** collection without a `diffwiki.yaml`: the title is the git remote repo name (fallback repo dir), the content dir is `docs/` by default (`-d` to override), non-git dirs are auto-initialised, collections are unique by git repo id, and linked worktrees are refused (add the source repo). Use `diffwiki init` to override title/paths via a `diffwiki.yaml`.
+
+### `diffwiki open`
+
+Run inside an external collection, `open` lands on that collection's root route (`/{coll}`); elsewhere it opens the site home. The sidebar shows an external collection's checked-out branch and a `↓N` "behind remote" marker (live only).
+
+### `diffwiki export -o <dir> [--base /repo/] [--filter <globs>] [--exclude <globs>]`
+
+Generate a fully static site (HTML + hashed assets + `_data/` JSON + `search-index.json` + `.nojekyll`) deployable to GitHub Pages or any file host. Pass `--base /<repo>/` for a project sub-path. Export a subset with `--filter <globs>` (only these collections) and/or `--exclude <globs>` (everything but these) — comma-separated name globs (`*`/`?`); an unmatched pattern or an empty selection aborts before anything is generated. Content is frozen at export time; git branch info is omitted (a console warning lists affected collections); search is the native BM25 engine run client-side over the generated index (semantic/plugin engines are server-only).
 
 ## Future Work / Troubleshooting
 

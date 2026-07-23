@@ -134,19 +134,13 @@ are the one piece a strict CSP can block; code and prose are unaffected.
 │ TopNav (full width) — sidebar toggle · breadcrumbs … themes · GitHub  │
 ├────────────────┬──────────────────────────────────┬──────────────────┤
 │ AppSidebar     │ Content (fills, via PageLayout)  │ TOC (256 px)     │
-│ (256 px, lg+)  │                                  │ (1152 px+)       │
+│ (256 px rail)  │                                  │ (desktop only)   │
 │ logo + search  │ <h1> · tags · <ArticleBody>      │ scroll-spy h2/h3 │
 │ CollapsibleNav │  — or a DirListing               │ (right gutter)   │
 └────────────────┴──────────────────────────────────┴──────────────────┘
 ```
 
-The full-width `TopNav` spans the top; the fixed sidebar rail is offset below it
-in CSS (`[data-slot='sidebar-container']`), and its in-flow gap is pinned so the
-content lane doesn't shift when the sidebar is toggled. A shared `PageLayout`
-gives home and article routes the same content lane + a fixed right gutter that
-holds the TOC (equal to the sidebar width). Layout tokens: `--nav-h 3.5rem`,
-`--sidebar-w 16rem`, `--toc-w 16rem`. Sidebar at `lg` (1024 px); TOC at 1152 px.
-Dark mode = `.dark` class on `<html>`, persisted to `localStorage` (`diffwiki:color-mode`).
+The full-width `TopNav` spans the top; below it the shell has **three responsive layouts**, applied to every route: mobile (the sidebar is an overlay sheet), tablet (the rail **pushes** content — the "layout shift"), and desktop (`>=84rem`: the rail **overlays** the left gutter and the content lane centres in the viewport with symmetric gutters). A shared `PageLayout` centres the content lane and, on desktop, places the TOC in the right gutter **without displacing the lane** — so pages with and without a TOC lay out identically. Layout tokens: `--nav-h 3.5rem`, `--sidebar-w 16rem`, `--toc-w 16rem`, `--content-max 48rem`. The full model (breakpoints, the push-vs-overlay gap regime, Tailwind mechanics) is documented in [`architecture/app-shell.md`](architecture/app-shell.md). Dark mode = `.dark` class on `<html>`, persisted to `localStorage` (`diffwiki:color-mode`).
 
 ### Testing
 
@@ -160,6 +154,15 @@ Dark mode = `.dark` class on `<html>`, persisted to `localStorage` (`diffwiki:co
   routes (title, tags, prose, code copy button, mermaid SVG), and `prod-server.spec.ts` checks
   the built bin serves static assets + doesn't 500 — bin-only regressions the dev server hides.
 - **`mise run test:e2e`** — runs workspace vitest e2e suites then the app Playwright suite.
+
+## Static export (SSG)
+
+The wiki app is a TanStack Start (SSR) application whose data loads through server functions. For static hosting (GitHub Pages or any file host) these are swapped at build time by a single `data-source` seam (`apps/wiki/src/lib/data-source.ts`) keyed on `VITE_DIFFWIKI_STATIC` — live builds call the server functions; static builds fetch pre-generated JSON under `${BASE_URL}_data/`. Site-data builders live in `diffwiki-core` (`site.ts`: `buildNavTree`, `buildCollections`, `resolvePage`, `toTreeNodes`), shared by the live server functions, the client data-source, and the exporter. `diffwiki export` drives `apps/wiki/bin/export.mjs` (Node + core + the shipped `dist-static` bundle): it emits `_data/*.json` + `search-index.json`, copies client assets, and prerenders every route by calling the built server bundle's `fetch` handler with an on-disk `_data` fetch shim. Git branch info is omitted under `DIFFWIKI_STATIC` (a `console.warn` per affected collection); `/api/watch` SSE + `LiveReload` are compiled out of static builds. External collections (`diffwiki add`) are registered by a stable git repo id (root-commit hash, else origin URL) with `type: 'external'`, pointing at the repo's `docs/` directory; linked worktrees are refused.
+
+See also:
+- [Static site generation](architecture/static-site-generation.md) — data-source seam, export harness, base-path handling, `dist-static` build.
+- [Search](architecture/search.md) — `buildSearchIndex`, `search-index.json`, `SearchBox` component.
+- [Collections](architecture/collections.md) — collection model, `external` type, git repo identity, `diffwiki add` vs `diffwiki init`.
 
 ## Future Work
 

@@ -1,5 +1,5 @@
 import { createFileRoute, notFound } from '@tanstack/react-router';
-import { readPage } from '../server/doc';
+import { loadPage } from '../lib/data-source';
 import { ArticleBody } from '../components/article-body';
 import { Toc } from '../components/toc';
 import { DirListing } from '../components/dir-listing';
@@ -8,8 +8,7 @@ import { Badge } from '@/components/ui/badge';
 
 export const Route = createFileRoute('/$coll/$')({
   loader: async ({ params }) => {
-    // readPage returns null only for a genuine miss; real errors propagate.
-    const page = await readPage({ data: { coll: params.coll, slug: params._splat ?? '' } });
+    const page = await loadPage(params.coll, params._splat ?? '');
     if (!page) throw notFound();
     return page;
   },

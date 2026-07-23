@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from '@tanstack/react-router';
-import { ChevronRight } from 'lucide-react';
+import { ChevronRight, GitBranch, ArrowDown } from 'lucide-react';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarMenuSub } from '@/components/ui/sidebar';
 import { cn } from '../lib/utils';
@@ -12,6 +12,26 @@ const ACTIVE = 'font-semibold !text-primary underline underline-offset-4 decorat
 const LINK =
   'block w-full whitespace-normal leading-snug line-clamp-2 text-muted-foreground transition-colors hover:text-foreground hover:underline hover:underline-offset-4 hover:decoration-2';
 const NO_BG = 'hover:bg-transparent active:bg-transparent';
+
+export function GitBadge({ branch, behind }: { branch: string; behind?: number }) {
+  return (
+    <span className="ml-1.5 inline-flex shrink-0 items-center gap-1 text-[0.6875rem] font-normal text-muted-foreground">
+      <span className="inline-flex items-center gap-0.5" title={`branch: ${branch}`}>
+        <GitBranch className="size-3" aria-hidden="true" />
+        {branch}
+      </span>
+      {behind !== undefined && behind > 0 && (
+        <span
+          className="inline-flex items-center gap-0.5 text-amber-600 dark:text-amber-500"
+          title={`${behind} behind remote`}
+        >
+          <ArrowDown className="size-3" aria-hidden="true" />
+          {behind}
+        </span>
+      )}
+    </span>
+  );
+}
 
 export function NavTree({ nodes }: { nodes: TreeNode[] }) {
   if (nodes.length === 0) return null;
@@ -60,7 +80,10 @@ function BranchNode({ node }: { node: TreeNode }) {
               activeProps={{ className: ACTIVE, 'aria-current': 'page' }}
               className={LINK}
             >
-              {label}
+              <span className="inline-flex flex-wrap items-baseline">
+                <span>{label}</span>
+                {node.meta?.branch && <GitBadge branch={node.meta.branch} behind={node.meta.behind} />}
+              </span>
             </Link>
           </SidebarMenuButton>
         </div>

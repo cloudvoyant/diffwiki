@@ -22,6 +22,8 @@ Desktop.ini
 
 # Build outputs and dependencies
 dist/
+dist-static/
+dist-site/
 build/
 # ...but keep mise task files that live under a build/ namespace dir
 !**/mise-tasks/build/

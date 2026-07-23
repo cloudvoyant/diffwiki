@@ -23,7 +23,7 @@ describe('global lifecycle', () => {
     expect((await run(['create', 'notes'])).ok).toBe(true);
     expect((await run(['config-set', 'defaultCollection', 'notes'])).ok).toBe(true);
 
-    const added = await run(['add', '-p', 'notes:Hello World', '-t', 'a,b', '-t', 'c', '# Hi']);
+    const added = await run(['add-article', '-p', 'notes:Hello World', '-t', 'a,b', '-t', 'c', '# Hi']);
     expect(added.ok).toBe(true);
     const articlePath = added.out.trim();
     expect(articlePath.endsWith('hello-world.md')).toBe(true);
@@ -37,16 +37,16 @@ describe('global lifecycle', () => {
     expect(q.out).toContain('Hello World');
 
     // default-collection path: no "collection:" prefix
-    const added2 = await run(['add', '-p', 'From Default', '-t', 'x']);
+    const added2 = await run(['add-article', '-p', 'From Default', '-t', 'x']);
     expect(added2.ok).toBe(true);
 
-    expect((await run(['update', '-p', 'notes:hello-world', '# Hi again'])).ok).toBe(true);
+    expect((await run(['update-article', '-p', 'notes:hello-world', '# Hi again'])).ok).toBe(true);
     expect((await run(['add-tags', '-p', 'notes:hello-world', 'd,e'])).ok).toBe(true);
     expect((await run(['remove-tags', '-p', 'notes:hello-world', 'a'])).ok).toBe(true);
     const setTags = await run(['update-tags', '-p', 'notes:hello-world', 'only']);
     expect(setTags.out).toContain('only');
 
-    expect((await run(['remove', '-p', 'notes:hello-world'])).ok).toBe(true);
+    expect((await run(['remove-article', '-p', 'notes:hello-world'])).ok).toBe(true);
     await expect(fs.access(articlePath)).rejects.toBeTruthy();
   });
 
@@ -58,7 +58,7 @@ describe('global lifecycle', () => {
   });
 
   it('reports a clean error when no default collection is set', async () => {
-    const res = await run(['add', '-p', 'Orphan', '-t', 'x']);
+    const res = await run(['add-article', '-p', 'Orphan', '-t', 'x']);
     expect(res.ok).toBe(false);
     expect(res.err).toContain('no default collection');
   });

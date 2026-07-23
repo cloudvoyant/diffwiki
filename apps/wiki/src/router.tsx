@@ -27,9 +27,14 @@ function RouteError({ error }: ErrorComponentProps) {
 export function getRouter() {
   const router = createTanStackRouter({
     routeTree,
+    basepath: import.meta.env.BASE_URL,
     scrollRestoration: true,
     defaultPreload: 'intent',
-    defaultPreloadStaleTime: 0,
+    // Keep TanStack's default preload stale time (30s) rather than forcing a fresh
+    // preload on every hover: `defaultPreloadStaleTime: 0` re-creates a match on
+    // each intent, and racing that churn against match cleanup trips a caught-but-
+    // noisy `_nonReactive` undefined in router-core's preloadRoute. A click still
+    // re-validates, so serving a wiki page from a <30s-old preload is fine.
     defaultNotFoundComponent: NotFound,
     defaultErrorComponent: RouteError,
   });

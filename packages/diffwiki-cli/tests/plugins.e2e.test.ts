@@ -255,8 +255,53 @@ describe('plugin install setup surfacing (local package, no network)', () => {
       // ...and the plugin stays registered so it works once the dep lands.
       const list = await run(['plugin', 'list']);
       expect(list.out).toContain('diffwiki-stub-search');
+
+      // A not-ready plugin must NOT hijack the default (it would only degrade to native).
+      expect(inst.out).not.toContain('default search engine');
     } finally {
       await fs.rm(pkgDir, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it('installs multiple search plugins — each install targets its own package', async () => {
+    // A minimal installable search package (no deps -> npm install is offline).
+    const mkPkg = async (name: string): Promise<string> => {
+      const dir = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'diffwiki-multi-')));
+      await fs.writeFile(
+        path.join(dir, 'package.json'),
+        JSON.stringify({
+          name,
+          version: '1.0.0',
+          type: 'module',
+          bin: { [name]: 'bin.mjs' },
+          diffwiki: { kind: 'search' },
+        }),
+        'utf8',
+      );
+      await fs.writeFile(path.join(dir, 'bin.mjs'), FIXTURE, 'utf8');
+      return dir;
+    };
+    const a = await mkPkg('diffwiki-search-a');
+    const b = await mkPkg('diffwiki-search-b');
+    try {
+      // Install A, then B. The second install must register B — not re-describe the
+      // first search package already in the managed root (the multi-plugin bug).
+      const instA = await run(['plugin', 'install', a, '--no-setup']);
+      const instB = await run(['plugin', 'install', b, '--no-setup']);
+      expect(instA.ok).toBe(true);
+      expect(instB.ok).toBe(true);
+
+      const list = await run(['plugin', 'list']);
+      expect(list.out).toContain('diffwiki-search-a');
+      expect(list.out).toContain('diffwiki-search-b');
+
+      // Each install makes itself the default; the most recent install wins.
+      expect(instA.out).toContain('Set "diffwiki-search-a" as the default search engine');
+      expect(instB.out).toContain('Set "diffwiki-search-b" as the default search engine');
+      expect((await run(['config-get', 'defaultSearch'])).out).toContain('diffwiki-search-b');
+    } finally {
+      await fs.rm(a, { recursive: true, force: true });
+      await fs.rm(b, { recursive: true, force: true });
     }
   }, 60_000);
 });

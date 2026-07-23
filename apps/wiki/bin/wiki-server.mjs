@@ -14,6 +14,13 @@ const portFlag = argv.indexOf('--port');
 if (portFlag !== -1 && argv[portFlag + 1]) {
   process.env.PORT = argv[portFlag + 1];
 }
+
+// `diffwiki-app export …` delegates to the static exporter (no server).
+if (argv[0] === 'export') {
+  await import(new URL('./export.mjs', import.meta.url));
+  process.exit(0);
+}
+
 const port = Number(process.env.PORT || '4321');
 if (!Number.isInteger(port) || port <= 0) {
   throw new Error(`Invalid port: ${JSON.stringify(process.env.PORT)}`);

@@ -1,5 +1,5 @@
 import { createRootRoute, HeadContent, Outlet, Scripts } from '@tanstack/react-router';
-import { getNavTree } from '../server/collections';
+import { loadNavTree } from '../lib/data-source';
 import { AppShell } from '../components/app-shell';
 import { THEME_INIT_SCRIPT } from '../components/theme-script';
 import { LiveReload } from '../components/live-reload';
@@ -7,7 +7,7 @@ import { LiveReload } from '../components/live-reload';
 import appCss from '../styles.css?url';
 
 export const Route = createRootRoute({
-  loader: () => getNavTree(),
+  loader: () => loadNavTree(),
   head: () => ({
     meta: [
       { charSet: 'utf-8' },

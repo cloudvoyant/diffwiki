@@ -1,6 +1,10 @@
 node_modules
 .DS_Store
 dist
+dist-static
+dist-static-bp
+dist-site
+dist-site-e2e
 dist-ssr
 *.local
 .env

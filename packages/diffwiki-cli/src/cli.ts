@@ -1,6 +1,8 @@
 import { Command } from 'commander';
 import {
+  addExternalCollection,
   addTags,
+  collectionGitStatus,
   createArticle,
   createCollection,
   doctor,
@@ -17,6 +19,7 @@ import {
   removeArticle,
   removePlugin,
   removeTags,
+  resolveCwdCollection,
   setConfigValue,
   setTags,
   updateArticleBody,
@@ -27,6 +30,7 @@ import {
 import { version } from './version';
 import { collect, splitTags, withErrors } from './runtime';
 import { openBrowser, readState, isAlive, startUi, stopUi, waitForServer } from './ui-server';
+import { runExport } from './exporter';
 
 const icon = (level: DiagnosticLevel): string => (level === 'ok' ? '✓' : level === 'warn' ? '!' : '✖');
 
@@ -61,8 +65,24 @@ export function createProgram(): Command {
           return;
         }
         for (const c of collections) {
-          console.log(`${c.name}\t[${c.type}]\t${c.path}`);
+          const status = await collectionGitStatus(c);
+          const branch = status?.branch ? `\t(${status.branch})` : '';
+          console.log(`${c.name}\t[${c.type}]\t${c.path}${branch}`);
         }
+      }),
+    );
+
+  program
+    .command('add')
+    .description('Add the current git repo as an external collection (docs dir, no diffwiki.yaml)')
+    .option('-d, --docs <dir>', 'content dir relative to repo root', 'docs')
+    .action(
+      withErrors(async (opts: { docs: string }) => {
+        const entry = await addExternalCollection({ cwd: process.cwd(), docsDir: opts.docs });
+        const status = await collectionGitStatus(entry);
+        const branch = status?.branch ? ` (${status.branch})` : '';
+        console.log(`Added "${entry.name}"${branch} → ${entry.path}`);
+        console.log('Registered globally — discoverable via: diffwiki list');
       }),
     );
 
@@ -78,7 +98,7 @@ export function createProgram(): Command {
     );
 
   program
-    .command('add')
+    .command('add-article')
     .description('Add an article to a collection')
     .requiredOption('-p, --path <target>', '"[collection:]title"')
     .option('-t, --tag <tag>', 'tag (repeatable, comma-separated)', collect, [])
@@ -95,7 +115,7 @@ export function createProgram(): Command {
     );
 
   program
-    .command('update')
+    .command('update-article')
     .description("Replace an article's body")
     .requiredOption('-p, --path <target>', '"collection:path"')
     .argument('<body>', 'new markdown body')
@@ -107,7 +127,7 @@ export function createProgram(): Command {
     );
 
   program
-    .command('remove')
+    .command('remove-article')
     .description('Delete an article')
     .requiredOption('-p, --path <target>', '"collection:path"')
     .action(
@@ -187,11 +207,13 @@ export function createProgram(): Command {
     .description('Install a search plugin from an npm spec and provision it (setup)')
     .argument('<spec>', 'npm package spec (name, name@version, or path)')
     .option('--no-setup', 'skip the end-to-end setup after install')
+    .option('--no-default', 'do not make this the default search engine')
     .option('--prefetch-models', 'pre-download models during setup (heavy)')
     .action(
-      withErrors(async (spec: string, opts: { setup: boolean; prefetchModels?: boolean }) => {
-        const { record, setup } = await installPlugin(spec, {
+      withErrors(async (spec: string, opts: { setup: boolean; default: boolean; prefetchModels?: boolean }) => {
+        const { record, setup, defaulted } = await installPlugin(spec, {
           setup: opts.setup,
+          setDefault: opts.default,
           prefetchModels: opts.prefetchModels,
         });
         console.log(`Installed "${record.name}"${record.version ? ` v${record.version}` : ''}`);
@@ -203,6 +225,11 @@ export function createProgram(): Command {
           const reason = setup.steps.find((s) => !s.ok)?.message ?? 'setup did not complete';
           console.log(`⚠ Not ready: ${reason}`);
           console.log('  → run: diffwiki doctor');
+        }
+        if (defaulted) {
+          console.log(
+            `Set "${record.name}" as the default search engine (change: diffwiki config-set defaultSearch <engine[:type]>)`,
+          );
         }
       }),
     );
@@ -274,6 +301,19 @@ export function createProgram(): Command {
         });
         console.log(`Initialized repo wiki "${entry.name}" at ${entry.path}`);
         console.log('Registered globally — discoverable via: diffwiki list');
+      }),
+    );
+
+  program
+    .command('export')
+    .description('Generate a static site (deployable to GitHub Pages)')
+    .requiredOption('-o, --out <dir>', 'output directory')
+    .option('-b, --base <path>', 'base URL path (e.g. /my-repo/ for GitHub Pages)', '/')
+    .option('-f, --filter <globs>', 'only export collections matching these globs (comma-separated)')
+    .option('-e, --exclude <globs>', 'exclude collections matching these globs (comma-separated)')
+    .action(
+      withErrors(async (opts: { out: string; base: string; filter?: string; exclude?: string }) => {
+        await runExport({ out: opts.out, base: opts.base, filter: opts.filter, exclude: opts.exclude });
       }),
     );
 
@@ -371,8 +411,10 @@ export function createProgram(): Command {
           state = await startUi(Number(opts.port));
           await waitForServer(state.url);
         }
-        openBrowser(state.url);
-        console.log(`Opening ${state.url}`);
+        const coll = await resolveCwdCollection(process.cwd());
+        const target = coll ? `${state.url}/${encodeURIComponent(coll.name)}` : state.url;
+        openBrowser(target);
+        console.log(`Opening ${target}`);
       }),
     );
 

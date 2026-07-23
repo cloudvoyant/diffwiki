@@ -9,5 +9,8 @@ log_info "Running workspace vitest e2e suites..."
 cd "${MISE_PROJECT_ROOT:-$PWD}"
 pnpm -r exec vitest run --passWithNoTests e2e
 
+log_info "Installing Playwright chromium (idempotent)..."
+pnpm --filter "diffwiki-app" exec playwright install --with-deps chromium
+
 log_info "Running apps/wiki Playwright suite..."
 pnpm --filter "diffwiki-app" test:e2e
