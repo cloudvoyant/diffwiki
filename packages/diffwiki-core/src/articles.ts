@@ -75,10 +75,9 @@ export async function createArticle(opts: { target: string; tags: string[]; body
   const { collection, title } = parseAddTarget(opts.target);
   const { name, dir } = await resolveCollectionDir(collection);
   const filePath = path.join(dir, `${slugify(title)}.md`);
-  const now = new Date().toISOString();
   const body = opts.body ?? `# ${title}\n`;
   await fs.mkdir(dir, { recursive: true });
-  await fs.writeFile(filePath, serializeArticle({ title, tags: opts.tags, created: now, updated: now, body }), 'utf8');
+  await fs.writeFile(filePath, serializeArticle({ title, tags: opts.tags, body }), 'utf8');
   void fireHook('article-created', name, path.relative(dir, filePath));
   return { title, tags: opts.tags, path: filePath, collection: name };
 }
@@ -100,17 +99,7 @@ async function loadArticle(
 export async function updateArticleBody(target: string, body: string): Promise<Article> {
   const { filePath, dir, raw, collection } = await loadArticle(target);
   const parsed = parseArticle(raw);
-  await fs.writeFile(
-    filePath,
-    serializeArticle({
-      title: parsed.title,
-      tags: parsed.tags,
-      created: parsed.created,
-      updated: new Date().toISOString(),
-      body,
-    }),
-    'utf8',
-  );
+  await fs.writeFile(filePath, serializeArticle({ title: parsed.title, tags: parsed.tags, body }), 'utf8');
   void fireHook('article-updated', collection, path.relative(dir, filePath));
   return { title: parsed.title, tags: parsed.tags, path: filePath, collection };
 }
@@ -119,17 +108,7 @@ async function mutateTags(target: string, fn: (tags: string[]) => string[]): Pro
   const { filePath, dir, raw, collection } = await loadArticle(target);
   const parsed = parseArticle(raw);
   const tags = fn(parsed.tags);
-  await fs.writeFile(
-    filePath,
-    serializeArticle({
-      title: parsed.title,
-      tags,
-      created: parsed.created,
-      updated: new Date().toISOString(),
-      body: parsed.body,
-    }),
-    'utf8',
-  );
+  await fs.writeFile(filePath, serializeArticle({ title: parsed.title, tags, body: parsed.body }), 'utf8');
   void fireHook('article-updated', collection, path.relative(dir, filePath));
   return { title: parsed.title, tags, path: filePath, collection };
 }

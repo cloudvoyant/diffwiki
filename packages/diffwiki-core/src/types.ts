@@ -197,6 +197,10 @@ export interface DocData {
   html: string;
   toc: TocItem[];
   path: string;
+  /** ISO-8601 creation date, sourced from git history / filesystem (not frontmatter). */
+  created?: string;
+  /** ISO-8601 last-update date, sourced from git history / filesystem (not frontmatter). */
+  updated?: string;
 }
 
 export interface ListingEntry {

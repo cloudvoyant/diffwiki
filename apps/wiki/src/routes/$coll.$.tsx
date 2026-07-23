@@ -15,6 +15,14 @@ export const Route = createFileRoute('/$coll/$')({
   component: CollectionDocPage,
 });
 
+/** Format an ISO date as a short, locale-aware "Mon D, YYYY"; passthrough if unparseable. */
+function formatDate(iso: string): string {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime())
+    ? iso
+    : d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
 function CollectionDocPage() {
   const page = Route.useLoaderData();
 
@@ -29,6 +37,14 @@ function CollectionDocPage() {
   return (
     <PageLayout aside={<Toc items={page.toc} />}>
       <h1 className="mb-3 text-3xl font-bold tracking-tight">{page.title}</h1>
+
+      {(page.updated || page.created) && (
+        <p className="mb-4 text-xs text-muted-foreground">
+          {page.updated && <span>Updated {formatDate(page.updated)}</span>}
+          {page.updated && page.created && <span className="mx-2 opacity-50">·</span>}
+          {page.created && <span>Created {formatDate(page.created)}</span>}
+        </p>
+      )}
 
       {page.tags.length > 0 && (
         <div className="mb-6 flex flex-wrap gap-2">
