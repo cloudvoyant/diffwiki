@@ -11,6 +11,8 @@ import { useRouter } from '@tanstack/react-router';
 export function LiveReload() {
   const router = useRouter();
   useEffect(() => {
+    if (import.meta.env.VITE_DIFFWIKI_STATIC === '1') return; // static: no server, nothing to watch
+
     const onVisible = () => {
       if (document.visibilityState === 'visible') void router.invalidate();
     };

@@ -21,6 +21,7 @@ export function AppSidebar({ tree }: { tree: CollectionTree[] }) {
     title: ct.collection.type === 'repo' ? `${ct.collection.name} (repo)` : ct.collection.name,
     path: `/${ct.collection.name}`,
     children: ct.nodes,
+    meta: ct.collection.branch ? { branch: ct.collection.branch, behind: ct.collection.behind } : undefined,
   }));
 
   return (

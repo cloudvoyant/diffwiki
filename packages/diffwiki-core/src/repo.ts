@@ -3,8 +3,10 @@ import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
-import { findCollection } from './collections';
+import { findCollection, findCollectionById, listCollections } from './collections';
 import { registerCollection } from './registry';
+import { ensureGitRepo, gitToplevel, isLinkedWorktree, repoId, repoRemoteName, upstreamStatus } from './git';
+import { CollectionAlreadyAddedError, WorktreeNotAllowedError } from './errors';
 import type { CollectionEntry, RepoConfig } from './types';
 
 const execFileAsync = promisify(execFile);
@@ -73,4 +75,99 @@ export async function initRepoWiki(opts: InitOptions): Promise<CollectionEntry> 
   };
   await registerCollection(entry);
   return entry;
+}
+
+export interface AddExternalOptions {
+  cwd: string;
+  /** Content dir relative to the repo root. Default "docs". */
+  docsDir?: string;
+}
+
+/**
+ * Register the git repo containing `cwd` as an `external` collection: title from
+ * the git remote (fallback repo dir), content dir `docs/` by default, git-only
+ * (auto `git init`), unique by repo id, and refusing linked worktrees.
+ */
+export async function addExternalCollection(opts: AddExternalOptions): Promise<CollectionEntry> {
+  const cwd = path.resolve(opts.cwd);
+  const root = await ensureGitRepo(cwd);
+  if (await isLinkedWorktree(cwd)) throw new WorktreeNotAllowedError(root);
+
+  const id = (await repoId(root)) ?? `path:${root}`;
+  const already = await findCollectionById(id);
+  if (already) throw new CollectionAlreadyAddedError(already.name);
+
+  const docsRel = opts.docsDir ?? 'docs';
+  const contentDir = path.join(root, docsRel);
+
+  let name = (await repoRemoteName(root)) ?? path.basename(root);
+  if (await findCollection(name)) {
+    let n = 2;
+    while (await findCollection(`${name}-${n}`)) n += 1;
+    name = `${name}-${n}`;
+  }
+
+  const entry: CollectionEntry = {
+    name,
+    type: 'external',
+    path: contentDir,
+    createdAt: new Date().toISOString(),
+    id,
+    repoRoot: root,
+    docsDir: docsRel,
+  };
+  await registerCollection(entry);
+  return entry;
+}
+
+/**
+ * The registered collection the current directory belongs to: an external
+ * collection whose repo id matches, else any collection whose content path (or
+ * repoRoot) contains `cwd`. Undefined when cwd is outside every known collection.
+ */
+export async function resolveCwdCollection(cwd: string): Promise<CollectionEntry | undefined> {
+  const abs = path.resolve(cwd);
+  const root = await gitToplevel(abs);
+  if (root) {
+    const id = (await repoId(root)) ?? `path:${root}`;
+    const byId = await findCollectionById(id);
+    if (byId) return byId;
+  }
+  const within = (base: string) => abs === base || abs.startsWith(base + path.sep);
+  // Most-specific-path wins: when collections nest (e.g. a repo collection whose
+  // docsDir sits inside another registered path), pick the one whose matching
+  // base is the longest, not merely the first in registry order.
+  const all = await listCollections();
+  let best: CollectionEntry | undefined;
+  let bestLen = -1;
+  for (const c of all) {
+    const bases = [c.path, c.repoRoot].filter((b): b is string => b !== undefined);
+    for (const b of bases) {
+      if (within(b) && b.length > bestLen) {
+        best = c;
+        bestLen = b.length;
+      }
+    }
+  }
+  return best;
+}
+
+export interface CollectionGitStatus {
+  branch?: string;
+  ahead: number;
+  behind: number;
+  hasUpstream: boolean;
+}
+
+/**
+ * Branch + upstream status for an external collection, from its repo root.
+ * Undefined for non-external collections or when git is unavailable (e.g. during
+ * static generation) — callers warn + omit.
+ */
+export async function collectionGitStatus(entry: CollectionEntry): Promise<CollectionGitStatus | undefined> {
+  if (entry.type !== 'external' || !entry.repoRoot) return undefined;
+  const top = await gitToplevel(entry.repoRoot);
+  if (!top) return undefined;
+  const s = await upstreamStatus(entry.repoRoot);
+  return { branch: s.branch, ahead: s.ahead, behind: s.behind, hasUpstream: s.hasUpstream };
 }

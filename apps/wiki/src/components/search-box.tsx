@@ -9,8 +9,10 @@ interface SearchBoxProps {
 }
 
 /**
- * Controlled search input: on Enter/submit navigates to `/search?q=…`.
- * Shared by the home hero and the sidebar header.
+ * Controlled search input. On submit it navigates to `/search?q=…` — the same on
+ * the live app and the static export. The `/search` route resolves results via the
+ * data-source seam: the server engine live, or the shared BM25 scorer over the
+ * pre-built index client-side when static. Shared by the home hero and the sidebar.
  */
 export function SearchBox({ className, placeholder = 'Search…', autoFocus = false }: SearchBoxProps) {
   const [value, setValue] = useState('');

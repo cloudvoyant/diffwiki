@@ -10,9 +10,13 @@ full-text search and a local web UI.
   `~/.diffwiki`, tracked in a single registry so the CLI can find them all.
 - **In-repo wikis** — `diffwiki init` attaches a wiki to any repository so its notes travel
   with the code, while still appearing alongside your global collections.
+- **External collections** — `diffwiki add` registers the current git repo (its `docs/` dir)
+  as a collection with no config file; unique by git repo id, worktree-aware.
 - **Plugin-based search** — a built-in zero-dependency BM25 engine, plus optional subprocess
   search plugins: `diffwiki-ripgrep` (fast keyword) and `diffwiki-qmd` (semantic/hybrid). Pick
   a default with `config-set defaultSearch`; `query` falls back to native automatically.
+- **Static export** — `diffwiki export -o ./dist` builds a fully static site (HTML + assets +
+  client-side search) deployable to GitHub Pages or any file host.
 - **Local web UI** — a TanStack Start app (`apps/wiki`) for browsing collections, reading
   rendered articles, and searching, launched with `diffwiki up`/`open`.
 

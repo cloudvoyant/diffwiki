@@ -41,7 +41,7 @@ describe('in-repo wiki', () => {
     expect(list.out).toContain('[repo]');
 
     // Articles can be added to the repo wiki via its registered name.
-    const added = await run(['add', '-p', 'repo-wiki:First Note', '-t', 'seed', '# First']);
+    const added = await run(['add-article', '-p', 'repo-wiki:First Note', '-t', 'seed', '# First']);
     expect(added.ok).toBe(true);
     const addedPath = path.resolve(added.out.trim());
     const expectedPrefix = path.resolve(path.join(repo, 'docs/wiki'));

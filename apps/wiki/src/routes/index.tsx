@@ -1,11 +1,11 @@
 import { createFileRoute, Link } from '@tanstack/react-router';
-import { getCollections } from '../server/collections';
+import { loadCollections } from '../lib/data-source';
 import { Logo } from '../components/logo';
-import { PageLayout } from '../components/page-layout';
 import { SearchBox } from '../components/search-box';
+import { PageLayout } from '../components/page-layout';
 
 export const Route = createFileRoute('/')({
-  loader: () => getCollections(),
+  loader: () => loadCollections(),
   component: HomeComponent,
 });
 

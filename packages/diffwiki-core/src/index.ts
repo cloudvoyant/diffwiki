@@ -23,10 +23,20 @@ export * from './frontmatter';
 export * from './collections';
 export * from './articles';
 export * from './repo';
+// Git identity + external collections helpers, and site builders (used by the
+// wiki app's server functions AND the static exporter)
+export * from './git';
+export * from './site';
+export * from './select';
 
 // Search
 export { search, query, nativeSearch, resolveDefaultSearchMode } from './query';
 export type { SearchOutcome } from './query';
+// Pure BM25 scorer + index types (also exposed browser-side via `diffwiki-core/bm25`)
+export { tokenize, rankDocs } from './bm25';
+export type { RankableFields, SearchDoc } from './bm25';
+// Static search index (consumed by the exporter to build search-index.json)
+export * from './search';
 
 // Diagnostics
 export { doctor } from './doctor';

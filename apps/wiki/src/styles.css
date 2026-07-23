@@ -259,19 +259,9 @@
   font-size: inherit;
 }
 
-/* >=1024px: pin sidebar-gap to --sidebar-width so content doesn't shift on collapse.
-   Not applied below 1024px — let the gap collapse so content reflows to fill the space. */
-@media (min-width: 1024px) {
-  [data-slot='sidebar-gap'] {
-    width: var(--sidebar-width) !important;
-  }
-}
-
-/* The top bar spans the full width; the fixed sidebar rail starts below it. */
-[data-slot='sidebar-container'] {
-  top: var(--nav-h);
-  height: calc(100svh - var(--nav-h));
-}
+/* The sidebar layout regime (push on tablet, overlay on desktop) and its nav-height
+   offset now live in Tailwind classes on the Sidebar primitive (components/ui/sidebar.tsx)
+   and PageLayout — see docs/architecture/app-shell.md. */
 
 /* Sidebar uses page background (not a distinct surface) on both desktop rail and mobile sheet. */
 [data-sidebar='sidebar'] {

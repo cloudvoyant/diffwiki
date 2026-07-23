@@ -2,5 +2,19 @@
 #MISE description="Run all tests (unit + e2e) across the workspace"
 #MISE depends=["build"]
 set -euo pipefail
+
+source "${MISE_PROJECT_ROOT:-$PWD}/mise-tasks/utils"
 cd "${MISE_PROJECT_ROOT:-$PWD}"
+
+log_info "Running workspace vitest suites (unit + vitest e2e)..."
 pnpm -r exec vitest run --passWithNoTests
+
+# The flagship static-export browser checks (hydration, client-side search,
+# result navigation) live in the wiki Playwright suite. Run it here so `mise run
+# test` — the command CI invokes — actually exercises the served bundle in a
+# browser instead of skipping it.
+log_info "Installing Playwright chromium (idempotent)..."
+pnpm --filter diffwiki-app exec playwright install --with-deps chromium
+
+log_info "Running apps/wiki Playwright suite..."
+pnpm --filter diffwiki-app test:e2e

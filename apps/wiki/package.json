@@ -6,6 +6,7 @@
   },
   "files": [
     "dist",
+    "dist-static",
     "bin"
   ],
   "bin": {
@@ -15,6 +16,9 @@
     "dev": "vite dev --port 3000",
     "dev:e2e": "vite dev --port 3100",
     "build": "vite build",
+    "build:static": "vite build --outDir dist-static",
+    "export": "node bin/export.mjs",
+    "serve:static-e2e": "node tests/e2e/seed-fixture.mjs && node bin/export.mjs --out dist-site-e2e --base / && node bin/serve-static.mjs dist-site-e2e --port 5055",
     "preview": "vite preview",
     "start": "node bin/wiki-server.mjs",
     "check": "tsc --noEmit",

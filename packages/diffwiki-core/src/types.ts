@@ -1,11 +1,17 @@
-export type CollectionType = 'global' | 'repo';
+export type CollectionType = 'global' | 'repo' | 'external';
 
 export interface CollectionEntry {
   name: string;
   type: CollectionType;
-  /** Absolute path to the collection's directory. */
+  /** Absolute path to the collection's content directory. */
   path: string;
   createdAt: string;
+  /** External only: stable git repo id (see `repoId`). Identity + dedupe key. */
+  id?: string;
+  /** External only: absolute repo root (branch/behind + open-at-root). */
+  repoRoot?: string;
+  /** External only: content dir relative to `repoRoot` (default "docs"). */
+  docsDir?: string;
 }
 
 export interface Registry {
@@ -147,3 +153,58 @@ export interface SearchProvider {
   /** Check plugin health and readiness. */
   health(collections: CollectionEntry[]): Promise<PluginHealth>;
 }
+
+// ── Site view types (consumed by the wiki app + static exporter) ─────────────
+
+export interface NodeMeta {
+  branch?: string;
+  behind?: number;
+}
+
+export interface TreeNode {
+  name: string;
+  title?: string;
+  path?: string;
+  children?: TreeNode[];
+  /** Set only on top-level collection rows: git branch/behind badge data. */
+  meta?: NodeMeta;
+}
+
+export interface CollectionInfo {
+  name: string;
+  type: CollectionType;
+  path: string;
+  branch?: string;
+  behind?: number;
+}
+
+export interface CollectionTree {
+  collection: CollectionInfo;
+  nodes: TreeNode[];
+}
+
+export interface TocItem {
+  slug: string;
+  text: string;
+  depth: number;
+}
+
+export interface DocData {
+  coll: string;
+  slug: string;
+  title: string;
+  tags: string[];
+  html: string;
+  toc: TocItem[];
+  path: string;
+}
+
+export interface ListingEntry {
+  name: string;
+  title: string;
+  path: string;
+  isDir: boolean;
+}
+
+export type PageData =
+  ({ kind: 'doc' } & DocData) | { kind: 'listing'; coll: string; slug: string; title: string; entries: ListingEntry[] };

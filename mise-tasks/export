@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+#MISE description="Build and export the static diffwiki site"
+set -euo pipefail
+source "${MISE_PROJECT_ROOT:-$PWD}/mise-tasks/utils"
+cd "${MISE_PROJECT_ROOT:-$PWD}"
+
+OUT="${1:-dist-site}"
+BASE="${2:-/}"
+
+log_info "Building static bundle (base=$BASE)"
+DIFFWIKI_BASE="$BASE" VITE_DIFFWIKI_STATIC=1 pnpm --filter diffwiki-app exec vite build --outDir dist-static
+
+log_info "Prerendering static site to $OUT"
+DIFFWIKI_STATIC=1 node apps/wiki/bin/export.mjs --out "$OUT" --base "$BASE"
+
+log_info "Done: $OUT"
