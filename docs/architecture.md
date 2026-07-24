@@ -115,14 +115,18 @@ frontmatter title) → `rehypeMarkMermaid` (turns ```mermaid fences into `<pre c
 → `rehypeRewriteLinks` (rewrites relative inter-page markdown links to in-app route paths
 `/{coll}/{slug}`, resolved against the article's folder — a folder-index source page resolves
 against its own folder — with `.md`/`.mdx` stripped and a trailing `index`/`readme` dropped;
-`#hash`/`?query` preserved, collection-escaping/absolute/anchor links untouched)
+`#hash`/`?query` preserved, collection-escaping/absolute/anchor links untouched. The deploy
+base (`ctx.base`, from `DIFFWIKI_BASE` — set by the exporter, empty on the root-served live
+server) is baked into each href so the raw anchor resolves under a non-root basepath)
 → `@shikijs/rehype` (dual `github-light`/`github-dark` highlighting, `defaultColor:false`)
 → `rehype-stringify`. `readPage` returns that `html` string; the client `<ArticleBody>`
 mounts it directly via `dangerouslySetInnerHTML` — **no `run()`/`eval`**, so article prose
 and code render under a strict CSP. (The content is the user's own trusted local files.)
-The client `<ArticleBody>` also intercepts clicks on the rewritten internal links and routes
-them through the router (client-side navigation, basepath-aware); self-referential
-`#fragment` links scroll in-page instead of navigating.
+In-content links need **no client JS**: because the base is baked into the absolute href,
+a plain `<a>` navigates correctly (a full page load, as on any static docs site), and a
+same-page `#fragment` link matches `location` exactly so the browser scrolls natively.
+(Nav-tree and breadcrumb links, by contrast, are base-agnostic React `<Link>`s — the router
+applies the basepath and navigates client-side.)
 
 ### Code Blocks and Mermaid
 

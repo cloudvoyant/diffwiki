@@ -81,6 +81,9 @@ export async function resolvePage(coll: string, slug: string): Promise<PageData 
       coll: art.coll,
       slug: art.slug,
       isIndex: art.isIndex,
+      // Static export sets DIFFWIKI_BASE to the deploy base (e.g. "/my-repo/") so
+      // raw-HTML article links are baked with it; unset (live server at root) → "".
+      base: process.env.DIFFWIKI_BASE,
     });
     const { created, updated } = await fileTimestamps(art.path);
     return {

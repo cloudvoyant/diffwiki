@@ -39,6 +39,9 @@ const filterGlobs = splitGlobs(flag('--filter', ''));
 const excludeGlobs = splitGlobs(flag('--exclude', ''));
 
 process.env.DIFFWIKI_STATIC = '1';
+// resolvePage bakes this base into raw-HTML article links so plain-anchor
+// navigation resolves under a non-root deploy base (GitHub-Pages sub-path).
+process.env.DIFFWIKI_BASE = base;
 
 const pkgRoot = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
 // The prebuilt Vite bundle to prerender against. Defaults to the package's
