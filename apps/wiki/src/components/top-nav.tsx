@@ -38,6 +38,18 @@ function buildCrumbs(tree: CollectionTree[], pathname: string): Crumb[] {
   return [{ label: collName, coll: collName }, ...chain.map((n) => ({ label: n.title ?? n.name, path: n.path }))];
 }
 
+/**
+ * The `_splat` for a crumb's route link — its path minus the leading "/{coll}/".
+ * The collection crumb → "". A crumb without a path is not a link → undefined.
+ * Stripped with literal string ops (never a RegExp): collName is user-supplied
+ * and may contain regex metacharacters.
+ */
+function crumbSplat(c: Crumb, prefix: string): string | undefined {
+  if (c.coll) return '';
+  if (!c.path) return undefined;
+  return c.path.startsWith(prefix) ? c.path.slice(prefix.length) : c.path.replace(/^\//, '');
+}
+
 function Breadcrumbs({ tree }: { tree: CollectionTree[] }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const crumbs = buildCrumbs(tree, pathname);
@@ -53,19 +65,7 @@ function Breadcrumbs({ tree }: { tree: CollectionTree[] }) {
     >
       {crumbs.map((c, i) => {
         const isLast = i === crumbs.length - 1;
-        // Collection crumb → splat "". Intermediate crumb with a path → the path
-        // after the collection segment. Others render as plain text.
-        // Strip the "/{coll}/" prefix by literal string ops — collName is
-        // user-supplied and may contain regex metacharacters, so never build a
-        // RegExp from it.
-        const prefix = `/${collName}/`;
-        const splat = c.coll
-          ? ''
-          : c.path
-            ? c.path.startsWith(prefix)
-              ? c.path.slice(prefix.length)
-              : c.path.replace(/^\//, '')
-            : undefined;
+        const splat = crumbSplat(c, `/${collName}/`);
         const isLink = !isLast && splat !== undefined;
         return (
           <Fragment key={`${i}-${c.label}`}>

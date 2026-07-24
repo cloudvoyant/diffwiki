@@ -35,7 +35,15 @@ export function ArticleBody({ html }: { html: string }) {
       // A self-referential link to the current page (same path, differing only by
       // #fragment) should scroll in-page, not trigger a full router navigation.
       const [linkPath, linkHash] = href.split('#');
-      if (linkHash !== undefined && linkPath === window.location.pathname) {
+      // Rewritten hrefs are base-agnostic ("/{coll}/{slug}"), but
+      // location.pathname carries the configured basepath (router.basepath /
+      // BASE_URL, e.g. "/my-repo/" on static export). Strip it before comparing,
+      // and compare only the path portion (drop any "?query") so query-only
+      // same-page links also scroll rather than navigate.
+      const base = router.basepath?.replace(/\/$/, '') ?? '';
+      const rawPath = window.location.pathname;
+      const currentPath = base && rawPath.startsWith(base) ? rawPath.slice(base.length) || '/' : rawPath;
+      if (linkHash !== undefined && linkPath.split('?')[0] === currentPath) {
         event.preventDefault();
         const el = linkHash ? document.getElementById(decodeURIComponent(linkHash)) : null;
         if (el) el.scrollIntoView();
