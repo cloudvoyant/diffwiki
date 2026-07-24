@@ -1,3 +1,10 @@
+## [0.6.1](https://github.com/cloudvoyant/diffwiki/compare/v0.6.0...v0.6.1) (2026-07-24)
+
+
+### Bug Fixes
+
+* relative wiki links, clickable breadcrumbs, git-sourced timestamps ([95a6bd5](https://github.com/cloudvoyant/diffwiki/commit/95a6bd520fc590b4c4fa278a0b34d120a3055648))
+
 # [0.6.0](https://github.com/cloudvoyant/diffwiki/compare/v0.5.0...v0.6.0) (2026-07-23)
 
 
