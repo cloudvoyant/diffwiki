@@ -45,9 +45,6 @@ function isNonRelativeHref(href: string): boolean {
  * root, or that are absolute / protocol / pure-anchor, are left unchanged.
  */
 function rehypeRewriteLinks(ctx: RenderContext) {
-  // A folder-index page (`guide/index.md`, slug "guide") resolves relative links
-  // against its own folder ("guide"); a leaf page (`guide.md`, slug "guide")
-  // resolves against its parent (dirname -> ".").
   const slugDir = ctx.isIndex ? ctx.slug || '.' : path.posix.dirname(ctx.slug || '.');
   return (tree: Root) => {
     visit(tree, 'element', (node: Element) => {
@@ -55,19 +52,17 @@ function rehypeRewriteLinks(ctx: RenderContext) {
       const raw = node.properties?.href;
       if (typeof raw !== 'string' || isNonRelativeHref(raw)) return;
 
-      // Split off a trailing #hash or ?query so it survives the rewrite.
+      // Split off a trailing #hash/?query so it survives the rewrite.
       const suffixMatch = /[#?].*$/.exec(raw);
       const suffix = suffixMatch ? suffixMatch[0] : '';
       const pathPart = suffix ? raw.slice(0, raw.length - suffix.length) : raw;
-      if (pathPart === '') return; // bare "#frag" already handled, but be safe
+      if (pathPart === '') return;
 
-      // Resolve relative to the article's directory, keeping it POSIX.
       const joined = path.posix.join(slugDir === '.' ? '' : slugDir, pathPart);
       const normalized = path.posix.normalize(joined);
-      // Escapes the collection root — can't map to a route; leave as-is.
-      if (normalized.startsWith('..')) return;
+      if (normalized.startsWith('..')) return; // escapes the collection root — can't map to a route
 
-      // Strip extension, then drop a trailing index/readme (folder index page).
+      // Strip extension, drop a trailing index/readme, then trim slashes.
       let resolved = normalized.replace(/\.(mdx?)$/i, '');
       resolved = resolved.replace(/(^|\/)(index|readme)$/i, '$1');
       resolved = resolved.replace(/\/+$/, '').replace(/^\/+/, '');

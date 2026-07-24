@@ -122,7 +122,11 @@ mounts it directly via `dangerouslySetInnerHTML` — **no `run()`/`eval`**, so a
 and code render under a strict CSP. (The content is the user's own trusted local files.)
 The client `<ArticleBody>` also intercepts clicks on the rewritten internal links and routes
 them through the router (client-side navigation, basepath-aware); self-referential
-`#fragment` links scroll in-page instead of navigating.
+`#fragment` links scroll in-page instead of navigating. Because rewritten hrefs are
+base-agnostic (`/{coll}/{slug}`) while `location.pathname` carries the configured basepath
+(`router.basepath`, e.g. `/my-repo/` on a subpath static export), the same-page check strips
+the basepath before comparing, and the in-page `history.replaceState` re-adds it so the URL
+bar keeps a reloadable/shareable path.
 
 ### Code Blocks and Mermaid
 

@@ -8,6 +8,10 @@ import { useRouter } from '@tanstack/react-router';
  * enhances it: a copy button per code block, and mermaid rendering for
  * `pre.mermaid` blocks (mermaid itself still uses eval, so diagrams are the one
  * piece that a strict CSP can block — code and prose are unaffected).
+ *
+ * The effect also intercepts clicks on internal in-content links (`/coll/slug…`)
+ * and routes them through the router for client-side, basepath-aware navigation;
+ * same-page `#fragment` links scroll in place instead of navigating.
  */
 export function ArticleBody({ html }: { html: string }) {
   const ref = useRef<HTMLElement>(null);
@@ -19,8 +23,6 @@ export function ArticleBody({ html }: { html: string }) {
 
     addCopyButtons(root);
 
-    // Route internal in-content links through the router so they apply the
-    // configured basepath and navigate client-side instead of reloading.
     const onClick = (event: MouseEvent) => {
       if (event.defaultPrevented || event.button !== 0) return;
       if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
@@ -29,26 +31,19 @@ export function ArticleBody({ html }: { html: string }) {
       if (!anchor) return;
       if (anchor.target || anchor.hasAttribute('download') || anchor.getAttribute('rel') === 'external') return;
       const href = anchor.getAttribute('href');
-      // Only internal route paths ("/coll/slug…"); leave anchors, external, and
-      // protocol-relative ("//host") links to native handling.
       if (!href || !href.startsWith('/') || href.startsWith('//')) return;
-      // A self-referential link to the current page (same path, differing only by
-      // #fragment) should scroll in-page, not trigger a full router navigation.
       const [linkPath, linkHash] = href.split('#');
-      // Rewritten hrefs are base-agnostic ("/{coll}/{slug}"), but
-      // location.pathname carries the configured basepath (router.basepath /
-      // BASE_URL, e.g. "/my-repo/" on static export). Strip it before comparing,
-      // and compare only the path portion (drop any "?query") so query-only
-      // same-page links also scroll rather than navigate.
+      // Rewritten hrefs are base-agnostic; location.pathname carries the basepath — strip it to compare.
       const base = router.basepath?.replace(/\/$/, '') ?? '';
       const rawPath = window.location.pathname;
       const currentPath = base && rawPath.startsWith(base) ? rawPath.slice(base.length) || '/' : rawPath;
       if (linkHash !== undefined && linkPath.split('?')[0] === currentPath) {
+        // Same-page #fragment: scroll in place, keeping the basepath in the URL bar.
         event.preventDefault();
         const el = linkHash ? document.getElementById(decodeURIComponent(linkHash)) : null;
         if (el) el.scrollIntoView();
         else window.scrollTo({ top: 0 });
-        history.replaceState(null, '', href);
+        history.replaceState(null, '', `${base}${href}`);
         return;
       }
       event.preventDefault();
@@ -63,8 +58,7 @@ export function ArticleBody({ html }: { html: string }) {
     };
     paint();
 
-    // Re-render mermaid when the .dark class toggles on <html>. The observer is
-    // already filtered to the `class` attribute, so any record means repaint.
+    // Re-render mermaid when the .dark class toggles on <html>.
     const observer = new MutationObserver(() => paint());
     observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
 
@@ -136,8 +130,7 @@ let mermaidSeq = 0;
  *  imported so it never touches the SSR/initial bundle. `isCancelled` lets an
  *  unmount/navigation abort mid-flight so we don't mutate a detached tree. */
 async function renderMermaid(root: HTMLElement, dark: boolean, isCancelled: () => boolean): Promise<void> {
-  // First pass: raw `pre.mermaid`. Subsequent passes: already-rendered wrappers
-  // that carry their source in `data-mermaid-src`.
+  // Fresh: raw `pre.mermaid`. Existing: rendered wrappers carrying source in `data-mermaid-src`.
   const fresh = [...root.querySelectorAll<HTMLElement>('pre.mermaid')].map((el) => ({
     el,
     src: el.textContent ?? '',
