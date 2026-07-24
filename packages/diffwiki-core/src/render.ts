@@ -25,16 +25,6 @@ export interface RenderContext {
    * against the folder itself, not its parent. Defaults to false (leaf page).
    */
   isIndex?: boolean;
-  /**
-   * Deploy base path (e.g. `/my-repo/`) to prepend to rewritten in-content link
-   * hrefs. Defaults to `` (root). The live server serves at root, so no prefix
-   * is needed; a static export under a sub-path (GitHub-Pages project site) bakes
-   * its base here so plain-anchor navigation resolves. Nav/breadcrumb links are
-   * base-agnostic and get the basepath from the router at runtime — but article
-   * body links live in raw HTML with no router, so the base is baked at render
-   * time instead.
-   */
-  base?: string;
 }
 
 /** True for hrefs that must pass through untouched: empty, root-absolute, pure
@@ -53,16 +43,12 @@ function isNonRelativeHref(href: string): boolean {
  * trailing `index`/`readme` segment dropped (folder index → folder route).
  * Any `#hash`/`?query` suffix is preserved. Hrefs that escape the collection
  * root, or that are absolute / protocol / pure-anchor, are left unchanged.
- * The configured deploy base (`ctx.base`) is prepended so the raw-HTML anchor
- * navigates correctly under a non-root basepath without any client-side JS.
  */
 function rehypeRewriteLinks(ctx: RenderContext) {
   // A folder-index page (`guide/index.md`, slug "guide") resolves relative links
   // against its own folder ("guide"); a leaf page (`guide.md`, slug "guide")
   // resolves against its parent (dirname -> ".").
   const slugDir = ctx.isIndex ? ctx.slug || '.' : path.posix.dirname(ctx.slug || '.');
-  // Deploy base prefix to bake into hrefs (e.g. "/my-repo"). "" / "/" → no prefix.
-  const basePrefix = ctx.base && ctx.base !== '/' ? `/${ctx.base.replace(/^\/+|\/+$/g, '')}` : '';
   return (tree: Root) => {
     visit(tree, 'element', (node: Element) => {
       if (node.tagName !== 'a') return;
@@ -88,7 +74,7 @@ function rehypeRewriteLinks(ctx: RenderContext) {
 
       node.properties = {
         ...node.properties,
-        href: `${basePrefix}/${ctx.coll}${resolved ? `/${resolved}` : ''}${suffix}`,
+        href: `/${ctx.coll}${resolved ? `/${resolved}` : ''}${suffix}`,
       };
     });
   };

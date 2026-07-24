@@ -64,25 +64,4 @@ describe('renderArticle link rewriting', () => {
     const { html } = await renderArticle('[c](../c.md)', indexCtx('a/b'));
     expect(hrefs(html)).toEqual(['/docs/a/c']);
   });
-
-  it('bakes a non-root deploy base into rewritten links', async () => {
-    // A static export under "/my-repo/" needs the base baked so plain-anchor
-    // navigation resolves (no client-side router to apply it).
-    const { html } = await renderArticle('[s](./setup.md#install)', {
-      coll: 'docs',
-      slug: 'intro',
-      base: '/my-repo/',
-    });
-    expect(hrefs(html)).toEqual(['/my-repo/docs/setup#install']);
-  });
-
-  it('normalizes a base given without surrounding slashes', async () => {
-    const { html } = await renderArticle('[s](./setup.md)', { coll: 'docs', slug: 'intro', base: 'my-repo' });
-    expect(hrefs(html)).toEqual(['/my-repo/docs/setup']);
-  });
-
-  it('treats a root base ("/") as no prefix', async () => {
-    const { html } = await renderArticle('[s](./setup.md)', { coll: 'docs', slug: 'intro', base: '/' });
-    expect(hrefs(html)).toEqual(['/docs/setup']);
-  });
 });

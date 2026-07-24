@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { useRouter } from '@tanstack/react-router';
 
 /**
  * Renders an article whose body was turned into Shiki-highlighted HTML on the
@@ -7,20 +8,53 @@ import { useEffect, useRef } from 'react';
  * enhances it: a copy button per code block, and mermaid rendering for
  * `pre.mermaid` blocks (mermaid itself still uses eval, so diagrams are the one
  * piece that a strict CSP can block — code and prose are unaffected).
- *
- * In-content links need no client JS: `renderArticle` rewrites relative links to
- * absolute route paths with the deploy base already baked in, so a plain `<a>`
- * navigates correctly (a full page load, as on any static docs site). Same-page
- * `#fragment` links match `location` exactly and scroll natively.
  */
 export function ArticleBody({ html }: { html: string }) {
   const ref = useRef<HTMLElement>(null);
+  const router = useRouter();
 
   useEffect(() => {
     const root = ref.current;
     if (!root) return;
 
     addCopyButtons(root);
+
+    // Route internal in-content links through the router so they apply the
+    // configured basepath and navigate client-side instead of reloading.
+    const onClick = (event: MouseEvent) => {
+      if (event.defaultPrevented || event.button !== 0) return;
+      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      const target = event.target as HTMLElement | null;
+      const anchor = target?.closest('a');
+      if (!anchor) return;
+      if (anchor.target || anchor.hasAttribute('download') || anchor.getAttribute('rel') === 'external') return;
+      const href = anchor.getAttribute('href');
+      // Only internal route paths ("/coll/slug…"); leave anchors, external, and
+      // protocol-relative ("//host") links to native handling.
+      if (!href || !href.startsWith('/') || href.startsWith('//')) return;
+      // A self-referential link to the current page (same path, differing only by
+      // #fragment) should scroll in-page, not trigger a full router navigation.
+      const [linkPath, linkHash] = href.split('#');
+      // Rewritten hrefs are base-agnostic ("/{coll}/{slug}"), but
+      // location.pathname carries the configured basepath (router.basepath /
+      // BASE_URL, e.g. "/my-repo/" on static export). Strip it before comparing,
+      // and compare only the path portion (drop any "?query") so query-only
+      // same-page links also scroll rather than navigate.
+      const base = router.basepath?.replace(/\/$/, '') ?? '';
+      const rawPath = window.location.pathname;
+      const currentPath = base && rawPath.startsWith(base) ? rawPath.slice(base.length) || '/' : rawPath;
+      if (linkHash !== undefined && linkPath.split('?')[0] === currentPath) {
+        event.preventDefault();
+        const el = linkHash ? document.getElementById(decodeURIComponent(linkHash)) : null;
+        if (el) el.scrollIntoView();
+        else window.scrollTo({ top: 0 });
+        history.replaceState(null, '', href);
+        return;
+      }
+      event.preventDefault();
+      void router.navigate({ to: href });
+    };
+    root.addEventListener('click', onClick, true);
 
     let cancelled = false;
     const isCancelled = () => cancelled;
@@ -36,9 +70,10 @@ export function ArticleBody({ html }: { html: string }) {
 
     return () => {
       cancelled = true;
+      root.removeEventListener('click', onClick, true);
       observer.disconnect();
     };
-  }, [html]);
+  }, [html, router]);
 
   return (
     <article ref={ref} className="prose dark:prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: html }} />
