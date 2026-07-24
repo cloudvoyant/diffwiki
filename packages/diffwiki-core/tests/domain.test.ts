@@ -93,17 +93,21 @@ describe('collections & articles', () => {
     await expect(removeArticle('notes:hello-world')).rejects.toBeInstanceOf(ArticleNotFoundError);
   });
 
-  it('preserves the created timestamp across body and tag edits', async () => {
+  it('never writes created/updated frontmatter on create, body, or tag edits', async () => {
     await createCollection('notes');
     const article = await createArticle({ target: 'notes:Timestamped', tags: ['a'], body: '# x' });
-    const created = parseArticle(await fs.readFile(article.path, 'utf8')).created;
-    expect(created).toBeTruthy();
+    const noTimestamps = async () => {
+      const raw = await fs.readFile(article.path, 'utf8');
+      expect(raw).not.toMatch(/^created:/m);
+      expect(raw).not.toMatch(/^updated:/m);
+    };
+    await noTimestamps();
 
     await updateArticleBody('notes:timestamped', '# x\n\nedited');
-    expect(parseArticle(await fs.readFile(article.path, 'utf8')).created).toBe(created);
+    await noTimestamps();
 
     await addTags('notes:timestamped', ['b']);
-    expect(parseArticle(await fs.readFile(article.path, 'utf8')).created).toBe(created);
+    await noTimestamps();
   });
 
   it('resolves title-based lookups the same way add slugifies them', async () => {

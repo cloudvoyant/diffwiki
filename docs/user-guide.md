@@ -203,7 +203,7 @@ The top bar holds a stateful sidebar toggle and breadcrumbs on the left, and the
 - **Light/Dark toggle** — switches `.dark` on `<html>`, persisted to `localStorage`.
 - **Theme picker** — choose from 52 built-in diffbook themes. The
   selection is persisted to `localStorage` as `diffwiki:theme`.
-- **Breadcrumbs** — the current collection → folder → page trail; the collection crumb links back to its index.
+- **Breadcrumbs** — the current collection → folder → page trail; every intermediate crumb (the collection and each folder) is a link to that level's index, while the current page is plain text.
 
 ### Left Navigation
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseArticle } from '../src/frontmatter';
+import { parseArticle, serializeArticle } from '../src/frontmatter';
 
 describe('parseArticle', () => {
   it('parses well-formed frontmatter normally', () => {
@@ -49,5 +49,19 @@ describe('parseArticle', () => {
     expect(result.title).toBe('');
     expect(result.tags).toEqual([]);
     expect(result.body).toBe('Body here.\n');
+  });
+});
+
+describe('serializeArticle', () => {
+  it('writes only title and tags — never created/updated', () => {
+    const out = serializeArticle({ title: 'Hello', tags: ['a', 'b'], body: '# Body\n' });
+    expect(out).toContain('title: Hello');
+    expect(out).not.toMatch(/^created:/m);
+    expect(out).not.toMatch(/^updated:/m);
+    // Round-trips through the parser.
+    const back = parseArticle(out);
+    expect(back.title).toBe('Hello');
+    expect(back.tags).toEqual(['a', 'b']);
+    expect(back.body).toBe('# Body\n');
   });
 });

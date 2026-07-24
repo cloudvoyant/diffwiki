@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { useRouter } from '@tanstack/react-router';
 
 /**
  * Renders an article whose body was turned into Shiki-highlighted HTML on the
@@ -7,15 +8,48 @@ import { useEffect, useRef } from 'react';
  * enhances it: a copy button per code block, and mermaid rendering for
  * `pre.mermaid` blocks (mermaid itself still uses eval, so diagrams are the one
  * piece that a strict CSP can block — code and prose are unaffected).
+ *
+ * The effect also intercepts clicks on internal in-content links (`/coll/slug…`)
+ * and routes them through the router for client-side, basepath-aware navigation;
+ * same-page `#fragment` links scroll in place instead of navigating.
  */
 export function ArticleBody({ html }: { html: string }) {
   const ref = useRef<HTMLElement>(null);
+  const router = useRouter();
 
   useEffect(() => {
     const root = ref.current;
     if (!root) return;
 
     addCopyButtons(root);
+
+    const onClick = (event: MouseEvent) => {
+      if (event.defaultPrevented || event.button !== 0) return;
+      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      const target = event.target as HTMLElement | null;
+      const anchor = target?.closest('a');
+      if (!anchor) return;
+      if (anchor.target || anchor.hasAttribute('download') || anchor.getAttribute('rel') === 'external') return;
+      const href = anchor.getAttribute('href');
+      if (!href || !href.startsWith('/') || href.startsWith('//')) return;
+      const [linkPath, linkHash] = href.split('#');
+      // Rewritten hrefs are base-agnostic; location.pathname carries the basepath — strip it to compare.
+      const base = router.basepath?.replace(/\/$/, '') ?? '';
+      const rawPath = window.location.pathname;
+      const currentPath = base && rawPath.startsWith(base) ? rawPath.slice(base.length) || '/' : rawPath;
+      if (linkHash !== undefined && linkPath.split('?')[0] === currentPath) {
+        // Same-page #fragment: scroll in place, keeping the basepath in the URL bar.
+        event.preventDefault();
+        const el = linkHash ? document.getElementById(decodeURIComponent(linkHash)) : null;
+        if (el) el.scrollIntoView();
+        else window.scrollTo({ top: 0 });
+        history.replaceState(null, '', `${base}${href}`);
+        return;
+      }
+      event.preventDefault();
+      void router.navigate({ to: href });
+    };
+    root.addEventListener('click', onClick, true);
 
     let cancelled = false;
     const isCancelled = () => cancelled;
@@ -24,16 +58,16 @@ export function ArticleBody({ html }: { html: string }) {
     };
     paint();
 
-    // Re-render mermaid when the .dark class toggles on <html>. The observer is
-    // already filtered to the `class` attribute, so any record means repaint.
+    // Re-render mermaid when the .dark class toggles on <html>.
     const observer = new MutationObserver(() => paint());
     observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
 
     return () => {
       cancelled = true;
+      root.removeEventListener('click', onClick, true);
       observer.disconnect();
     };
-  }, [html]);
+  }, [html, router]);
 
   return (
     <article ref={ref} className="prose dark:prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: html }} />
@@ -96,8 +130,7 @@ let mermaidSeq = 0;
  *  imported so it never touches the SSR/initial bundle. `isCancelled` lets an
  *  unmount/navigation abort mid-flight so we don't mutate a detached tree. */
 async function renderMermaid(root: HTMLElement, dark: boolean, isCancelled: () => boolean): Promise<void> {
-  // First pass: raw `pre.mermaid`. Subsequent passes: already-rendered wrappers
-  // that carry their source in `data-mermaid-src`.
+  // Fresh: raw `pre.mermaid`. Existing: rendered wrappers carrying source in `data-mermaid-src`.
   const fresh = [...root.querySelectorAll<HTMLElement>('pre.mermaid')].map((el) => ({
     el,
     src: el.textContent ?? '',
