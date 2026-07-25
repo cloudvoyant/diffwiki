@@ -1,3 +1,10 @@
+# [0.7.0](https://github.com/cloudvoyant/diffwiki/compare/v0.6.1...v0.7.0) (2026-07-25)
+
+
+### Features
+
+* obsidian-style knowledge graph in wiki sidebar ([68800ff](https://github.com/cloudvoyant/diffwiki/commit/68800ff570e8eb9db4d7cc01ed99c3c279142c04))
+
 ## [0.6.1](https://github.com/cloudvoyant/diffwiki/compare/v0.6.0...v0.6.1) (2026-07-24)
 
 
