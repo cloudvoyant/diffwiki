@@ -3,6 +3,11 @@
 import type { GraphNode, GraphEdge, LinkGraph, LocalGraph } from 'diffwiki-core';
 export type { GraphNode, GraphEdge, LinkGraph, LocalGraph };
 
+/** Audience axis — who an article is for (mirrors diffwiki-core). Private is never published. */
+export type Audience = 'public' | 'private';
+/** Lifecycle axis — readiness (mirrors diffwiki-core). Draft is not yet published. */
+export type PublishStatus = 'draft' | 'published';
+
 export interface NodeMeta {
   branch?: string;
   behind?: number;
@@ -12,6 +17,10 @@ export interface TreeNode {
   name: string;
   title?: string;
   path?: string;
+  /** Audience; present only when 'private' (drives the sidebar lock). */
+  audience?: Audience;
+  /** Lifecycle status; present only when 'draft' (drives the sidebar DRAFT tag). */
+  status?: PublishStatus;
   children?: TreeNode[];
   /** Set only on top-level collection rows: git branch/behind badge data (omitted in static export). */
   meta?: NodeMeta;
@@ -25,6 +34,10 @@ export interface CollectionInfo {
   branch?: string;
   /** External collections only: commits behind upstream (live builds). */
   behind?: number;
+  /** Collection audience (from its index page); present only when 'private'. */
+  audience?: Audience;
+  /** Collection lifecycle status (from its index page); present only when 'draft'. */
+  status?: PublishStatus;
 }
 
 export interface CollectionTree {
@@ -43,6 +56,10 @@ export interface DocData {
   slug: string;
   title: string;
   tags: string[];
+  /** Audience; present only when 'private'. */
+  audience?: Audience;
+  /** Lifecycle status; present only when 'draft'. */
+  status?: PublishStatus;
   /** Article body rendered server-side to Shiki-highlighted HTML (mounted directly, no eval). */
   html: string;
   /** TOC (h2/h3) extracted server-side during render. */

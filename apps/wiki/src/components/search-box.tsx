@@ -36,7 +36,7 @@ export function SearchBox({ className, placeholder = 'Search…', autoFocus = fa
         autoFocus={autoFocus}
         aria-label="Search"
         className={cn(
-          'w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground shadow-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring',
+          'w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring',
           className,
         )}
       />

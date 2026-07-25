@@ -11,6 +11,8 @@ import { render, screen, cleanup } from '@testing-library/react';
 import { createElement } from 'react';
 import type { TreeNode } from 'diffwiki-core';
 import { GitBadge } from '../../src/components/nav-tree';
+import { AudienceBadge, AudienceIcon } from '../../src/components/audience-badge';
+import { DraftMark } from '../../src/components/draft-mark';
 
 afterEach(cleanup);
 
@@ -74,5 +76,42 @@ describe('TreeNode.meta contract', () => {
   it('allows a node with no meta (static build, no git info)', () => {
     const node: TreeNode = { name: 'notes', title: 'notes', path: '/notes', children: [] };
     expect(node.meta?.branch).toBeUndefined();
+  });
+});
+
+describe('AudienceBadge (page pill — real component)', () => {
+  it('renders a Public pill for public/undefined audience', () => {
+    render(createElement(AudienceBadge, { audience: 'public' }));
+    expect(screen.getByText('Public')).toBeTruthy();
+    cleanup();
+    render(createElement(AudienceBadge, {}));
+    expect(screen.getByText('Public')).toBeTruthy();
+  });
+
+  it('renders a Private pill for private audience', () => {
+    render(createElement(AudienceBadge, { audience: 'private' }));
+    expect(screen.getByText('Private')).toBeTruthy();
+  });
+});
+
+describe('AudienceIcon (sidebar — real component)', () => {
+  it('renders a muted lock for private audience', () => {
+    render(createElement(AudienceIcon, { audience: 'private' }));
+    expect(screen.getByLabelText('Private')).toBeTruthy();
+  });
+
+  it('renders nothing for public/undefined audience', () => {
+    const { container } = render(createElement(AudienceIcon, { audience: 'public' }));
+    expect(container.querySelector('svg')).toBeNull();
+    cleanup();
+    const { container: c2 } = render(createElement(AudienceIcon, {}));
+    expect(c2.querySelector('svg')).toBeNull();
+  });
+});
+
+describe('DraftMark (sidebar — real component)', () => {
+  it('renders a "DRAFT" text label', () => {
+    render(createElement(DraftMark, {}));
+    expect(screen.getByText('Draft')).toBeTruthy();
   });
 });

@@ -1,5 +1,5 @@
 import { listCollections } from './collections';
-import { listArticleTree, readArticle } from './browse';
+import { listArticleTree, readArticle, collectionMeta } from './browse';
 import { renderArticle } from './render';
 import { buildLinkGraph, localGraph } from './graph';
 import { collectionGitStatus } from './repo';
@@ -17,17 +17,29 @@ import type {
 
 const isStatic = (): boolean => process.env.DIFFWIKI_STATIC === '1';
 
-/** Map core article nodes to UI nav nodes, assigning each its route path. */
+/** Map core article nodes to UI nav nodes, assigning each its route path.
+ *  In static builds, private (audience) or draft (status) articles are dropped
+ *  entirely (no nav row, and — since routes + per-doc JSON derive from this tree
+ *  — no route/JSON). */
 export function toTreeNodes(coll: string, nodes: ArticleNode[]): TreeNode[] {
-  return nodes.map((n) =>
+  const visible = isStatic() ? nodes.filter((n) => n.audience !== 'private' && n.status !== 'draft') : nodes;
+  return visible.map((n) =>
     n.children
       ? {
           name: n.name,
           title: n.title ?? n.name,
           path: n.slug ? `/${coll}/${n.slug}` : undefined,
+          ...(n.audience ? { audience: n.audience } : {}),
+          ...(n.status ? { status: n.status } : {}),
           children: toTreeNodes(coll, n.children),
         }
-      : { name: n.name, title: n.title ?? n.name, path: `/${coll}/${n.slug}` },
+      : {
+          name: n.name,
+          title: n.title ?? n.name,
+          path: `/${coll}/${n.slug}`,
+          ...(n.audience ? { audience: n.audience } : {}),
+          ...(n.status ? { status: n.status } : {}),
+        },
   );
 }
 
@@ -43,24 +55,45 @@ async function gitInfo(e: CollectionEntry): Promise<{ branch?: string; behind?: 
 
 export async function buildCollections(): Promise<CollectionInfo[]> {
   const entries = await listCollections();
-  return Promise.all(
-    entries.map(async (e): Promise<CollectionInfo> => ({
-      name: e.name,
-      type: e.type,
-      path: e.path,
-      ...(await gitInfo(e)),
-    })),
+  const infos = await Promise.all(
+    entries.map(async (e): Promise<CollectionInfo> => {
+      const { audience, status } = await collectionMeta(e.path);
+      return {
+        name: e.name,
+        type: e.type,
+        path: e.path,
+        ...(await gitInfo(e)),
+        ...(audience ? { audience } : {}),
+        ...(status ? { status } : {}),
+      };
+    }),
   );
+  // A collection marked private (audience) or draft (status) in its index is dropped from static builds.
+  return isStatic() ? infos.filter((c) => c.audience !== 'private' && c.status !== 'draft') : infos;
 }
 
 export async function buildNavTree(): Promise<CollectionTree[]> {
   const entries = await listCollections();
-  return Promise.all(
-    entries.map(async (e): Promise<CollectionTree> => ({
-      collection: { name: e.name, type: e.type, path: e.path, ...(await gitInfo(e)) },
-      nodes: toTreeNodes(e.name, await listArticleTree(e.name)),
-    })),
+  const trees = await Promise.all(
+    entries.map(async (e): Promise<CollectionTree> => {
+      const { audience, status } = await collectionMeta(e.path);
+      return {
+        collection: {
+          name: e.name,
+          type: e.type,
+          path: e.path,
+          ...(await gitInfo(e)),
+          ...(audience ? { audience } : {}),
+          ...(status ? { status } : {}),
+        },
+        nodes: toTreeNodes(e.name, await listArticleTree(e.name)),
+      };
+    }),
   );
+  // Drop private/draft collections entirely from static builds (nav → routes → JSON all derive from here).
+  return isStatic()
+    ? trees.filter((t) => t.collection.audience !== 'private' && t.collection.status !== 'draft')
+    : trees;
 }
 
 function findNode(nodes: ArticleNode[], slug: string): ArticleNode | undefined {
@@ -103,6 +136,8 @@ export async function resolvePage(
       slug: art.slug,
       title: art.title,
       tags: art.tags,
+      ...(art.audience === 'private' ? { audience: art.audience } : {}),
+      ...(art.status === 'draft' ? { status: art.status } : {}),
       html,
       toc,
       path: `/${art.coll}/${art.slug}`,

@@ -49,8 +49,10 @@ function isNonRelativeHref(href: string): boolean {
  * paths `/{coll}/{slug}`. A relative href is resolved against the current
  * article's slug directory, has its `.md`/`.mdx` extension stripped, and a
  * trailing `index`/`readme` segment dropped (folder index → folder route).
- * Any `#hash`/`?query` suffix is preserved. Hrefs that escape the collection
- * root, or that are absolute / protocol / pure-anchor, are left unchanged.
+ * Any `#hash`/`?query` suffix is preserved. A link that escapes the collection
+ * root by exactly one level targets a SIBLING collection (collections live side
+ * by side) and is mapped to `/{other-collection}/{slug}`; deeper escapes, or
+ * absolute / protocol / pure-anchor hrefs, are left unchanged.
  */
 function rehypeRewriteLinks(ctx: RenderContext) {
   const slugDir = ctx.isIndex ? ctx.slug || '.' : path.posix.dirname(ctx.slug || '.');
@@ -68,13 +70,26 @@ function rehypeRewriteLinks(ctx: RenderContext) {
 
       const joined = path.posix.join(slugDir === '.' ? '' : slugDir, pathPart);
       const normalized = path.posix.normalize(joined);
-      if (normalized.startsWith('..')) return; // escapes the collection root — can't map to a route
 
-      // Strip extension, drop a trailing index/readme, then trim slashes.
-      let resolved = normalized.replace(/\.(mdx?)$/i, '');
-      resolved = resolved.replace(/(^|\/)(index|readme)$/i, '$1');
-      resolved = resolved.replace(/\/+$/, '').replace(/^\/+/, '');
+      // Strip .md/.mdx, drop a trailing index/readme, then trim slashes.
+      const toRoute = (p: string) =>
+        p
+          .replace(/\.(mdx?)$/i, '')
+          .replace(/(^|\/)(index|readme)$/i, '$1')
+          .replace(/\/+$/, '')
+          .replace(/^\/+/, '');
 
+      // One level above the collection root → a sibling collection:
+      // `../devtools/qmd/x.md` → `/devtools/qmd/x`. Deeper escapes leave the wiki.
+      if (normalized.startsWith('../')) {
+        const sibling = normalized.slice(3);
+        if (sibling === '' || sibling.startsWith('..')) return; // beyond the sibling-collection level
+        node.properties = { ...node.properties, href: `/${toRoute(sibling)}${suffix}` };
+        return;
+      }
+      if (normalized.startsWith('..')) return; // bare `..` — can't map to a route
+
+      const resolved = toRoute(normalized);
       node.properties = {
         ...node.properties,
         href: `/${ctx.coll}${resolved ? `/${resolved}` : ''}${suffix}`,

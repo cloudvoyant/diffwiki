@@ -60,3 +60,23 @@ test.describe('Content route (/$coll/*path)', () => {
     });
   });
 });
+
+test.describe('article status badge (local serve)', () => {
+  test('a draft article shows a Draft badge above the title', async ({ page }) => {
+    await page.goto('/notes/scratchpad');
+    await expect(page.getByRole('heading', { level: 1, name: /scratchpad wip/i }).first()).toBeVisible();
+    await expect(page.getByText('Draft', { exact: true })).toBeVisible();
+  });
+
+  test('a private article shows a Private badge above the title', async ({ page }) => {
+    await page.goto('/notes/confidential');
+    await expect(page.getByRole('heading', { level: 1, name: /confidential memo/i }).first()).toBeVisible();
+    await expect(page.getByText('Private', { exact: true })).toBeVisible();
+  });
+
+  test('a public article shows a Public badge above the title', async ({ page }) => {
+    await page.goto('/notes/intro');
+    await expect(page.getByRole('heading', { level: 1, name: /introduction to diffwiki/i }).first()).toBeVisible();
+    await expect(page.getByText('Public', { exact: true })).toBeVisible();
+  });
+});

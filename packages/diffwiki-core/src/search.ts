@@ -1,10 +1,12 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { listArticleTree } from './browse';
+import { listArticleTree, collectionMeta } from './browse';
 import { findCollection, listCollections } from './collections';
 import { parseArticle } from './frontmatter';
 import { tokenize, type SearchDoc } from './bm25';
 import type { ArticleNode } from './types';
+
+const isStatic = (): boolean => process.env.DIFFWIKI_STATIC === '1';
 
 /** Read a leaf article's tags + body from frontmatter. Falls back gracefully. */
 async function readArticleParts(collDir: string, slug: string): Promise<{ tags: string[]; body: string }> {
@@ -21,6 +23,9 @@ async function readArticleParts(collDir: string, slug: string): Promise<{ tags: 
 
 async function flatten(coll: string, collDir: string, nodes: ArticleNode[], out: SearchDoc[]): Promise<void> {
   for (const n of nodes) {
+    // Static export must not index private/draft articles, nor anything inside a
+    // private/draft folder (the whole subtree is unpublished).
+    if (isStatic() && (n.audience === 'private' || n.status === 'draft')) continue;
     if (n.slug && !n.children) {
       // Leaf article — read its real tags + body and tokenize every ranked field.
       const title = n.title ?? n.name;
@@ -56,6 +61,11 @@ export async function buildSearchIndex(collection?: string): Promise<SearchDoc[]
     try {
       const collEntry = await findCollection(e.name);
       const collDir = path.resolve(collEntry?.path ?? e.path);
+      // Static export skips whole private/draft collections (marked via their index page).
+      if (isStatic()) {
+        const cm = await collectionMeta(collDir);
+        if (cm.audience === 'private' || cm.status === 'draft') continue;
+      }
       await flatten(e.name, collDir, await listArticleTree(e.name), out);
     } catch {
       // Skip collections whose content dir is missing/unreadable.

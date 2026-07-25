@@ -42,7 +42,29 @@ describe('renderArticle link rewriting', () => {
     expect(hrefs(html)).toEqual(['#top', 'https://example.com', '/already/abs', 'mailto:x@y.z']);
   });
 
-  it('leaves a link that escapes the collection root unchanged', async () => {
+  it('maps a one-level escape to a sibling collection route (from a root article)', async () => {
+    const { html } = await renderArticle('[x](../other/qmd/x.md)', ctx('intro'));
+    expect(hrefs(html)).toEqual(['/other/qmd/x']);
+  });
+
+  it('maps a sibling-collection link from a folder-index page', async () => {
+    // `diffwiki/index.md` (route slug "diffwiki") linking `../../devtools/qmd/x.md`
+    // normalizes to one level above the collection root → the devtools collection.
+    const { html } = await renderArticle('[x](../../devtools/qmd/x.md)', indexCtx('diffwiki'));
+    expect(hrefs(html)).toEqual(['/devtools/qmd/x']);
+  });
+
+  it('drops a trailing index/readme on a sibling-collection link', async () => {
+    const { html } = await renderArticle('[c](../devtools/qmd/index.md) [r](../devtools/)', ctx('intro'));
+    expect(hrefs(html)).toEqual(['/devtools/qmd', '/devtools']);
+  });
+
+  it('preserves a #hash on a sibling-collection link', async () => {
+    const { html } = await renderArticle('[x](../devtools/qmd/x.md#run)', ctx('intro'));
+    expect(hrefs(html)).toEqual(['/devtools/qmd/x#run']);
+  });
+
+  it('leaves a link that escapes beyond the sibling level unchanged', async () => {
     const { html } = await renderArticle('[up](../../outside.md)', ctx('intro'));
     expect(hrefs(html)).toEqual(['../../outside.md']);
   });

@@ -1,3 +1,8 @@
+/** Audience axis — who an article is for. Private is never published. Missing/invalid → 'public'. */
+export type Audience = 'public' | 'private';
+/** Lifecycle axis — readiness. Draft is not yet published. Missing/invalid → 'published'. */
+export type PublishStatus = 'draft' | 'published';
+
 export type CollectionType = 'global' | 'repo' | 'external';
 
 export interface CollectionEntry {
@@ -49,6 +54,10 @@ export interface ArticleNode {
    * leaves (the article) and on branches (the folder, navigable to its index).
    */
   slug?: string;
+  /** Audience, set only when 'private' (omitted for 'public'). */
+  audience?: Audience;
+  /** Lifecycle status, set only when 'draft' (omitted for 'published'). */
+  status?: PublishStatus;
   /** Branch only: nested nodes. */
   children?: ArticleNode[];
 }
@@ -59,6 +68,10 @@ export interface ArticleContent {
   slug: string;
   title: string;
   tags: string[];
+  /** Audience from frontmatter ('public' when absent). */
+  audience: Audience;
+  /** Lifecycle status from frontmatter ('published' when absent). */
+  status: PublishStatus;
   /** Frontmatter-stripped body (md/mdx). */
   body: string;
   /** Absolute path to the file on disk. */
@@ -172,6 +185,10 @@ export interface TreeNode {
   name: string;
   title?: string;
   path?: string;
+  /** Audience; present only when 'private' (drives the sidebar lock). */
+  audience?: Audience;
+  /** Lifecycle status; present only when 'draft' (drives the sidebar DRAFT tag). */
+  status?: PublishStatus;
   children?: TreeNode[];
   /** Set only on top-level collection rows: git branch/behind badge data. */
   meta?: NodeMeta;
@@ -183,6 +200,10 @@ export interface CollectionInfo {
   path: string;
   branch?: string;
   behind?: number;
+  /** Audience from the collection's root index page; present only when 'private'. */
+  audience?: Audience;
+  /** Lifecycle status from the collection's root index page; present only when 'draft'. */
+  status?: PublishStatus;
 }
 
 export interface CollectionTree {
@@ -201,6 +222,10 @@ export interface DocData {
   slug: string;
   title: string;
   tags: string[];
+  /** Audience; present only when 'private'. */
+  audience?: Audience;
+  /** Lifecycle status; present only when 'draft'. */
+  status?: PublishStatus;
   html: string;
   toc: TocItem[];
   path: string;

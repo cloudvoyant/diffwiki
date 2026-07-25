@@ -1,16 +1,21 @@
 import matter from 'gray-matter';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
+import type { Audience, PublishStatus } from './types';
 
 export interface ParsedArticle {
   title: string;
   tags: string[];
   created?: string;
+  audience: Audience;
+  status: PublishStatus;
   body: string;
 }
 
 export interface SerializableArticle {
   title: string;
   tags: string[];
+  audience?: Audience;
+  status?: PublishStatus;
   body: string;
 }
 
@@ -30,6 +35,16 @@ const YAML_ENGINE = {
 };
 const MATTER_OPTS = { engines: { yaml: YAML_ENGINE } } as const;
 
+/** Coerce a frontmatter `audience` value; anything but 'private' → 'public'. */
+function coerceAudience(value: unknown): Audience {
+  return value === 'private' ? 'private' : 'public';
+}
+
+/** Coerce a frontmatter `status` value; anything but 'draft' → 'published'. */
+function coerceStatus(value: unknown): PublishStatus {
+  return value === 'draft' ? 'draft' : 'published';
+}
+
 /**
  * Best-effort fallback when the YAML engine rejects the frontmatter block
  * (e.g. an unquoted colon in the title). Strips the `---…---` fence via
@@ -41,18 +56,29 @@ function parseFallback(raw: string): ParsedArticle {
   const fenceRe = /^---[ \t]*\n([\s\S]*?)\n---[ \t]*\n/;
   const fenceMatch = fenceRe.exec(raw);
   let title = '';
+  let audience: Audience = 'public';
+  let status: PublishStatus = 'published';
   let body: string;
+  const clean = (s: string) => s.trim().replace(/^["']|["']$/g, '');
   if (fenceMatch) {
     const inner = fenceMatch[1];
     const titleMatch = /^title:\s*(.+)$/m.exec(inner);
     if (titleMatch) {
-      title = titleMatch[1].trim().replace(/^["']|["']$/g, '');
+      title = clean(titleMatch[1]);
+    }
+    const audienceMatch = /^audience:\s*(.+)$/m.exec(inner);
+    if (audienceMatch) {
+      audience = coerceAudience(clean(audienceMatch[1]));
+    }
+    const statusMatch = /^status:\s*(.+)$/m.exec(inner);
+    if (statusMatch) {
+      status = coerceStatus(clean(statusMatch[1]));
     }
     body = raw.slice(fenceMatch[0].length);
   } else {
     body = raw;
   }
-  return { title, tags: [], body: body.replace(/^\n+/, '') };
+  return { title, tags: [], audience, status, body: body.replace(/^\n+/, '') };
 }
 
 export function parseArticle(raw: string): ParsedArticle {
@@ -61,7 +87,9 @@ export function parseArticle(raw: string): ParsedArticle {
     const title = typeof data.title === 'string' ? data.title : '';
     const tags = Array.isArray(data.tags) ? data.tags.map((t) => String(t)) : [];
     const created = typeof data.created === 'string' ? data.created : undefined;
-    return { title, tags, created, body: content.replace(/^\n+/, '') };
+    const audience = coerceAudience(data.audience);
+    const status = coerceStatus(data.status);
+    return { title, tags, created, audience, status, body: content.replace(/^\n+/, '') };
   } catch {
     return parseFallback(raw);
   }
@@ -69,5 +97,8 @@ export function parseArticle(raw: string): ParsedArticle {
 
 export function serializeArticle(article: SerializableArticle): string {
   const front: Record<string, unknown> = { title: article.title, tags: article.tags };
+  // Only non-default axes are written, keeping public/published files clean.
+  if (article.audience === 'private') front.audience = 'private';
+  if (article.status === 'draft') front.status = 'draft';
   return matter.stringify(article.body, front, MATTER_OPTS);
 }
