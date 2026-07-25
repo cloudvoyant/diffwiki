@@ -128,6 +128,19 @@ base-agnostic (`/{coll}/{slug}`) while `location.pathname` carries the configure
 the basepath before comparing, and the in-page `history.replaceState` re-adds it so the URL
 bar keeps a reloadable/shareable path.
 
+### Knowledge Graph
+
+An Obsidian-style link graph sits in the right sidebar (above the TOC) and expands to a
+full-screen overlay. `diffwiki-core`'s `graph.ts` builds the model (`buildLinkGraph` +
+`localGraph`, reusing `renderArticle`'s link resolver), and it flows through the same
+**static/dynamic seam** as the rest of the app (`loadGraph`: server fn `getLinkGraph` live,
+`_data/graph.json` static; per-page sidebar previews via `localGraph` in `resolvePage`, pruned
+to the same included collections on a subset export). Three components render it — `ForceGraph`
+(eval-free d3-force SVG), `GraphOverlay` (the full-screen Radix dialog), and `KnowledgeGraph`
+(the sidebar panel). The full model — link/tag resolution, the Links/Tags view modes,
+subset-export parity, and the renderer — is documented in
+[`architecture/knowledge-graph.md`](architecture/knowledge-graph.md).
+
 ### Code Blocks and Mermaid
 
 Code is highlighted server-side (above), so it needs no client JS to display. `<ArticleBody>`

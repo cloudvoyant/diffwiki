@@ -49,6 +49,32 @@ test.describe('static export — HTTP smoke (search-index + nav-tree)', () => {
     expect(data.title).toBe('Setting Up');
     await ctx.dispose();
   });
+
+  test('_data/graph.json is reachable with nodes + the intro→setup edge', async () => {
+    const ctx = await request.newContext({ baseURL: STATIC_URL });
+    const res = await ctx.get('/_data/graph.json');
+    expect(res.status(), '_data/graph.json must be 200').toBe(200);
+    const g = (await res.json()) as { nodes: { id: string }[]; edges: { source: string; target: string }[] };
+    expect(g.nodes.some((n) => n.id === 'notes/intro')).toBe(true);
+    expect(g.edges.some((e) => e.source === 'notes/intro' && e.target === 'notes/guide/setup')).toBe(true);
+    await ctx.dispose();
+  });
+
+  test('per-doc graph preview only references pages that were emitted (no dangling links)', async () => {
+    // Static/dynamic parity guard: every node id in a page's sidebar graph must have
+    // a corresponding emitted per-doc JSON, so clicking a preview node never 404s.
+    const ctx = await request.newContext({ baseURL: STATIC_URL });
+    const doc = await ctx.get('/_data/doc/notes/intro.json');
+    expect(doc.status()).toBe(200);
+    const data = (await doc.json()) as { graph?: { nodes: { id: string; kind: string }[] } };
+    expect(data.graph, 'intro doc must carry a sidebar graph').toBeDefined();
+    for (const node of data.graph!.nodes) {
+      if (node.kind === 'tag') continue; // tag hubs are not pages — they never navigate/404
+      const emitted = await ctx.get(`/_data/doc/${node.id}.json`);
+      expect(emitted.status(), `preview node ${node.id} must have an emitted page`).toBe(200);
+    }
+    await ctx.dispose();
+  });
 });
 
 test.describe('static export — browser hydration and search', () => {

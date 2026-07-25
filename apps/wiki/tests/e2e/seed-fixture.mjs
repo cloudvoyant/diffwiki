@@ -48,6 +48,8 @@ tags:
 
 Welcome to diffwiki — your local, git-friendly knowledge base.
 
+Start by [setting up](/notes/guide/setup) your first collection.
+
 \`\`\`ts
 import { listCollections } from 'diffwiki-core';
 
@@ -64,14 +66,34 @@ flowchart LR
     'utf8',
   );
 
+  // ── guide/index.md ───────────────────────────────────────────────────────────
+  // A FOLDER INDEX page (served at /notes/guide). Its relative link to `setup`
+  // must resolve inside the guide/ folder, so the knowledge graph shows the link
+  // rather than an empty "no links on this page" neighbourhood.
+  fs.writeFileSync(
+    path.join(guideDir, 'index.md'),
+    `---
+title: Guide
+---
+
+# Guide
+
+Start with the [setup steps](./setup).
+`,
+    'utf8',
+  );
+
   // ── guide/setup.mdx ──────────────────────────────────────────────────────────
-  // A nested file to verify the splat route handles subdirectories.
+  // A nested file to verify the splat route handles subdirectories. Shares the
+  // `getting-started` tag with intro (which also links here), so the knowledge
+  // graph's "shared tags" mode shows a heavier intro↔setup edge (link + tag).
   fs.writeFileSync(
     path.join(guideDir, 'setup.mdx'),
     `---
 title: Setting Up
 tags:
   - setup
+  - getting-started
 ---
 
 # Setting Up
@@ -94,6 +116,7 @@ This nested page renders from plain **markdown**.
 title: diffwiki release notes
 tags:
   - changelog
+  - overview
 ---
 
 # diffwiki release notes

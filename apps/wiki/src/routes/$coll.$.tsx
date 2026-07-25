@@ -2,6 +2,7 @@ import { createFileRoute, notFound } from '@tanstack/react-router';
 import { loadPage } from '../lib/data-source';
 import { ArticleBody } from '../components/article-body';
 import { Toc } from '../components/toc';
+import { KnowledgeGraph } from '../components/knowledge-graph';
 import { DirListing } from '../components/dir-listing';
 import { PageLayout } from '../components/page-layout';
 import { Badge } from '@/components/ui/badge';
@@ -35,7 +36,14 @@ function CollectionDocPage() {
   }
 
   return (
-    <PageLayout aside={<Toc items={page.toc} />}>
+    <PageLayout
+      aside={
+        <>
+          <KnowledgeGraph graph={page.graph} />
+          <Toc items={page.toc} />
+        </>
+      }
+    >
       <h1 className="mb-3 text-3xl font-bold tracking-tight">{page.title}</h1>
 
       {(page.updated || page.created) && (

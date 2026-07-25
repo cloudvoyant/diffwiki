@@ -1,8 +1,9 @@
 import { getNavTree, getCollections } from '../server/collections';
+import { getLinkGraph } from '../server/graph';
 import { readPage } from '../server/doc';
 import { runSearch, getSearchModes, type SearchResponse, type SearchModesResponse } from '../server/search';
 import { rankDocs, type SearchDoc } from 'diffwiki-core/bm25';
-import type { CollectionInfo, CollectionTree, PageData } from './types';
+import type { CollectionInfo, CollectionTree, LinkGraph, PageData } from './types';
 
 const STATIC = import.meta.env.VITE_DIFFWIKI_STATIC === '1';
 const BASE = import.meta.env.BASE_URL; // "/" or "/my-repo/"
@@ -38,6 +39,10 @@ export function loadNavTree(): Promise<CollectionTree[]> {
 
 export function loadCollections(): Promise<CollectionInfo[]> {
   return STATIC ? json<CollectionInfo[]>('collections.json') : getCollections();
+}
+
+export function loadGraph(): Promise<LinkGraph> {
+  return STATIC ? json<LinkGraph>('graph.json') : getLinkGraph();
 }
 
 export function loadPage(coll: string, slug: string): Promise<PageData | null> {
