@@ -86,6 +86,8 @@ tags:
 
 Welcome to **diffwiki** — your local, git-friendly knowledge base.
 
+See the [setup guide](/notes/guide/setup) to get started.
+
 \`\`\`ts
 const x: number = 42;
 \`\`\`
@@ -177,6 +179,29 @@ describe('static export harness — on-disk bundle', () => {
     expect(Array.isArray(nav)).toBe(true);
     const notesColl = nav.find((c) => c.collection.name === 'notes');
     expect(notesColl).toBeDefined();
+  });
+
+  it('emits _data/graph.json with nodes, the intro→setup edge, and tag hubs', async () => {
+    const raw = await fs.readFile(path.join(outDir, '_data', 'graph.json'), 'utf8');
+    const graph: {
+      nodes: { id: string; kind: string }[];
+      edges: { source: string; target: string; kind: string }[];
+    } = JSON.parse(raw);
+    const ids = graph.nodes.map((n) => n.id);
+    expect(ids).toContain('notes/intro');
+    expect(ids).toContain('notes/guide/setup');
+    expect(graph.edges).toContainEqual({ source: 'notes/intro', target: 'notes/guide/setup', kind: 'link' });
+    expect(graph.nodes.find((n) => n.id === 'tag:overview')).toMatchObject({ kind: 'tag' });
+    expect(graph.edges).toContainEqual({ source: 'notes/intro', target: 'tag:overview', kind: 'tag' });
+  });
+
+  it('embeds a local graph with the focus and its neighbour in each per-doc JSON', async () => {
+    const docFile = path.join(outDir, '_data', 'doc', 'notes', 'intro.json');
+    const doc: { graph: { focus: string; nodes: { id: string }[] } } = JSON.parse(await fs.readFile(docFile, 'utf8'));
+    expect(doc.graph.focus).toBe('notes/intro');
+    const ids = doc.graph.nodes.map((n) => n.id);
+    expect(ids).toContain('notes/intro');
+    expect(ids).toContain('notes/guide/setup');
   });
 
   it('emits per-doc JSON for the flat article', async () => {
@@ -336,5 +361,79 @@ describe('static export harness — sub-path base', () => {
       }
     }
     expect(sawBase).toBe(true);
+  });
+});
+
+// ── Subset-export parity variant ─────────────────────────────────────────────────
+// A filtered export (--exclude) must prune each page's sidebar graph preview to the
+// SAME included collections as the overlay graph.json — otherwise clicking a preview
+// neighbour in an excluded collection 404s (its page was never emitted). Reuses the
+// shared base-"/" dist-static, so no extra Vite build.
+
+let subHome: string;
+let subOutDir: string;
+
+beforeAll(async () => {
+  await ensureDistStatic();
+
+  subHome = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'dw-export-sub-')));
+  subOutDir = path.join(subHome, 'dist-sub');
+
+  const collectionsDir = path.join(subHome, 'collections');
+  const notesDir = path.join(collectionsDir, 'notes');
+  const refsDir = path.join(collectionsDir, 'refs');
+  await fs.mkdir(notesDir, { recursive: true });
+  await fs.mkdir(refsDir, { recursive: true });
+
+  // notes/intro links cross-collection to refs/spec (which will be excluded).
+  await fs.writeFile(
+    path.join(notesDir, 'intro.md'),
+    `---\ntitle: Introduction\n---\n\n# Introduction\n\nSee the [spec](/refs/spec).\n`,
+    'utf8',
+  );
+  await fs.writeFile(
+    path.join(refsDir, 'spec.md'),
+    `---\ntitle: Spec\n---\n\n# Spec\n\nAn out-of-collection reference.\n`,
+    'utf8',
+  );
+
+  const registry = {
+    version: '1',
+    collections: [
+      { name: 'notes', type: 'global', path: notesDir, createdAt: new Date().toISOString() },
+      { name: 'refs', type: 'global', path: refsDir, createdAt: new Date().toISOString() },
+    ],
+  };
+  await fs.writeFile(path.join(subHome, 'registry.json'), JSON.stringify(registry), 'utf8');
+  await fs.writeFile(path.join(subHome, 'config.json'), JSON.stringify({ defaultCollection: 'notes' }), 'utf8');
+
+  await execFileAsync('node', [EXPORT_SCRIPT, '--out', subOutDir, '--base', '/', '--exclude', 'refs'], {
+    env: { ...process.env, DIFFWIKI_HOME: subHome, DIFFWIKI_STATIC: '1' },
+    timeout: 120_000,
+  });
+}, 420_000);
+
+afterAll(async () => {
+  if (subHome) await fs.rm(subHome, { recursive: true, force: true });
+});
+
+describe('static export harness — subset export (parity)', () => {
+  it('excludes the filtered collection from the overlay graph.json', async () => {
+    const graph = JSON.parse(await fs.readFile(path.join(subOutDir, '_data', 'graph.json'), 'utf8')) as {
+      nodes: { id: string }[];
+    };
+    expect(graph.nodes.some((n) => n.id.startsWith('refs/'))).toBe(false);
+  });
+
+  it("prunes an excluded neighbour from a page's sidebar graph (no 404-on-click)", async () => {
+    const doc = JSON.parse(await fs.readFile(path.join(subOutDir, '_data', 'doc', 'notes', 'intro.json'), 'utf8')) as {
+      graph: { nodes: { id: string }[] };
+    };
+    const ids = doc.graph.nodes.map((n) => n.id);
+    // The cross-collection refs/spec neighbour must be pruned — its page was never
+    // emitted, so a preview link to it would 404 in the static site.
+    expect(ids).not.toContain('refs/spec');
+    // And no per-doc JSON was emitted for the excluded page.
+    await expect(fs.access(path.join(subOutDir, '_data', 'doc', 'refs', 'spec.json'))).rejects.toThrow();
   });
 });

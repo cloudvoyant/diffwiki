@@ -1,3 +1,8 @@
+// Knowledge-graph types — single source of truth in diffwiki-core, imported here so the
+// app can both use them (e.g. DocData.graph) and re-export them for the graph UI.
+import type { GraphNode, GraphEdge, LinkGraph, LocalGraph } from 'diffwiki-core';
+export type { GraphNode, GraphEdge, LinkGraph, LocalGraph };
+
 export interface NodeMeta {
   branch?: string;
   behind?: number;
@@ -47,6 +52,8 @@ export interface DocData {
   created?: string;
   /** ISO-8601 last-update date, sourced from git history / filesystem (not frontmatter). */
   updated?: string;
+  /** Local knowledge-graph neighbourhood for this page (this node + its direct links). */
+  graph: LocalGraph;
 }
 
 /** One row in a generated directory listing. */

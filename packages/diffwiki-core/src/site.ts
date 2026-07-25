@@ -1,6 +1,7 @@
 import { listCollections } from './collections';
 import { listArticleTree, readArticle } from './browse';
 import { renderArticle } from './render';
+import { buildLinkGraph, localGraph } from './graph';
 import { collectionGitStatus } from './repo';
 import { fileTimestamps } from './git';
 import { ArticleNotFoundError, CollectionNotFoundError } from './errors';
@@ -73,8 +74,20 @@ function findNode(nodes: ArticleNode[], slug: string): ArticleNode | undefined {
   return undefined;
 }
 
-/** Resolve a route to a rendered doc or a generated directory listing (or null). */
-export async function resolvePage(coll: string, slug: string): Promise<PageData | null> {
+/**
+ * Resolve a route to a rendered doc or a generated directory listing (or null).
+ *
+ * `opts.include` restricts the doc's sidebar `graph` preview to the given set of
+ * collection names — supplied by the static exporter for subset exports so the
+ * per-page local graph matches the filtered overlay `graph.json` and never links
+ * to a page that was excluded from the build. Omitting it (the dynamic server
+ * path, which serves every collection) keeps the whole-wiki neighbourhood.
+ */
+export async function resolvePage(
+  coll: string,
+  slug: string,
+  opts?: { include?: ReadonlySet<string> },
+): Promise<PageData | null> {
   try {
     const art = await readArticle(coll, slug);
     const { html, toc } = await renderArticle(art.body, {
@@ -83,6 +96,7 @@ export async function resolvePage(coll: string, slug: string): Promise<PageData 
       isIndex: art.isIndex,
     });
     const { created, updated } = await fileTimestamps(art.path);
+    const graph = localGraph(await buildLinkGraph(), `${art.coll}/${art.slug}`, opts?.include);
     return {
       kind: 'doc',
       coll: art.coll,
@@ -94,6 +108,7 @@ export async function resolvePage(coll: string, slug: string): Promise<PageData 
       path: `/${art.coll}/${art.slug}`,
       created,
       updated,
+      graph,
     };
   } catch (err) {
     if (err instanceof CollectionNotFoundError) return null;

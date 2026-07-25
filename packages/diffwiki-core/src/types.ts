@@ -208,6 +208,8 @@ export interface DocData {
   created?: string;
   /** ISO-8601 last-update date, sourced from git history / filesystem (not frontmatter). */
   updated?: string;
+  /** Local knowledge-graph neighbourhood for this page (this node + its direct links). */
+  graph: LocalGraph;
 }
 
 export interface ListingEntry {
@@ -219,3 +221,47 @@ export interface ListingEntry {
 
 export type PageData =
   ({ kind: 'doc' } & DocData) | { kind: 'listing'; coll: string; slug: string; title: string; entries: ListingEntry[] };
+
+// ── Knowledge graph view types (consumed by the wiki app + static exporter) ───
+
+/**
+ * One node in the knowledge graph. Two kinds:
+ * - `article` — a wiki page. `id` is `"<coll>/<slug>"`, with `coll`/`slug` set.
+ * - `tag` — an Obsidian-style tag hub. `id` is `"tag:<name>"`; `coll`/`slug` are
+ *   empty (a tag is not a page, so clicking it never navigates), `title` is `#name`.
+ */
+export interface GraphNode {
+  id: string;
+  kind: 'article' | 'tag';
+  coll: string;
+  slug: string;
+  title: string;
+}
+
+/**
+ * A graph edge. `kind` distinguishes an explicit hyperlink between two articles
+ * (`link`) from an article↔tag-hub membership edge (`tag`). For `link` edges the
+ * direction (source→target) is the link direction; `tag` edges go article→tag.
+ */
+export interface GraphEdge {
+  source: string;
+  target: string;
+  kind: 'link' | 'tag';
+}
+
+/** The whole-wiki knowledge graph. */
+export interface LinkGraph {
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+}
+
+/**
+ * The local neighbourhood of one node: the node itself plus its directly linked
+ * (outgoing) and linking (incoming) neighbours, and the edges among them. `focus`
+ * is the id of the page this neighbourhood is centred on.
+ */
+export interface LocalGraph {
+  focus: string;
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+}

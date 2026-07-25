@@ -14,6 +14,7 @@ import {
   buildCollections,
   resolvePage,
   buildSearchIndex,
+  buildLinkGraph,
   listCollections,
   resolveCollectionSelection,
 } from 'diffwiki-core';
@@ -113,6 +114,19 @@ await writeFile(
   path.join(outDir, 'search-index.json'),
   JSON.stringify((await buildSearchIndex()).filter((d) => included.has(d.collection))),
 );
+// Whole-wiki knowledge graph, filtered to the selected collections (both endpoints
+// of every edge must survive the filter, otherwise the overlay would draw an edge
+// to a node that was excluded from the export).
+const fullGraph = await buildLinkGraph();
+// Keep every surviving article node plus all tag hubs (a tag is not a page, so it
+// is never emitted and can never 404); then drop any edge whose endpoints did not
+// both survive, and finally prune tag hubs left with no surviving membership edge.
+const articleNodes = fullGraph.nodes.filter((n) => n.kind === 'article' && included.has(n.coll));
+const survivingIds = new Set([...articleNodes.map((n) => n.id), ...fullGraph.nodes.filter((n) => n.kind === 'tag').map((n) => n.id)]);
+const includedEdges = fullGraph.edges.filter((e) => survivingIds.has(e.source) && survivingIds.has(e.target));
+const connectedTagIds = new Set(includedEdges.filter((e) => e.kind === 'tag').map((e) => e.target));
+const includedNodes = [...articleNodes, ...fullGraph.nodes.filter((n) => n.kind === 'tag' && connectedTagIds.has(n.id))];
+await writeFile(path.join(dataDir, 'graph.json'), JSON.stringify({ nodes: includedNodes, edges: includedEdges }));
 
 const routes = new Set(['/']);
 const collectPaths = (nodes, acc) => {
@@ -125,7 +139,10 @@ for (const ct of nav) {
   const coll = ct.collection.name;
   routes.add(`/${coll}`);
   await mkdir(path.join(dataDir, 'doc', coll), { recursive: true });
-  await writeFile(path.join(dataDir, 'doc', coll, 'index.json'), JSON.stringify(await resolvePage(coll, '')));
+  // Prune each page's sidebar graph preview to the SAME included set as the overlay
+  // graph.json above — otherwise a subset export (--filter/--exclude) could preview a
+  // neighbour in an excluded collection whose page was never emitted (404 on click).
+  await writeFile(path.join(dataDir, 'doc', coll, 'index.json'), JSON.stringify(await resolvePage(coll, '', { include: included })));
   const paths = [];
   collectPaths(ct.nodes, paths);
   for (const p of paths) {
@@ -133,7 +150,7 @@ for (const ct of nav) {
     const slug = p.slice(`/${coll}/`.length);
     const file = path.join(dataDir, 'doc', coll, `${slug}.json`);
     await mkdir(path.dirname(file), { recursive: true });
-    await writeFile(file, JSON.stringify(await resolvePage(coll, slug)));
+    await writeFile(file, JSON.stringify(await resolvePage(coll, slug, { include: included })));
   }
 }
 

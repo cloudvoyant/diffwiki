@@ -48,6 +48,7 @@ export type { DiffwikiLogLevel } from './logger';
 // Content rendering and browsing
 export * from './browse';
 export * from './render';
+export * from './graph';
 
 // Plugin management (curated -- no internal helpers)
 export {

@@ -13,18 +13,26 @@ import type { TocItem } from './types';
 
 export type { TocItem };
 
-/** Route context for an article being rendered — used to resolve relative links. */
+/**
+ * Route context for an article being rendered — used both to rewrite relative
+ * inter-page links into in-app routes and to resolve links to `coll/slug` graph
+ * node ids.
+ */
 export interface RenderContext {
   /** Collection name (first route segment). */
   coll: string;
   /** Article route slug (path within the collection, no extension), e.g. "a/b/deep". */
   slug: string;
   /**
-   * True when the source file is a folder-index page (`<slug>/index.md`). Such a
-   * page shares its route slug with the folder, so relative links must resolve
-   * against the folder itself, not its parent. Defaults to false (leaf page).
+   * True for a directory index page: relative links resolve against the folder
+   * (`slug`) itself, not its parent — so `./sub` from `guide/index.md` → `guide/sub`.
    */
   isIndex?: boolean;
+  /**
+   * Deployment base path (e.g. `/my-repo/`) stripped from absolute route links so
+   * the collection segment resolves cleanly. Defaults to `DIFFWIKI_BASE`.
+   */
+  base?: string;
 }
 
 /** True for hrefs that must pass through untouched: empty, root-absolute, pure
@@ -81,6 +89,12 @@ export interface RenderedArticle {
   html: string;
   /** h2/h3 headings collected during render, in document order. */
   toc: TocItem[];
+  /**
+   * Internal outgoing links as `coll/slug` node ids, de-duplicated, in document
+   * order. Only populated when a {@link RenderContext} is supplied; external
+   * links, in-page anchors, and unresolvable targets are dropped.
+   */
+  links: string[];
 }
 
 /** Fence-tag aliases → Shiki language ids (so ```c#``` / ```c++``` / ```hs``` work). */
@@ -101,6 +115,84 @@ function rehypeCollectToc(toc: TocItem[]) {
       const id = node.properties?.id;
       if (!id) return;
       toc.push({ slug: String(id), text: hastToString(node), depth: node.tagName === 'h2' ? 2 : 3 });
+    });
+  };
+}
+
+/** True for links that leave the wiki (or are in-page anchors), so they are not graph edges. */
+function isExternalHref(href: string): boolean {
+  if (!href) return true;
+  if (href.startsWith('#')) return true; // in-page anchor
+  if (href.startsWith('//')) return true; // protocol-relative → external
+  return /^[a-z][a-z0-9+.-]*:/i.test(href); // has a scheme (http:, https:, mailto:, tel:, …)
+}
+
+/**
+ * Resolve an `<a href>` from an article body to an internal `coll/slug` node id,
+ * or `null` if it is not an internal article link. Handles two shapes:
+ *   - Route links: `/coll/slug` (optionally with a base prefix, `.html`, trailing
+ *     slash, query, or hash) → `coll/slug`.
+ *   - Relative file links: `./foo.md`, `../bar/baz.mdx`, `sibling` → resolved
+ *     against the current article's directory to `coll/<resolved>`.
+ * The result is NOT verified against real nodes here — `buildLinkGraph` drops
+ * edges whose target is not a known node.
+ */
+function resolveHref(href: string, ctx: RenderContext): string | null {
+  if (isExternalHref(href)) return null;
+
+  // Strip query/hash and any `.md`/`.mdx`/`.html` extension and trailing slash.
+  const clean = (p: string): string =>
+    p
+      .replace(/[?#].*$/, '')
+      .replace(/\.(mdx?|html)$/i, '')
+      .replace(/\/+$/, '');
+
+  const target = clean(href);
+  if (!target) return null;
+
+  if (target.startsWith('/')) {
+    // Absolute route link: strip the base prefix, then the remainder is `<coll>/<slug…>`.
+    const base = ctx.base ?? process.env.DIFFWIKI_BASE ?? '';
+    const baseSegs = base.split('/').filter(Boolean);
+    let segs = target.split('/').filter(Boolean);
+    if (baseSegs.length > 0 && baseSegs.every((b, i) => segs[i] === b)) {
+      segs = segs.slice(baseSegs.length);
+    }
+    if (segs.length < 2) return null;
+    return segs.join('/');
+  }
+
+  // Relative link — resolve against the article's directory (an index page's dir is
+  // its whole slug; a leaf file's is the slug's parent).
+  const dir = ctx.isIndex ? ctx.slug : ctx.slug.includes('/') ? ctx.slug.slice(0, ctx.slug.lastIndexOf('/')) : '';
+  const baseSegs = dir ? dir.split('/') : [];
+  const out = [...baseSegs];
+  for (const seg of target.split('/')) {
+    if (seg === '' || seg === '.') continue;
+    if (seg === '..') {
+      // Reject `..` that escapes the collection root rather than clamp to a sibling.
+      if (out.length === 0) return null;
+      out.pop();
+      continue;
+    }
+    out.push(seg);
+  }
+  if (out.length === 0) return null;
+  return `${ctx.coll}/${out.join('/')}`;
+}
+
+/** rehype plugin: collect internal outgoing links (as `coll/slug` node ids) into `links`. */
+function rehypeCollectLinks(links: string[], ctx: RenderContext) {
+  const seen = new Set<string>();
+  return (tree: Root) => {
+    visit(tree, 'element', (node: Element) => {
+      if (node.tagName !== 'a') return;
+      const href = node.properties?.href;
+      if (typeof href !== 'string') return;
+      const id = resolveHref(href, ctx);
+      if (!id || seen.has(id)) return;
+      seen.add(id);
+      links.push(id);
     });
   };
 }
@@ -139,20 +231,24 @@ function rehypeMarkMermaid() {
 
 /**
  * Render an article body (markdown) to Shiki-highlighted HTML plus its table of
- * contents, rewriting relative links to in-app routes via `ctx`.
- * Runs entirely server-side; the client mounts the HTML directly with
- * no `eval`/`new Function`, so it works under a strict CSP. Code is highlighted
- * here (dual github-light/github-dark via CSS variables); mermaid fences are
- * marked for client rendering.
+ * contents. Rewrites relative inter-page links to in-app routes and collects the
+ * article's internal outgoing links (`coll/slug` node ids) for the knowledge graph.
+ * Runs entirely server-side; the client mounts the HTML directly with no
+ * `eval`/`new Function`, so it works under a strict CSP. Code is highlighted here
+ * (dual github-light/github-dark via CSS variables); mermaid fences are marked for
+ * client rendering.
  */
 export async function renderArticle(body: string, ctx: RenderContext): Promise<RenderedArticle> {
   const toc: TocItem[] = [];
-  const file = await unified()
+  const links: string[] = [];
+  const pipeline = unified()
     .use(remarkParse)
     .use(remarkGfm)
     .use(remarkRehype)
     .use(rehypeSlug)
     .use(rehypeCollectToc, toc)
+    .use(rehypeCollectLinks, links, ctx);
+  const file = await pipeline
     .use(rehypeStripLeadingH1)
     .use(rehypeMarkMermaid)
     .use(rehypeRewriteLinks, ctx)
@@ -164,5 +260,5 @@ export async function renderArticle(body: string, ctx: RenderContext): Promise<R
     })
     .use(rehypeStringify)
     .process(body);
-  return { html: String(file), toc };
+  return { html: String(file), toc, links };
 }
