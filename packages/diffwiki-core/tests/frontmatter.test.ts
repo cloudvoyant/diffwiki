@@ -50,6 +50,36 @@ describe('parseArticle', () => {
     expect(result.tags).toEqual([]);
     expect(result.body).toBe('Body here.\n');
   });
+
+  it('parses audience and status independently', () => {
+    const raw = '---\ntitle: Secret Draft\naudience: private\nstatus: draft\n---\n\nBody\n';
+    const result = parseArticle(raw);
+    expect(result.audience).toBe('private');
+    expect(result.status).toBe('draft');
+  });
+
+  it('defaults audience to public and status to published when absent', () => {
+    const raw = '---\ntitle: Plain\ntags:\n  - x\n---\n\nBody\n';
+    const result = parseArticle(raw);
+    expect(result.audience).toBe('public');
+    expect(result.status).toBe('published');
+  });
+
+  it('coerces unknown axis values to their defaults', () => {
+    const raw = '---\ntitle: Weird\naudience: everyone\nstatus: archived\n---\n\nBody\n';
+    const result = parseArticle(raw);
+    expect(result.audience).toBe('public');
+    expect(result.status).toBe('published');
+  });
+
+  it('recovers audience/status from malformed frontmatter via the fallback', () => {
+    // Unquoted colon in the title forces the regex fallback; both axes must survive.
+    const raw = '---\ntitle: A: B\naudience: private\nstatus: draft\n---\n\nBody\n';
+    const result = parseArticle(raw);
+    expect(result.title).toBe('A: B');
+    expect(result.audience).toBe('private');
+    expect(result.status).toBe('draft');
+  });
 });
 
 describe('serializeArticle', () => {
@@ -63,5 +93,26 @@ describe('serializeArticle', () => {
     expect(back.title).toBe('Hello');
     expect(back.tags).toEqual(['a', 'b']);
     expect(back.body).toBe('# Body\n');
+  });
+
+  it('writes private audience + draft status and round-trips them', () => {
+    const out = serializeArticle({ title: 'D', tags: [], audience: 'private', status: 'draft', body: '# B\n' });
+    expect(out).toMatch(/^audience: private$/m);
+    expect(out).toMatch(/^status: draft$/m);
+    const back = parseArticle(out);
+    expect(back.audience).toBe('private');
+    expect(back.status).toBe('draft');
+  });
+
+  it('omits both axes at their defaults (keeps public/published files clean)', () => {
+    const out = serializeArticle({ title: 'Pub', tags: [], audience: 'public', status: 'published', body: '# B\n' });
+    expect(out).not.toMatch(/^audience:/m);
+    expect(out).not.toMatch(/^status:/m);
+  });
+
+  it('omits both axes when unset', () => {
+    const out = serializeArticle({ title: 'Pub', tags: [], body: '# B\n' });
+    expect(out).not.toMatch(/^audience:/m);
+    expect(out).not.toMatch(/^status:/m);
   });
 });

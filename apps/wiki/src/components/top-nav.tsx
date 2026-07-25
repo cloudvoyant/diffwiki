@@ -1,97 +1,10 @@
-import { Fragment } from 'react';
-import { Link, useRouterState } from '@tanstack/react-router';
-import { ChevronRight, Github, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import { Link } from '@tanstack/react-router';
+import { Github, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { useSidebar } from '@/components/ui/sidebar';
 import { Button } from '@/components/ui/button';
-import { ThemeToggle } from '@/components/theme-toggle';
-import { ThemePicker } from '@/components/theme-picker';
-import { cn } from '@/lib/utils';
-import type { CollectionTree, TreeNode } from '@/lib/types';
-
-interface Crumb {
-  label: string;
-  /** Collection slug — set only on the (linkable) collection crumb. */
-  coll?: string;
-  /** Route path for an intermediate/leaf node, e.g. "/docs/guide/setup". */
-  path?: string;
-}
-
-/** Resolve the breadcrumb trail for a pathname from the collection nav tree. */
-function buildCrumbs(tree: CollectionTree[], pathname: string): Crumb[] {
-  if (!pathname || pathname === '/') return [];
-  const collName = decodeURIComponent(pathname.split('/').filter(Boolean)[0] ?? '');
-  const ct = tree.find((t) => t.collection.name === collName);
-  if (!ct) return [{ label: collName }];
-
-  const chain: TreeNode[] = [];
-  const walk = (nodes: TreeNode[]): boolean => {
-    for (const node of nodes) {
-      chain.push(node);
-      if (node.path === pathname) return true;
-      if (node.children && walk(node.children)) return true;
-      chain.pop();
-    }
-    return false;
-  };
-  walk(ct.nodes);
-
-  return [{ label: collName, coll: collName }, ...chain.map((n) => ({ label: n.title ?? n.name, path: n.path }))];
-}
-
-/**
- * The `_splat` for a crumb's route link — its path minus the leading "/{coll}/".
- * The collection crumb → "". A crumb without a path is not a link → undefined.
- * Stripped with literal string ops (never a RegExp): collName is user-supplied
- * and may contain regex metacharacters.
- */
-function crumbSplat(c: Crumb, prefix: string): string | undefined {
-  if (c.coll) return '';
-  if (!c.path) return undefined;
-  return c.path.startsWith(prefix) ? c.path.slice(prefix.length) : c.path.replace(/^\//, '');
-}
-
-function Breadcrumbs({ tree }: { tree: CollectionTree[] }) {
-  const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const crumbs = buildCrumbs(tree, pathname);
-  if (crumbs.length === 0) return null;
-
-  // The first crumb always carries the collection name; intermediate crumbs are
-  // links whose splat is their route path minus the leading "/{coll}/".
-  const collName = crumbs[0]?.coll ?? '';
-  return (
-    <nav
-      aria-label="Breadcrumb"
-      className="hidden min-w-0 flex-1 items-center gap-1.5 overflow-hidden text-sm text-muted-foreground sm:flex"
-    >
-      {crumbs.map((c, i) => {
-        const isLast = i === crumbs.length - 1;
-        const splat = crumbSplat(c, `/${collName}/`);
-        const isLink = !isLast && splat !== undefined;
-        return (
-          <Fragment key={`${i}-${c.label}`}>
-            {i > 0 && <ChevronRight className="size-3.5 shrink-0 opacity-50" aria-hidden />}
-            {isLink ? (
-              <Link
-                to="/$coll/$"
-                params={{ coll: collName, _splat: splat }}
-                className="shrink-0 whitespace-nowrap transition-colors hover:text-foreground"
-              >
-                {c.label}
-              </Link>
-            ) : (
-              <span
-                className={cn('truncate whitespace-nowrap', isLast && 'font-medium text-foreground')}
-                aria-current={isLast ? 'page' : undefined}
-              >
-                {c.label}
-              </span>
-            )}
-          </Fragment>
-        );
-      })}
-    </nav>
-  );
-}
+import { SettingsDialog } from '@/components/settings-dialog';
+import { SearchBox } from '@/components/search-box';
+import { Logo } from '@/components/logo';
 
 /**
  * Stateful sidebar toggle — shows a "close" icon when the sidebar is open and an
@@ -115,28 +28,41 @@ function SidebarToggle() {
   );
 }
 
-/**
- * TopNav — full-width sticky bar above the sidebar and content. Holds the
- * sidebar toggle and breadcrumbs on the left and theme + GitHub controls on the
- * right. (The middle will also host navigation tabs later.) Height is governed
- * by the --nav-h CSS custom property (3.5rem = h-14).
- */
-export function TopNav({ tree }: { tree: CollectionTree[] }) {
+/** The logo + wordmark home link that navigates back to the site root. */
+function HomeLink() {
   return (
-    <header
-      className={cn(
-        'sticky top-0 z-40 flex items-center gap-3 border-b bg-background px-4 sm:px-6',
-        'h-[var(--nav-h)]',
-      )}
+    <Link
+      to="/"
+      className="flex shrink-0 items-center gap-2 font-semibold text-foreground transition-colors hover:text-foreground/80"
+      aria-label="diffwiki home"
     >
+      <Logo className="size-6 shrink-0" />
+      <span className="hidden text-lg font-bold tracking-tight sm:inline">diffwiki</span>
+    </Link>
+  );
+}
+
+/**
+ * TopNav — full-width sticky bar above the sidebar and content. Holds the sidebar
+ * toggle, the logo/wordmark home link, and the search box on the left, and the
+ * settings + GitHub controls on the right. Breadcrumbs now live on the page
+ * (above the article title), not here. Height is governed by the --nav-h CSS
+ * custom property (3.5rem = h-14).
+ */
+export function TopNav() {
+  return (
+    <header className="sticky top-0 z-40 flex h-[var(--nav-h)] items-center gap-3 border-b bg-background px-2.5">
       <SidebarToggle />
 
-      <Breadcrumbs tree={tree} />
+      <HomeLink />
+
+      <div className="min-w-0 max-w-xs flex-1">
+        <SearchBox placeholder="Search…" className="h-9" />
+      </div>
 
       {/* Right-side controls */}
       <div className="ml-auto flex shrink-0 items-center gap-1">
-        <ThemePicker />
-        <ThemeToggle />
+        <SettingsDialog />
 
         <a
           href="https://github.com/cloudvoyant/diffwiki"

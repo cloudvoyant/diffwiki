@@ -105,6 +105,71 @@ This nested page renders from plain **markdown**.
     'utf8',
   );
 
+  // ── scratchpad.md (status: draft) ────────────────────────────────────────────
+  // Draft article: visible with a badge in local serve, SKIPPED in static export.
+  // Body avoids every term the search specs query, so dev-search counts are stable.
+  fs.writeFileSync(
+    path.join(notesDir, 'scratchpad.md'),
+    `---
+title: Scratchpad WIP
+status: draft
+---
+
+# Scratchpad WIP
+
+A work-in-progress scratch page.
+`,
+    'utf8',
+  );
+
+  // ── confidential.md (status: private) ────────────────────────────────────────
+  // Private article: visible with a badge in local serve, SKIPPED in static export.
+  fs.writeFileSync(
+    path.join(notesDir, 'confidential.md'),
+    `---
+title: Confidential Memo
+audience: private
+---
+
+# Confidential Memo
+
+An internal-only memo.
+`,
+    'utf8',
+  );
+
+  // ── archive/ (folder marked private via its index page) ──────────────────────
+  // A private FOLDER: its index.md sets status:private. In local serve the folder
+  // row shows the muted indicator; in static export the WHOLE subtree is skipped —
+  // even the public child below — because the folder itself is unpublished.
+  const archiveDir = path.join(notesDir, 'archive');
+  fs.mkdirSync(archiveDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(archiveDir, 'index.md'),
+    `---
+title: Archive
+audience: private
+---
+
+# Archive
+
+Retired notes, hidden from the published site.
+`,
+    'utf8',
+  );
+  fs.writeFileSync(
+    path.join(archiveDir, 'old-note.md'),
+    `---
+title: Old Note
+---
+
+# Old Note
+
+A public leaf that must still be skipped because its folder is private.
+`,
+    'utf8',
+  );
+
   // ── devlog/release.md ─────────────────────────────────────────────────────────
   // A SECOND collection sharing the searchable term "diffwiki" with notes, so a
   // collection filter can be proven to EXCLUDE the other collection's hits (the

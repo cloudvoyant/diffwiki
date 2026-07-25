@@ -142,3 +142,68 @@ test.describe('static export — browser hydration and search', () => {
     await expect(results.getByRole('link', { name: /introduction/i }).first()).toBeVisible({ timeout: 5_000 });
   });
 });
+
+test.describe('static export — draft/private articles are skipped', () => {
+  /** Recursively collect every node path in a nav-tree.json payload. */
+  function allPaths(nodes: { path?: string; children?: unknown[] }[]): string[] {
+    const out: string[] = [];
+    for (const n of nodes) {
+      if (n.path) out.push(n.path);
+      if (Array.isArray(n.children)) out.push(...allPaths(n.children as typeof nodes));
+    }
+    return out;
+  }
+
+  test('draft/private articles are absent from the search index', async () => {
+    const ctx = await request.newContext({ baseURL: STATIC_URL });
+    const idx = (await (await ctx.get('/search-index.json')).json()) as { slug: string }[];
+    const slugs = idx.map((d) => d.slug);
+    expect(slugs).not.toContain('scratchpad');
+    expect(slugs).not.toContain('confidential');
+    // Positive control: a public sibling in the same collection IS indexed.
+    expect(slugs).toContain('intro');
+    await ctx.dispose();
+  });
+
+  test('draft/private articles are absent from the nav tree', async () => {
+    const ctx = await request.newContext({ baseURL: STATIC_URL });
+    const nav = (await (await ctx.get('/_data/nav-tree.json')).json()) as {
+      collection: { name: string };
+      nodes: { path?: string; children?: unknown[] }[];
+    }[];
+    const notes = nav.find((c) => c.collection.name === 'notes');
+    expect(notes).toBeDefined();
+    const paths = allPaths(notes!.nodes);
+    expect(paths).not.toContain('/notes/scratchpad');
+    expect(paths).not.toContain('/notes/confidential');
+    // Positive control: the public nested article IS present.
+    expect(paths).toContain('/notes/guide/setup');
+    await ctx.dispose();
+  });
+
+  test('draft/private per-doc JSON is not emitted (404)', async () => {
+    const ctx = await request.newContext({ baseURL: STATIC_URL });
+    expect((await ctx.get('/_data/doc/notes/scratchpad.json')).status()).toBe(404);
+    expect((await ctx.get('/_data/doc/notes/confidential.json')).status()).toBe(404);
+    await ctx.dispose();
+  });
+
+  test('a private folder skips its whole subtree — even public children', async () => {
+    const ctx = await request.newContext({ baseURL: STATIC_URL });
+    // Nav: neither the private folder nor its public child appear.
+    const nav = (await (await ctx.get('/_data/nav-tree.json')).json()) as {
+      collection: { name: string };
+      nodes: { path?: string; children?: unknown[] }[];
+    }[];
+    const notes = nav.find((c) => c.collection.name === 'notes');
+    const paths = allPaths(notes!.nodes);
+    expect(paths).not.toContain('/notes/archive');
+    expect(paths).not.toContain('/notes/archive/old-note');
+    // Search index: the public child of a private folder is not indexed.
+    const idx = (await (await ctx.get('/search-index.json')).json()) as { slug: string }[];
+    expect(idx.map((d) => d.slug)).not.toContain('archive/old-note');
+    // Routes: the child's per-doc JSON is not emitted.
+    expect((await ctx.get('/_data/doc/notes/archive/old-note.json')).status()).toBe(404);
+    await ctx.dispose();
+  });
+});

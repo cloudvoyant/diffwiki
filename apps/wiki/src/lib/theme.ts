@@ -5,60 +5,52 @@ import { THEME_NAMES } from './themes';
 
 export const COLOR_MODE_KEY = 'diffwiki:color-mode' as const;
 export const THEME_KEY = 'diffwiki:theme' as const;
-export type ColorMode = 'light' | 'dark';
+export type ColorMode = 'light' | 'dark' | 'system';
 export type ThemeName = string; // any diffbook theme name — see src/lib/themes.ts
 
 const THEME_PREFIX = 'theme-';
 
 // ── Color mode ───────────────────────────────────────────────────────────
 
-/**
- * Read the persisted color mode from localStorage.
- * Falls back to 'light' when storage is unavailable or unset.
- */
-export function getInitialColorMode(): ColorMode {
-  if (typeof window === 'undefined') return 'light';
-  try {
-    const saved = localStorage.getItem(COLOR_MODE_KEY);
-    if (saved === 'dark' || saved === 'light') return saved;
-  } catch {
-    /* storage unavailable */
-  }
-  return 'light';
+/** Whether the OS currently prefers a dark color scheme. */
+function systemPrefersDark(): boolean {
+  return (
+    typeof window !== 'undefined' && !!window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+  );
 }
 
 /**
- * Apply a color mode by toggling the `.dark` class on <html>.
- * Also persists the choice to localStorage.
+ * Read the persisted color-mode PREFERENCE from localStorage: 'light', 'dark',
+ * or 'system' (follow the OS). Falls back to 'system' when unavailable or unset.
+ */
+export function getInitialColorMode(): ColorMode {
+  if (typeof window === 'undefined') return 'system';
+  try {
+    const saved = localStorage.getItem(COLOR_MODE_KEY);
+    if (saved === 'dark' || saved === 'light' || saved === 'system') return saved;
+  } catch {
+    /* storage unavailable */
+  }
+  return 'system';
+}
+
+/** Resolve a preference to the effective applied mode ('system' → OS preference). */
+export function resolveColorMode(mode: ColorMode): 'light' | 'dark' {
+  return mode === 'system' ? (systemPrefersDark() ? 'dark' : 'light') : mode;
+}
+
+/**
+ * Apply a color-mode preference by toggling the `.dark` class on <html> to the
+ * resolved effective mode, and persist the raw preference (incl. 'system').
  */
 export function applyColorMode(mode: ColorMode): void {
   if (typeof document === 'undefined') return;
-  const root = document.documentElement;
-  if (mode === 'dark') {
-    root.classList.add('dark');
-  } else {
-    root.classList.remove('dark');
-  }
+  document.documentElement.classList.toggle('dark', resolveColorMode(mode) === 'dark');
   try {
     localStorage.setItem(COLOR_MODE_KEY, mode);
   } catch {
     /* storage unavailable */
   }
-}
-
-/**
- * Toggle between light and dark and return the new mode.
- */
-export function toggleColorMode(): ColorMode {
-  if (typeof document === 'undefined') return 'light';
-  const isDark = document.documentElement.classList.toggle('dark');
-  const mode: ColorMode = isDark ? 'dark' : 'light';
-  try {
-    localStorage.setItem(COLOR_MODE_KEY, mode);
-  } catch {
-    /* storage unavailable */
-  }
-  return mode;
 }
 
 // ── Theme ────────────────────────────────────────────────────────────────

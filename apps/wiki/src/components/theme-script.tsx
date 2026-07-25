@@ -12,8 +12,18 @@
 
 export const THEME_INIT_SCRIPT = `try {
   var root = document.documentElement;
-  var mode = localStorage.getItem("diffwiki:color-mode");
-  if (mode === "dark") root.classList.add("dark");
+  var mq = window.matchMedia("(prefers-color-scheme: dark)");
+  function applyMode() {
+    var mode = localStorage.getItem("diffwiki:color-mode") || "system";
+    var dark = mode === "dark" || (mode === "system" && mq.matches);
+    root.classList.toggle("dark", dark);
+  }
+  applyMode();
+  // Live-follow the OS while the preference is 'system'.
+  mq.addEventListener("change", function() {
+    var mode = localStorage.getItem("diffwiki:color-mode") || "system";
+    if (mode === "system") applyMode();
+  });
   var theme = localStorage.getItem("diffwiki:theme");
   if (theme) {
     var toRemove = [];

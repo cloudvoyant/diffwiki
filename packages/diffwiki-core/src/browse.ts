@@ -3,7 +3,7 @@ import path from 'node:path';
 import { findCollection } from './collections';
 import { parseArticle } from './frontmatter';
 import { ArticleNotFoundError, CollectionNotFoundError, InvalidTargetError } from './errors';
-import type { ArticleNode, ArticleContent } from './types';
+import type { ArticleNode, ArticleContent, Audience, PublishStatus } from './types';
 
 // ── Pure tree builder (unit-tested) ─────────────────────────────────────────
 
@@ -109,42 +109,73 @@ function pickIndexFile(names: string[]): string | undefined {
   return names.filter((n) => INDEX_RE.test(n)).sort((a, b) => rank(a) - rank(b))[0];
 }
 
-/** Read the first 512 bytes of a file and extract a YAML frontmatter `title:`. */
-async function cheapTitle(absPath: string): Promise<string | undefined> {
+/**
+ * Read the leading bytes of a file and extract YAML frontmatter title/audience/status.
+ * Reads up to 8 KiB so a long frontmatter block's closing `---` (and any late
+ * `audience:`/`status:` line) isn't truncated — a miss there is a visibility bug
+ * (a private/draft page could leak into a static export), not just a wrong title.
+ */
+const CHEAP_META_BYTES = 8192;
+async function cheapMeta(absPath: string): Promise<{ title?: string; audience?: Audience; status?: PublishStatus }> {
   let handle: import('node:fs/promises').FileHandle | undefined;
   try {
     handle = await fs.open(absPath, 'r');
-    const buf = Buffer.alloc(512);
-    const { bytesRead } = await handle.read(buf, 0, 512, 0);
+    const buf = Buffer.alloc(CHEAP_META_BYTES);
+    const { bytesRead } = await handle.read(buf, 0, CHEAP_META_BYTES, 0);
     const snippet = buf.subarray(0, bytesRead).toString('utf8');
-    const m = snippet.match(/^---[\s\S]*?^title:\s*(.+)$/m);
-    if (m) return m[1].trim().replace(/^["']|["']$/g, '');
+    // Only look inside a leading frontmatter fence.
+    const fence = /^---[ \t]*\n([\s\S]*?)(?:\n---[ \t]*\n|$)/.exec(snippet);
+    if (!fence) return {};
+    const inner = fence[1];
+    const clean = (s: string) => s.trim().replace(/^["']|["']$/g, '');
+    const titleM = /^title:\s*(.+)$/m.exec(inner);
+    const audienceM = /^audience:\s*(.+)$/m.exec(inner);
+    const statusM = /^status:\s*(.+)$/m.exec(inner);
+    const title = titleM ? clean(titleM[1]) : undefined;
+    // Only the non-default value of each axis is carried (private / draft).
+    const audience = audienceM && clean(audienceM[1]) === 'private' ? ('private' as const) : undefined;
+    const status = statusM && clean(statusM[1]) === 'draft' ? ('draft' as const) : undefined;
+    return { title, audience, status };
   } catch {
     /* unreadable — fall back to filename */
   } finally {
     await handle?.close();
   }
-  return undefined;
+  return {};
 }
 
-/** Enrich leaf titles from frontmatter (cheap partial read). Returns a new tree. */
+/** Enrich leaf titles + status from frontmatter (cheap partial read). Returns a new tree. */
 async function enrichTitles(nodes: ArticleNode[], collDir: string): Promise<ArticleNode[]> {
   return Promise.all(
     nodes.map(async (node): Promise<ArticleNode> => {
       if (node.children) {
         const children = await enrichTitles(node.children, collDir);
-        // A folder shows the title of its index page, when one exists.
+        // A folder shows the title (and audience/status) of its index page, when one exists.
         let title = node.title;
+        let audience = node.audience;
+        let status = node.status;
         if (node.slug) {
           const dir = path.join(collDir, node.slug);
           const idx = pickIndexFile(await readdirSafe(dir));
-          if (idx) title = (await cheapTitle(path.join(dir, idx))) ?? title;
+          if (idx) {
+            const meta = await cheapMeta(path.join(dir, idx));
+            title = meta.title ?? title;
+            audience = meta.audience ?? audience;
+            status = meta.status ?? status;
+          }
         }
-        return { ...node, title, children };
+        return { ...node, title, audience, status, children };
       }
       for (const ext of ['.mdx', '.md']) {
-        const title = await cheapTitle(path.join(collDir, `${node.slug}${ext}`));
-        if (title) return { ...node, title };
+        const meta = await cheapMeta(path.join(collDir, `${node.slug}${ext}`));
+        if (meta.title || meta.audience || meta.status) {
+          return {
+            ...node,
+            title: meta.title ?? node.title,
+            audience: meta.audience ?? node.audience,
+            status: meta.status ?? node.status,
+          };
+        }
       }
       return node;
     }),
@@ -152,6 +183,19 @@ async function enrichTitles(nodes: ArticleNode[], collDir: string): Promise<Arti
 }
 
 // ── Public API ──────────────────────────────────────────────────────────────
+
+/**
+ * Read a collection's (or any directory's) audience + status from its index page
+ * (index.md / README). Each axis is present only at its non-default value
+ * (audience:'private' / status:'draft'), else absent. Cheap partial read — used
+ * to mark/skip whole collections the same way leaf articles are.
+ */
+export async function collectionMeta(collDir: string): Promise<{ audience?: Audience; status?: PublishStatus }> {
+  const idx = pickIndexFile(await readdirSafe(collDir));
+  if (!idx) return {};
+  const meta = await cheapMeta(path.join(collDir, idx));
+  return { audience: meta.audience, status: meta.status };
+}
 
 /**
  * List the article tree of a collection. Walks the collection's registered
@@ -219,5 +263,15 @@ export async function readArticle(coll: string, slug: string): Promise<ArticleCo
 
   const parsed = parseArticle(await fs.readFile(abs, 'utf8'));
   const title = parsed.title?.trim() || (safeSlug ? (safeSlug.split('/').pop() ?? safeSlug) : coll);
-  return { coll, slug: safeSlug, title, tags: parsed.tags, body: parsed.body, path: abs, isIndex };
+  return {
+    coll,
+    slug: safeSlug,
+    title,
+    tags: parsed.tags,
+    audience: parsed.audience,
+    status: parsed.status,
+    body: parsed.body,
+    path: abs,
+    isIndex,
+  };
 }

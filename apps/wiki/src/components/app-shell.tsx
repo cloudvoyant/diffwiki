@@ -24,7 +24,7 @@ interface AppShellProps {
 export function AppShell({ tree, children }: AppShellProps) {
   return (
     <SidebarProvider className="flex-col">
-      <TopNav tree={tree} />
+      <TopNav />
 
       <div className="flex min-h-0 w-full flex-1">
         <AppSidebar tree={tree} />

@@ -99,7 +99,17 @@ async function loadArticle(
 export async function updateArticleBody(target: string, body: string): Promise<Article> {
   const { filePath, dir, raw, collection } = await loadArticle(target);
   const parsed = parseArticle(raw);
-  await fs.writeFile(filePath, serializeArticle({ title: parsed.title, tags: parsed.tags, body }), 'utf8');
+  await fs.writeFile(
+    filePath,
+    serializeArticle({
+      title: parsed.title,
+      tags: parsed.tags,
+      audience: parsed.audience,
+      status: parsed.status,
+      body,
+    }),
+    'utf8',
+  );
   void fireHook('article-updated', collection, path.relative(dir, filePath));
   return { title: parsed.title, tags: parsed.tags, path: filePath, collection };
 }
@@ -108,7 +118,17 @@ async function mutateTags(target: string, fn: (tags: string[]) => string[]): Pro
   const { filePath, dir, raw, collection } = await loadArticle(target);
   const parsed = parseArticle(raw);
   const tags = fn(parsed.tags);
-  await fs.writeFile(filePath, serializeArticle({ title: parsed.title, tags, body: parsed.body }), 'utf8');
+  await fs.writeFile(
+    filePath,
+    serializeArticle({
+      title: parsed.title,
+      tags,
+      audience: parsed.audience,
+      status: parsed.status,
+      body: parsed.body,
+    }),
+    'utf8',
+  );
   void fireHook('article-updated', collection, path.relative(dir, filePath));
   return { title: parsed.title, tags, path: filePath, collection };
 }
