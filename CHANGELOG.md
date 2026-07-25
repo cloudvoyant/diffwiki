@@ -1,3 +1,10 @@
+# [0.8.0](https://github.com/cloudvoyant/diffwiki/compare/v0.7.0...v0.8.0) (2026-07-25)
+
+
+### Features
+
+* article audience and publish-status visibility ([42905ca](https://github.com/cloudvoyant/diffwiki/commit/42905ca12bbec477fcfe674b0c9c374cbdf122a7))
+
 # [0.7.0](https://github.com/cloudvoyant/diffwiki/compare/v0.6.1...v0.7.0) (2026-07-25)
 
 
