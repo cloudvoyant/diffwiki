@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+#MISE description="Build the diffwiki showcase site for GitHub Pages (from diffwiki.yaml)"
+set -euo pipefail
+
+source "${MISE_PROJECT_ROOT:-$PWD}/mise-tasks/utils"
+cd "${MISE_PROJECT_ROOT:-$PWD}"
+
+ROOT="${MISE_PROJECT_ROOT:-$PWD}"
+BASE="${1:-/diffwiki/}"
+OUT="${2:-dist-site}"
+
+log_info "Compiling workspace packages"
+mise run build
+
+# --project scopes the SSG to ROOT/diffwiki.yaml — exactly what `diffwiki preview`
+# shows. DIFFWIKI_FORCE_BUILD guarantees dist-static is rebuilt for this base
+# (avoids the base-marker cache serving stale output after source edits).
+log_info "Exporting project site from diffwiki.yaml (base=$BASE → $OUT)"
+DIFFWIKI_STATIC=1 DIFFWIKI_FORCE_BUILD=1 \
+  node apps/wiki/bin/export.mjs --project "$ROOT" --out "$OUT" --base "$BASE"
+
+log_info "Site ready: $OUT"

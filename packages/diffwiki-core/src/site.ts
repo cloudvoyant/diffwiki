@@ -5,6 +5,7 @@ import { buildLinkGraph, localGraph } from './graph';
 import { collectionGitStatus } from './repo';
 import { fileTimestamps } from './git';
 import { ArticleNotFoundError, CollectionNotFoundError } from './errors';
+import { readSiteConfig } from './project';
 import type {
   ArticleNode,
   CollectionEntry,
@@ -12,6 +13,7 @@ import type {
   CollectionTree,
   ListingEntry,
   PageData,
+  SiteConfig,
   TreeNode,
 } from './types';
 
@@ -57,11 +59,12 @@ export async function buildCollections(): Promise<CollectionInfo[]> {
   const entries = await listCollections();
   const infos = await Promise.all(
     entries.map(async (e): Promise<CollectionInfo> => {
-      const { audience, status } = await collectionMeta(e.path);
+      const { title, audience, status } = await collectionMeta(e.path);
       return {
         name: e.name,
         type: e.type,
         path: e.path,
+        ...(title ? { title } : {}),
         ...(await gitInfo(e)),
         ...(audience ? { audience } : {}),
         ...(status ? { status } : {}),
@@ -76,12 +79,13 @@ export async function buildNavTree(): Promise<CollectionTree[]> {
   const entries = await listCollections();
   const trees = await Promise.all(
     entries.map(async (e): Promise<CollectionTree> => {
-      const { audience, status } = await collectionMeta(e.path);
+      const { title, audience, status } = await collectionMeta(e.path);
       return {
         collection: {
           name: e.name,
           type: e.type,
           path: e.path,
+          ...(title ? { title } : {}),
           ...(await gitInfo(e)),
           ...(audience ? { audience } : {}),
           ...(status ? { status } : {}),
@@ -170,5 +174,22 @@ export async function resolvePage(
       title: folder.title ?? (slug ? (slug.split('/').pop() ?? slug) : coll),
       entries,
     };
+  }
+}
+
+/**
+ * The site config for the current context, from `diffwiki.yaml` at
+ * `DIFFWIKI_PROJECT_DIR`. Returns `{}` when the env var is unset (the default
+ * runtime) or the file is missing/unreadable — the home page then falls back to
+ * collection pills. Consumed by the static exporter (site.json) and the live
+ * `getSite` server fn.
+ */
+export async function buildSiteConfig(): Promise<SiteConfig> {
+  const dir = process.env.DIFFWIKI_PROJECT_DIR;
+  if (!dir) return {};
+  try {
+    return await readSiteConfig(dir);
+  } catch {
+    return {};
   }
 }

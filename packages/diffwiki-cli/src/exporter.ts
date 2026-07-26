@@ -11,6 +11,8 @@ export interface ExportOptions {
   filter?: string;
   /** Comma-separated exclude globs. */
   exclude?: string;
+  /** Build only the repo project's diffwiki.yaml (string dir, or true for cwd). */
+  project?: string | boolean;
 }
 
 const splitGlobs = (v?: string): string[] =>
@@ -48,8 +50,10 @@ export async function runExport(opts: ExportOptions): Promise<void> {
   const filter = splitGlobs(opts.filter);
   const exclude = splitGlobs(opts.exclude);
 
-  // Fail fast on a bad selection — before spawning the app / generating anything.
-  if (filter.length > 0 || exclude.length > 0) {
+  // Fail fast on a bad selection — but only when NOT in project mode (project mode
+  // scopes to diffwiki.yaml via a tmp home the harness seeds; the global registry
+  // is not the source of truth then).
+  if (!opts.project && (filter.length > 0 || exclude.length > 0)) {
     const names = (await listCollections()).map((c) => c.name);
     const { errors } = resolveCollectionSelection(names, { filter, exclude });
     if (errors.length > 0) throw new InvalidExportSelectionError(errors);
@@ -63,6 +67,10 @@ export async function runExport(opts: ExportOptions): Promise<void> {
   const args = [...prefix, 'export', '--out', out, '--base', opts.base];
   if (opts.filter) args.push('--filter', opts.filter);
   if (opts.exclude) args.push('--exclude', opts.exclude);
+  if (opts.project) {
+    args.push('--project');
+    if (typeof opts.project === 'string') args.push(opts.project);
+  }
 
   if (override) console.log(`Exporting via ${override}`);
   await new Promise<void>((resolve, reject) => {

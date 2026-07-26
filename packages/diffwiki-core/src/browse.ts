@@ -116,7 +116,9 @@ function pickIndexFile(names: string[]): string | undefined {
  * (a private/draft page could leak into a static export), not just a wrong title.
  */
 const CHEAP_META_BYTES = 8192;
-async function cheapMeta(absPath: string): Promise<{ title?: string; audience?: Audience; status?: PublishStatus }> {
+async function cheapMeta(
+  absPath: string,
+): Promise<{ title?: string; audience?: Audience; status?: PublishStatus; order?: number }> {
   let handle: import('node:fs/promises').FileHandle | undefined;
   try {
     handle = await fs.open(absPath, 'r');
@@ -131,11 +133,14 @@ async function cheapMeta(absPath: string): Promise<{ title?: string; audience?: 
     const titleM = /^title:\s*(.+)$/m.exec(inner);
     const audienceM = /^audience:\s*(.+)$/m.exec(inner);
     const statusM = /^status:\s*(.+)$/m.exec(inner);
+    const orderM = /^order:\s*(.+)$/m.exec(inner);
     const title = titleM ? clean(titleM[1]) : undefined;
     // Only the non-default value of each axis is carried (private / draft).
     const audience = audienceM && clean(audienceM[1]) === 'private' ? ('private' as const) : undefined;
     const status = statusM && clean(statusM[1]) === 'draft' ? ('draft' as const) : undefined;
-    return { title, audience, status };
+    const orderNum = orderM ? Number(clean(orderM[1])) : NaN;
+    const order = Number.isFinite(orderNum) ? orderNum : undefined;
+    return { title, audience, status, order };
   } catch {
     /* unreadable — fall back to filename */
   } finally {
@@ -144,16 +149,22 @@ async function cheapMeta(absPath: string): Promise<{ title?: string; audience?: 
   return {};
 }
 
-/** Enrich leaf titles + status from frontmatter (cheap partial read). Returns a new tree. */
+/**
+ * Enrich leaf/folder titles + status + order from frontmatter (cheap partial read),
+ * then sort each sibling set by frontmatter `order` (ascending; unset sorts after,
+ * keeping the dirs-first, alphabetical order from `buildArticleTree` as the tiebreak
+ * via a stable sort). Returns a new tree.
+ */
 async function enrichTitles(nodes: ArticleNode[], collDir: string): Promise<ArticleNode[]> {
-  return Promise.all(
+  const enriched = await Promise.all(
     nodes.map(async (node): Promise<ArticleNode> => {
       if (node.children) {
         const children = await enrichTitles(node.children, collDir);
-        // A folder shows the title (and audience/status) of its index page, when one exists.
+        // A folder shows the title (and audience/status/order) of its index page, when one exists.
         let title = node.title;
         let audience = node.audience;
         let status = node.status;
+        let order = node.order;
         if (node.slug) {
           const dir = path.join(collDir, node.slug);
           const idx = pickIndexFile(await readdirSafe(dir));
@@ -162,24 +173,28 @@ async function enrichTitles(nodes: ArticleNode[], collDir: string): Promise<Arti
             title = meta.title ?? title;
             audience = meta.audience ?? audience;
             status = meta.status ?? status;
+            order = meta.order ?? order;
           }
         }
-        return { ...node, title, audience, status, children };
+        return { ...node, title, audience, status, order, children };
       }
       for (const ext of ['.mdx', '.md']) {
         const meta = await cheapMeta(path.join(collDir, `${node.slug}${ext}`));
-        if (meta.title || meta.audience || meta.status) {
+        if (meta.title || meta.audience || meta.status || meta.order != null) {
           return {
             ...node,
             title: meta.title ?? node.title,
             audience: meta.audience ?? node.audience,
             status: meta.status ?? node.status,
+            order: meta.order ?? node.order,
           };
         }
       }
       return node;
     }),
   );
+  // Array.prototype.sort is stable, so unordered siblings keep their dirs-first/alpha order.
+  return enriched.sort((a, b) => (a.order ?? Number.MAX_SAFE_INTEGER) - (b.order ?? Number.MAX_SAFE_INTEGER));
 }
 
 // ── Public API ──────────────────────────────────────────────────────────────
@@ -190,11 +205,13 @@ async function enrichTitles(nodes: ArticleNode[], collDir: string): Promise<Arti
  * (audience:'private' / status:'draft'), else absent. Cheap partial read — used
  * to mark/skip whole collections the same way leaf articles are.
  */
-export async function collectionMeta(collDir: string): Promise<{ audience?: Audience; status?: PublishStatus }> {
+export async function collectionMeta(
+  collDir: string,
+): Promise<{ title?: string; audience?: Audience; status?: PublishStatus }> {
   const idx = pickIndexFile(await readdirSafe(collDir));
   if (!idx) return {};
   const meta = await cheapMeta(path.join(collDir, idx));
-  return { audience: meta.audience, status: meta.status };
+  return { title: meta.title, audience: meta.audience, status: meta.status };
 }
 
 /**

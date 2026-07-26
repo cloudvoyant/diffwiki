@@ -1,0 +1,36 @@
+name: Build diffwiki site
+description: >-
+  Set up the toolchain (mise + cached pnpm store), build the showcase static site
+  (`mise run build:pages`), and upload it as a GitHub Pages artifact. Assumes the
+  repo is already checked out.
+
+runs:
+  using: composite
+  steps:
+    - name: Setup mise
+      uses: jdx/mise-action@v4
+
+    - name: Locate pnpm store
+      shell: bash
+      run: echo "PNPM_STORE_PATH=$(pnpm store path --silent)" >> "$GITHUB_ENV"
+
+    - name: Cache pnpm store
+      uses: actions/cache@v4
+      with:
+        path: ${{ env.PNPM_STORE_PATH }}
+        key: ${{ runner.os }}-pnpm-store-${{ hashFiles('pnpm-lock.yaml') }}
+        restore-keys: |
+          ${{ runner.os }}-pnpm-store-
+
+    - name: Install dependencies
+      shell: bash
+      run: mise run install
+
+    - name: Build showcase site
+      shell: bash
+      run: mise run build:pages
+
+    - name: Upload Pages artifact
+      uses: actions/upload-pages-artifact@v3
+      with:
+        path: dist-site

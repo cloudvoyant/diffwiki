@@ -18,6 +18,7 @@ function buildCrumbs(tree: CollectionTree[], pathname: string): Crumb[] {
   const collName = decodeURIComponent(pathname.split('/').filter(Boolean)[0] ?? '');
   const ct = tree.find((t) => t.collection.name === collName);
   if (!ct) return [{ label: collName }];
+  const collLabel = ct.collection.title ?? collName;
 
   const chain: TreeNode[] = [];
   const walk = (nodes: TreeNode[]): boolean => {
@@ -31,7 +32,7 @@ function buildCrumbs(tree: CollectionTree[], pathname: string): Crumb[] {
   };
   walk(ct.nodes);
 
-  return [{ label: collName, coll: collName }, ...chain.map((n) => ({ label: n.title ?? n.name, path: n.path }))];
+  return [{ label: collLabel, coll: collName }, ...chain.map((n) => ({ label: n.title ?? n.name, path: n.path }))];
 }
 
 /**

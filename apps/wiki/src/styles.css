@@ -127,10 +127,16 @@
   * {
     border-color: var(--border);
   }
+  /* Contain the viewport rubber-band so the sticky top nav doesn't drift on
+     overscroll at the very top of the page (matches shadcn's contained scroll). */
+  html {
+    overscroll-behavior: none;
+  }
   body {
     background-color: var(--background);
     color: var(--foreground);
     font-family: var(--font-sans, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif);
+    overscroll-behavior: none;
   }
   /* Headings use the theme's heading font (defaults to the sans stack; themes
      like anthropic point --font-heading at a serif). */
@@ -277,4 +283,27 @@
   display: block;
   width: 100%;
   overflow-x: auto;
+}
+
+/* Vertical roll for the cycling home-page tagline (see components/cycling-text.tsx).
+   Clean slide (no blur) with a light fade; clipped vertically via clip-path. */
+@keyframes tagline-roll-in {
+  from {
+    opacity: 0;
+    transform: translateY(100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes tagline-roll-out {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-100%);
+  }
 }

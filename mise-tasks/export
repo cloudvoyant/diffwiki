@@ -7,10 +7,14 @@ cd "${MISE_PROJECT_ROOT:-$PWD}"
 OUT="${1:-dist-site}"
 BASE="${2:-/}"
 
+EXPORT_ARGS=(--out "$OUT" --base "$BASE")
+[[ -n "${DIFFWIKI_FILTER:-}" ]] && EXPORT_ARGS+=(--filter "$DIFFWIKI_FILTER")
+[[ -n "${DIFFWIKI_EXCLUDE:-}" ]] && EXPORT_ARGS+=(--exclude "$DIFFWIKI_EXCLUDE")
+
 log_info "Building static bundle (base=$BASE)"
 DIFFWIKI_BASE="$BASE" VITE_DIFFWIKI_STATIC=1 pnpm --filter diffwiki-app exec vite build --outDir dist-static
 
 log_info "Prerendering static site to $OUT"
-DIFFWIKI_STATIC=1 node apps/wiki/bin/export.mjs --out "$OUT" --base "$BASE"
+DIFFWIKI_STATIC=1 node apps/wiki/bin/export.mjs "${EXPORT_ARGS[@]}"
 
 log_info "Done: $OUT"

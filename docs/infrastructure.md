@@ -54,6 +54,16 @@ Key compatibility measures:
 - Line endings enforced to LF via `.editorconfig`
 - Bash 3.2+ required (macOS ships with Bash 3.2)
 
+## GitHub Pages deploy
+
+The showcase site is published by `.github/workflows/pages.yml`:
+
+1. **Trigger** — push to `main` touching `wiki/**`, `apps/wiki/**`, `packages/**`, `diffwiki.yaml`, or `mise-tasks/**`; or manual `workflow_dispatch`.
+2. **Build** — `mise run build:pages` compiles the workspace and runs `export --project` against the committed `diffwiki.yaml`. `--project` self-seeds a throwaway `DIFFWIKI_HOME` (OS tmpdir) from `diffwiki.yaml`, scoping the SSG to exactly the project's collections at `--base /diffwiki/` — the same source `diffwiki preview` renders. Output: `dist-site/`.
+3. **Deploy** — `actions/upload-pages-artifact` + `actions/deploy-pages` (OIDC; `pages: write`, `id-token: write`).
+
+**One-time setup:** Settings → Pages → Source = **GitHub Actions** (Phase 0). The registry is sourced from `diffwiki.yaml` — never from the machine-local `~/.diffwiki` — so the build is reproducible on a clean runner.
+
 ## References
 
 - [mise - the dev tool manager](https://mise.jdx.dev/)
