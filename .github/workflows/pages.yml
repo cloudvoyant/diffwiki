@@ -1,0 +1,47 @@
+name: Deploy Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'wiki/**'
+      - 'apps/wiki/**'
+      - 'packages/**'
+      - 'diffwiki.yaml'
+      - 'mise-tasks/**'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+# Least-privilege for Pages deploy via OIDC.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never cancel an in-flight deploy; serialize on the shared Pages environment.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      # Build + upload the showcase site — composed in .github/actions/build-site so
+      # the same steps can be reused (e.g. a PR preview build) without duplication.
+      - name: Build & upload site
+        uses: ./.github/actions/build-site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

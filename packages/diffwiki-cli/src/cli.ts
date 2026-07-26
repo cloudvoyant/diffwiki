@@ -1,3 +1,4 @@
+import { spawn } from 'node:child_process';
 import { Command } from 'commander';
 import {
   addExternalCollection,
@@ -20,6 +21,8 @@ import {
   removePlugin,
   removeTags,
   resolveCwdCollection,
+  resolveEditorCommand,
+  resolveEditTarget,
   setConfigValue,
   setTags,
   updateArticleBody,
@@ -31,6 +34,7 @@ import { version } from './version';
 import { collect, splitTags, withErrors } from './runtime';
 import { openBrowser, readState, isAlive, startUi, stopUi, waitForServer } from './ui-server';
 import { runExport } from './exporter';
+import { runPreview } from './preview';
 
 const icon = (level: DiagnosticLevel): string => (level === 'ok' ? '✓' : level === 'warn' ? '!' : '✖');
 
@@ -311,10 +315,19 @@ export function createProgram(): Command {
     .option('-b, --base <path>', 'base URL path (e.g. /my-repo/ for GitHub Pages)', '/')
     .option('-f, --filter <globs>', 'only export collections matching these globs (comma-separated)')
     .option('-e, --exclude <globs>', 'exclude collections matching these globs (comma-separated)')
+    .option('--project [dir]', 'build only the repo project from its diffwiki.yaml (default: cwd)')
     .action(
-      withErrors(async (opts: { out: string; base: string; filter?: string; exclude?: string }) => {
-        await runExport({ out: opts.out, base: opts.base, filter: opts.filter, exclude: opts.exclude });
-      }),
+      withErrors(
+        async (opts: { out: string; base: string; filter?: string; exclude?: string; project?: string | boolean }) => {
+          await runExport({
+            out: opts.out,
+            base: opts.base,
+            filter: opts.filter,
+            exclude: opts.exclude,
+            project: opts.project,
+          });
+        },
+      ),
     );
 
   program
@@ -415,6 +428,46 @@ export function createProgram(): Command {
         const target = coll ? `${state.url}/${encodeURIComponent(coll.name)}` : state.url;
         openBrowser(target);
         console.log(`Opening ${target}`);
+      }),
+    );
+
+  program
+    .command('edit')
+    .description('Open a collection (or article) in your editor — GUI not required')
+    .argument('[target]', 'collection or "collection:slug" (default: the current repo collection)')
+    .option('--editor <cmd>', 'editor command (overrides config `editor`, $VISUAL, $EDITOR)')
+    .action(
+      withErrors(async (target: string | undefined, opts: { editor?: string }) => {
+        const argv = await resolveEditorCommand(opts.editor);
+        if (!argv) {
+          console.error(
+            'No editor set. Configure one: diffwiki config-set editor "<cmd>" — or set $EDITOR, or pass --editor.',
+          );
+          process.exitCode = 1;
+          return;
+        }
+        const { path: dest, kind } = await resolveEditTarget(target, process.cwd());
+        const [cmd, ...args] = argv;
+        console.log(`Opening ${kind} ${dest} with ${argv.join(' ')}`);
+        const code = await new Promise<number>((resolve) => {
+          const child = spawn(cmd, [...args, dest], { stdio: 'inherit' });
+          child.on('error', (err) => {
+            console.error(`Could not launch editor "${cmd}": ${err.message}`);
+            resolve(127);
+          });
+          child.on('exit', (c) => resolve(c ?? 0));
+        });
+        if (code !== 0) process.exitCode = code;
+      }),
+    );
+
+  program
+    .command('preview')
+    .description('Preview the site from the repo diffwiki.yaml (ignores global collections)')
+    .option('-p, --port <port>', 'port to serve on', '4321')
+    .action(
+      withErrors(async (opts: { port: string }) => {
+        await runPreview({ cwd: process.cwd(), port: Number(opts.port) });
       }),
     );
 

@@ -27,6 +27,8 @@ export interface Registry {
 export interface Config {
   defaultCollection?: string;
   defaultSearch?: string;
+  /** Editor command used by `diffwiki edit` (e.g. "code -w", "hx"). Falls back to $VISUAL/$EDITOR. */
+  editor?: string;
 }
 
 export interface Article {
@@ -41,6 +43,62 @@ export interface RepoConfig {
   collection: string;
   /** Path to the wiki directory, relative to the repo root. */
   path: string;
+}
+
+/** A home-page card (VitePress-style): icon + title + subtitle linking into the site. */
+export interface HomeCard {
+  /** Icon name from the curated home-card icon set; unknown/missing → no icon. */
+  icon?: string;
+  title: string;
+  subtitle?: string;
+  /** In-site path, e.g. "/getting-started". */
+  link: string;
+}
+
+/** Home-page customization from `diffwiki.yaml` → `site.home`. */
+export interface SiteHome {
+  /** Line shown under the wordmark on the home page. */
+  tagline?: string;
+  /** Cards rendered below the search bar. */
+  cards?: HomeCard[];
+}
+
+/** Footer copyright notice from `diffwiki.yaml` → `site.copyright`. Applies to the
+ *  site/software; article CONTENT copyright stays with its respective authors. */
+export interface SiteCopyright {
+  /** The full notice text, e.g. "© 2026 Acme, Inc." */
+  text: string;
+  /** Optional URL — renders the notice as a link. */
+  url?: string;
+}
+
+/** Site-level config from `diffwiki.yaml` → `site`. The diffwiki logo + wordmark
+ *  are fixed branding and deliberately not configurable. */
+export interface SiteConfig {
+  /** Project repository URL for the top-nav GitHub link. */
+  repo?: string;
+  /** Footer copyright notice; no default — the footer is empty when unset. */
+  copyright?: SiteCopyright;
+  home?: SiteHome;
+}
+
+/** One collection declared in `diffwiki.yaml` → `collections[]`. */
+export interface ProjectCollection {
+  name: string;
+  /** Content directory, relative to the project root. */
+  path: string;
+  /** Optional display order (ascending). Unset sorts after ordered ones, keeping list order. */
+  order?: number;
+}
+
+/**
+ * Normalised repo-root `diffwiki.yaml`. The extended form carries `site` +
+ * `collections[]`; the legacy `{ collection, path }` form is folded into a
+ * one-element `collections` by the parser.
+ */
+export interface ProjectConfig {
+  site?: SiteConfig;
+  collections: ProjectCollection[];
 }
 
 /** A node in a collection's article tree. Branches have `children`; leaves have `slug`. */
@@ -58,6 +116,8 @@ export interface ArticleNode {
   audience?: Audience;
   /** Lifecycle status, set only when 'draft' (omitted for 'published'). */
   status?: PublishStatus;
+  /** Frontmatter `order` — nav sort within a folder (ascending; unset sorts after). */
+  order?: number;
   /** Branch only: nested nodes. */
   children?: ArticleNode[];
 }
@@ -198,6 +258,8 @@ export interface CollectionInfo {
   name: string;
   type: CollectionType;
   path: string;
+  /** Display title from the collection's root index page frontmatter; falls back to `name` in the UI. */
+  title?: string;
   branch?: string;
   behind?: number;
   /** Audience from the collection's root index page; present only when 'private'. */

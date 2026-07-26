@@ -30,7 +30,7 @@ function formatDate(iso: string): string {
 function CollectionDocPage() {
   const page = Route.useLoaderData();
   // The nav tree comes from the root loader; breadcrumbs resolve the trail from it.
-  const tree = useLoaderData({ from: '__root__' });
+  const { tree } = useLoaderData({ from: '__root__' });
 
   if (page.kind === 'listing') {
     return (

@@ -34,38 +34,16 @@ export const Route = createFileRoute('/search')({
   pendingMs: 150,
 });
 
-const QUERY_INPUT_CLASS =
-  'w-full rounded-lg border border-input bg-background px-4 py-2.5 text-sm text-foreground shadow-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring';
-
 /** Human-friendly search duration: sub-second in ms, else seconds with one decimal. */
 function formatDuration(ms: number): string {
   return ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(1)} s`;
 }
 
-/** Shown while the search loader is in flight — keeps the query bar usable. */
+/** Shown while the search loader is in flight. The query bar lives in the top nav. */
 function SearchPending() {
-  const params = Route.useSearch();
-  const navigate = Route.useNavigate();
-  const [term, setTerm] = useState(params.q);
-
-  const submit = (e: React.FormEvent) => {
-    e.preventDefault();
-    void navigate({ to: '/search', search: (prev) => ({ ...prev, q: term.trim() }) });
-  };
-
   return (
     <PageLayout>
       <div className="flex w-full max-w-3xl flex-col gap-6">
-        <form onSubmit={submit} role="search">
-          <input
-            type="search"
-            value={term}
-            onChange={(e) => setTerm(e.target.value)}
-            placeholder="Search…"
-            aria-label="Search"
-            className={QUERY_INPUT_CLASS}
-          />
-        </form>
         <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground" role="status" aria-live="polite">
           <span
             className="inline-block size-4 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent"
@@ -83,8 +61,6 @@ function SearchComponent() {
   const { collections, modes, defaultMode } = loader;
   const params = Route.useSearch();
   const navigate = Route.useNavigate();
-
-  const [term, setTerm] = useState(params.q);
 
   // Static builds have no server: prerendered `/search` ships an empty result set,
   // so compute results on the client whenever the query/collection changes — this
@@ -104,12 +80,6 @@ function SearchComponent() {
     };
   }, [isStatic, params.q, params.c]);
   const search = isStatic ? clientSearch : loader.search;
-
-  const submit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const value = term.trim();
-    void navigate({ to: '/search', search: (prev) => ({ ...prev, q: value }) });
-  };
 
   // The current mode key is "engine:type". When the URL omits engine/type, reflect
   // the engine the server actually runs (resolved via config.defaultSearch / first
@@ -133,18 +103,7 @@ function SearchComponent() {
   return (
     <PageLayout>
       <div className="flex w-full max-w-3xl flex-col gap-6">
-        {/* Query bar — top-aligned (not vertically centred like the home hero) */}
-        <form onSubmit={submit} role="search">
-          <input
-            type="search"
-            value={term}
-            onChange={(e) => setTerm(e.target.value)}
-            placeholder="Search…"
-            aria-label="Search"
-            className={QUERY_INPUT_CLASS}
-          />
-        </form>
-
+        {/* No query bar here — search is driven by the top-nav bar (⌘K). */}
         {/* Filters: collection + dynamic search-mode dropdown */}
         <div className="flex flex-wrap items-center gap-3">
           <select
@@ -159,7 +118,7 @@ function SearchComponent() {
             <option value="">All collections</option>
             {collections.map((c: CollectionInfo) => (
               <option key={c.name} value={c.name}>
-                {c.name}
+                {c.title ?? c.name}
               </option>
             ))}
           </select>
@@ -192,11 +151,12 @@ function SearchComponent() {
 
         {/* Results region */}
         {q === '' ? (
-          <p className="text-sm text-muted-foreground">Type a query and press Enter.</p>
+          <p className="text-sm text-muted-foreground">Search from the bar above to find articles.</p>
         ) : (
           <div className="flex flex-col gap-3">
             <p className="text-xs text-muted-foreground" data-testid="search-meta">
-              {search.results.length} result{search.results.length === 1 ? '' : 's'} · {formatDuration(search.tookMs)}
+              {search.results.length} result{search.results.length === 1 ? '' : 's'} for &ldquo;{q}&rdquo; ·{' '}
+              {formatDuration(search.tookMs)}
             </p>
             {search.results.length === 0 ? (
               <p className="text-sm text-muted-foreground">No results for &ldquo;{q}&rdquo;.</p>

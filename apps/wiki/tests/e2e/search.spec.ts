@@ -21,13 +21,11 @@ const test = base.extend<{ noClientErrors: void }>({
 });
 
 test.describe('Search route (/search)', () => {
-  test('reflects the query term from the URL in the search bar', async ({ page }) => {
+  test('reflects the query term from the URL in the results meta', async ({ page }) => {
     await page.goto('/search?q=intro');
-    // The sidebar also has a SearchBox, so target the search page's input inside
-    // the SidebarInset content area (the main content inset rendered after the sidebar).
-    const searchInput = page.locator('[data-slot="sidebar-inset"] input[type="search"]').first();
-    await expect(searchInput).toBeVisible();
-    await expect(searchInput).toHaveValue('intro');
+    // The /search page has no query bar (search is driven by the top-nav bar); the
+    // active query is echoed in the results meta line.
+    await expect(page.getByTestId('search-meta')).toContainText('intro');
   });
 
   test('renders the collection filter with an "All collections" option', async ({ page }) => {
@@ -90,7 +88,7 @@ test.describe('Search route (/search)', () => {
 
   test('shows a hint when the query is empty', async ({ page }) => {
     await page.goto('/search');
-    await expect(page.getByText(/type a query and press enter/i)).toBeVisible();
+    await expect(page.getByText(/search from the bar above/i)).toBeVisible();
   });
 
   test('navigates from the home search box to /search with the query in the URL', async ({ page }) => {
@@ -103,8 +101,7 @@ test.describe('Search route (/search)', () => {
     await searchInput.fill('diffwiki');
     await searchInput.press('Enter');
     await expect(page).toHaveURL(/\/search\?.*q=diffwiki/);
-    // After navigation, the search page's input should reflect the term.
-    const pageSearchInput = page.locator('[data-slot="sidebar-inset"] input[type="search"]').first();
-    await expect(pageSearchInput).toHaveValue('diffwiki');
+    // The /search page has no query bar; it echoes the active query in its results meta.
+    await expect(page.getByTestId('search-meta')).toContainText('diffwiki');
   });
 });

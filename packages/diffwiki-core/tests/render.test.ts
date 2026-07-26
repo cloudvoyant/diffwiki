@@ -87,3 +87,17 @@ describe('renderArticle link rewriting', () => {
     expect(hrefs(html)).toEqual(['/docs/a/c']);
   });
 });
+
+describe('renderArticle code fences', () => {
+  // Every fence must become a `pre.shiki` (themed background + client copy button),
+  // never a bare dark <pre>. Language-less fences rely on `defaultLanguage`.
+  it('highlights a language-tagged fence as pre.shiki', async () => {
+    const { html } = await renderArticle('```ts\nconst x = 1;\n```\n', ctx('intro'));
+    expect(html).toContain('<pre class="shiki');
+  });
+
+  it('highlights a language-less fence as pre.shiki (defaultLanguage)', async () => {
+    const { html } = await renderArticle('```\ndiffwiki list\n```\n', ctx('intro'));
+    expect(html).toContain('<pre class="shiki');
+  });
+});

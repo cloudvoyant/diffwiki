@@ -30,6 +30,8 @@ export interface CollectionInfo {
   name: string;
   type: 'global' | 'repo' | 'external';
   path: string;
+  /** Display title from the collection's index page; falls back to `name`. */
+  title?: string;
   /** External collections only: checked-out branch (live builds; omitted in static export). */
   branch?: string;
   /** External collections only: commits behind upstream (live builds). */
@@ -43,6 +45,31 @@ export interface CollectionInfo {
 export interface CollectionTree {
   collection: CollectionInfo;
   nodes: TreeNode[];
+}
+
+export interface HomeCard {
+  icon?: string;
+  title: string;
+  subtitle?: string;
+  link: string;
+}
+
+export interface SiteHome {
+  tagline?: string;
+  cards?: HomeCard[];
+}
+
+export interface SiteCopyright {
+  text: string;
+  url?: string;
+}
+
+export interface SiteConfig {
+  /** Project repo URL for the top-nav GitHub link. */
+  repo?: string;
+  /** Footer copyright notice; no default — footer is empty when unset. */
+  copyright?: SiteCopyright;
+  home?: SiteHome;
 }
 
 export interface TocItem {

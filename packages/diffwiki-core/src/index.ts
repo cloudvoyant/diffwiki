@@ -23,6 +23,7 @@ export * from './frontmatter';
 export * from './collections';
 export * from './articles';
 export * from './repo';
+export * from './project';
 // Git identity + external collections helpers, and site builders (used by the
 // wiki app's server functions AND the static exporter)
 export * from './git';
@@ -49,6 +50,7 @@ export type { DiffwikiLogLevel } from './logger';
 export * from './browse';
 export * from './render';
 export * from './graph';
+export * from './edit';
 
 // Plugin management (curated -- no internal helpers)
 export {

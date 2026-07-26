@@ -30,11 +30,15 @@ export function getRouter() {
     basepath: import.meta.env.BASE_URL,
     scrollRestoration: true,
     defaultPreload: 'intent',
+    // Only preload after the pointer rests ~80ms on a link, so the mouse merely
+    // passing over links doesn't spin up (then immediately tear down) preload
+    // matches — that churn is what races match cleanup and trips the caught-but-
+    // noisy `_nonReactive` undefined in router-core's preloadRoute.
+    defaultPreloadDelay: 80,
     // Keep TanStack's default preload stale time (30s) rather than forcing a fresh
-    // preload on every hover: `defaultPreloadStaleTime: 0` re-creates a match on
-    // each intent, and racing that churn against match cleanup trips a caught-but-
-    // noisy `_nonReactive` undefined in router-core's preloadRoute. A click still
-    // re-validates, so serving a wiki page from a <30s-old preload is fine.
+    // preload on every hover (`defaultPreloadStaleTime: 0` re-creates a match on
+    // each intent, worsening the same race). A click still re-validates, so serving
+    // a wiki page from a <30s-old preload is fine.
     defaultNotFoundComponent: NotFound,
     defaultErrorComponent: RouteError,
   });

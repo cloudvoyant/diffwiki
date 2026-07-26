@@ -1,13 +1,14 @@
 import { createRootRoute, HeadContent, Outlet, Scripts } from '@tanstack/react-router';
-import { loadNavTree } from '../lib/data-source';
+import { loadNavTree, loadSite } from '../lib/data-source';
 import { AppShell } from '../components/app-shell';
+import { RouteProgress } from '../components/route-progress';
 import { THEME_INIT_SCRIPT } from '../components/theme-script';
 import { LiveReload } from '../components/live-reload';
 
 import appCss from '../styles.css?url';
 
 export const Route = createRootRoute({
-  loader: () => loadNavTree(),
+  loader: async () => ({ tree: await loadNavTree(), site: await loadSite() }),
   head: () => ({
     meta: [
       { charSet: 'utf-8' },
@@ -32,7 +33,7 @@ export const Route = createRootRoute({
 });
 
 function RootLayout() {
-  const tree = Route.useLoaderData();
+  const { tree, site } = Route.useLoaderData();
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
@@ -40,7 +41,8 @@ function RootLayout() {
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
       </head>
       <body>
-        <AppShell tree={tree}>
+        <RouteProgress />
+        <AppShell tree={tree} site={site}>
           <Outlet />
         </AppShell>
         <LiveReload />

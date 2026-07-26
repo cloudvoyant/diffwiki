@@ -322,6 +322,54 @@ Run `diffwiki config-set defaultCollection <name>` (the collection must exist), 
 Check `DIFFWIKI_HOME` — if set, diffwiki uses it instead of `~/.diffwiki`. Run `diffwiki
 doctor` to see resolved paths.
 
+## Publishing
+
+A repo-root `diffwiki.yaml` declares the collections to publish and customizes the home page:
+
+```yaml
+site:
+  repo: https://github.com/you/your-repo # top-nav GitHub link
+  home:
+    tagline: your local knowledge base
+    cards:
+      - icon: rocket
+        title: Getting Started
+        subtitle: Install, create a wiki, publish it.
+        link: /getting-started
+collections:
+  - name: getting-started
+    path: wiki/getting-started
+  - name: user-guide
+    path: wiki/user-guide
+```
+
+- **Collection titles** come from each collection's `index.md` frontmatter `title:`; URLs use the slug name.
+- **Home cards** are `site.home.cards[]` — `icon` (from the curated set: `rocket`, `book-open`, `code`, `compass`, `search`, `git-branch`, `sparkles`, `file-text`, `boxes`, `database`, `terminal`, `map`), `title`, `subtitle`, `link`.
+- The **diffwiki logo and wordmark are fixed branding** — not configurable. This is a wiki, not a custom site.
+- **Footer copyright** is `site.copyright` — either a bare string or `{ text, url }`. There is no default (no notice shown when unset). It covers the **site/software**; article content copyright stays with its respective authors.
+
+```yaml
+site:
+  copyright:
+    text: © 2026 Acme, Inc.
+    url: https://acme.example # optional — links the notice
+```
+
+Preview locally (rendered from `diffwiki.yaml`, not your global `~/.diffwiki` collections):
+
+```bash
+diffwiki preview            # http://127.0.0.1:4321
+```
+
+Build and serve the static site:
+
+```bash
+mise run build:pages                              # → dist-site/, base /diffwiki/
+node apps/wiki/bin/serve-static.mjs dist-site     # spot-check
+```
+
+Deployment is automatic: `.github/workflows/pages.yml` builds and deploys to GitHub Pages on every push to `main`.
+
 ## References
 
 - [Commander.js](https://www.npmjs.com/package/commander)

@@ -4,6 +4,8 @@ diffwiki is a git-based personal knowledge base: manage topic-specific markdown 
 ("collections") from your terminal — globally or attached to any repository — with real
 full-text search and a local web UI.
 
+> **Live showcase:** https://cloudvoyant.github.io/diffwiki/ — a diffwiki that documents itself, built from `wiki/` and deployed by diffwiki's own static exporter.
+
 ## Features
 
 - **Git-based collections** — markdown/mdx notes organized into named collections under
@@ -64,6 +66,7 @@ Commit using conventional commits (`feat:`, `fix:`, `docs:`). Merge/push to main
 - [User Guide](docs/user-guide.md) - Complete setup and usage guide
 - [Architecture](docs/architecture.md) - Design and implementation details
 - [Infrastructure](docs/infrastructure.md) - Infrastructure and CI/CD details
+- Published site source lives in `wiki/`; see [User Guide → Publishing](docs/user-guide.md#publishing) to build and deploy it.
 
 ## References
 

@@ -7,16 +7,19 @@
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { mkdir, writeFile, cp, readFile, access } from 'node:fs/promises';
+import { rmSync } from 'node:fs';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import {
   buildNavTree,
   buildCollections,
+  buildSiteConfig,
   resolvePage,
   buildSearchIndex,
   buildLinkGraph,
   listCollections,
   resolveCollectionSelection,
+  seedProjectHome,
 } from 'diffwiki-core';
 
 const execFileAsync = promisify(execFile);
@@ -40,6 +43,33 @@ const filterGlobs = splitGlobs(flag('--filter', ''));
 const excludeGlobs = splitGlobs(flag('--exclude', ''));
 
 process.env.DIFFWIKI_STATIC = '1';
+
+// --project [dir]: build only the repo project at `dir` (default cwd) from its
+// diffwiki.yaml. Seeds a tmp DIFFWIKI_HOME on the fly + points DIFFWIKI_PROJECT_DIR
+// at the repo, then the rest of the harness runs unchanged, scoped to the project.
+const projectIdx = argv.indexOf('--project');
+const projectDir =
+  projectIdx !== -1
+    ? argv[projectIdx + 1] && !argv[projectIdx + 1].startsWith('--')
+      ? path.resolve(argv[projectIdx + 1])
+      : process.cwd()
+    : undefined;
+let projectHome;
+if (projectDir !== undefined) {
+  projectHome = (await seedProjectHome(projectDir)).home;
+  process.env.DIFFWIKI_HOME = projectHome;
+  process.env.DIFFWIKI_PROJECT_DIR = projectDir;
+  // Remove the throwaway home on ANY exit — a mid-build throw must not leak it,
+  // not just the success path at the end of this script.
+  process.on('exit', () => {
+    try {
+      rmSync(projectHome, { recursive: true, force: true });
+    } catch {
+      /* best-effort */
+    }
+  });
+  console.log(`[diffwiki] project mode: ${path.join(projectDir, 'diffwiki.yaml')}`);
+}
 
 const pkgRoot = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
 // The prebuilt Vite bundle to prerender against. Defaults to the package's
@@ -110,6 +140,7 @@ await writeFile(
   path.join(dataDir, 'collections.json'),
   JSON.stringify((await buildCollections()).filter((c) => included.has(c.name))),
 );
+await writeFile(path.join(dataDir, 'site.json'), JSON.stringify(await buildSiteConfig()));
 await writeFile(
   path.join(outDir, 'search-index.json'),
   JSON.stringify((await buildSearchIndex()).filter((d) => included.has(d.collection))),
@@ -208,3 +239,5 @@ for (const route of routes) {
 
 await writeFile(path.join(outDir, '.nojekyll'), '');
 console.log(`Exported ${count} routes to ${outDir}`);
+// Temp project home (if any) is removed by the process-exit handler registered
+// where it was seeded — robust to mid-build failures, not just this success path.

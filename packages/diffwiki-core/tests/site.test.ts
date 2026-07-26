@@ -32,6 +32,8 @@ beforeEach(async () => {
   // Folder with no index (so resolvePage returns a listing)
   await fs.mkdir(path.join(c.path, 'folder'), { recursive: true });
   await fs.writeFile(path.join(c.path, 'folder', 'child.md'), '---\ntitle: Child\n---\n# Child\n');
+  // Collection index page — its frontmatter title becomes the collection display title.
+  await fs.writeFile(path.join(c.path, 'index.md'), '---\ntitle: Demo Collection\n---\n# Demo Collection\n');
 });
 
 afterEach(async () => {
@@ -47,9 +49,20 @@ describe('site builders (exporter data)', () => {
     expect(demo!.nodes.some((n) => n.path === '/demo/intro')).toBe(true);
   });
 
+  it('sorts sibling articles by frontmatter `order` (overriding alphabetical)', async () => {
+    const g = await createCollection('guide');
+    await fs.writeFile(path.join(g.path, 'zeta.md'), '---\ntitle: Zeta\norder: 1\n---\n# Zeta\n');
+    await fs.writeFile(path.join(g.path, 'alpha.md'), '---\ntitle: Alpha\norder: 2\n---\n# Alpha\n');
+    const nav = await buildNavTree();
+    const guide = nav.find((c) => c.collection.name === 'guide')!;
+    expect(guide.nodes.map((n) => n.path)).toEqual(['/guide/zeta', '/guide/alpha']);
+  });
+
   it('buildCollections lists the collection', async () => {
     const cols = await buildCollections();
-    expect(cols.some((c) => c.name === 'demo')).toBe(true);
+    const demo = cols.find((c) => c.name === 'demo');
+    expect(demo).toBeDefined();
+    expect(demo!.title).toBe('Demo Collection');
   });
 
   it('resolvePage renders a flat doc with highlighted HTML + toc', async () => {

@@ -271,6 +271,10 @@ export async function renderArticle(body: string, ctx: RenderContext): Promise<R
       themes: { light: 'github-light', dark: 'github-dark' },
       defaultColor: false,
       langAlias: LANG_ALIASES,
+      // `defaultLanguage` styles fences with no language, `fallbackLanguage` those
+      // with an unknown one — both as plaintext, so every code block renders as a
+      // themed `pre.shiki` (light background + copy button), never a bare dark <pre>.
+      defaultLanguage: 'plaintext',
       fallbackLanguage: 'plaintext',
     })
     .use(rehypeStringify)

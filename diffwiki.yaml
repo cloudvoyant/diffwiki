@@ -1,0 +1,42 @@
+# diffwiki project config — drives the published showcase site.
+# Collections are the in-repo wiki dirs; site.home renders the home page cards.
+site:
+  # Top-nav GitHub link points at THIS project's repo. (The diffwiki logo +
+  # wordmark are fixed branding — not configurable.)
+  repo: https://github.com/cloudvoyant/diffwiki
+  # Footer notice — covers the site/software; article content stays © its authors.
+  copyright:
+    text: © 2026 Cloudvoyant, Inc.
+    url: https://cloudvoyant.io
+  home:
+    # No tagline → the home page shows its animated default ("your <cycling> knowledge base").
+    cards:
+      - icon: rocket
+        title: Getting Started
+        subtitle: Install, create your first wiki, and publish it.
+        link: /getting-started
+      - icon: book-open
+        title: User Guide
+        subtitle: Collections, search, and agent memory / RAG.
+        link: /user-guide
+      - icon: code
+        title: API Docs
+        subtitle: The CLI, diffwiki-core, and the plugin SDK.
+        link: /api-docs
+      - icon: compass
+        title: What's Next?
+        subtitle: The roadmap and the long-term vision.
+        link: /whats-next
+collections:
+  - name: getting-started
+    path: wiki/getting-started
+    order: 1
+  - name: user-guide
+    path: wiki/user-guide
+    order: 2
+  - name: api-docs
+    path: wiki/api-docs
+    order: 3
+  - name: whats-next
+    path: wiki/whats-next
+    order: 4
