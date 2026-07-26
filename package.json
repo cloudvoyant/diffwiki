@@ -1,6 +1,6 @@
 {
   "name": "diffwiki-monorepo",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "private": true,
   "packageManager": "pnpm@10.32.1",
   "description": "diffwiki — a git-based knowledge base CLI (monorepo root)",

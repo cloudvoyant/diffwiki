@@ -1,3 +1,10 @@
+# [0.9.0](https://github.com/cloudvoyant/diffwiki/compare/v0.8.0...v0.9.0) (2026-07-26)
+
+
+### Features
+
+* publish diffwiki as a static site with a project config ([cfe3657](https://github.com/cloudvoyant/diffwiki/commit/cfe3657512cb5f7c9e485e224669f6a5a73ff444))
+
 # [0.8.0](https://github.com/cloudvoyant/diffwiki/compare/v0.7.0...v0.8.0) (2026-07-25)
 
 
