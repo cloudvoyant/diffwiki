@@ -63,7 +63,7 @@ describe('diffwiki open — collection-root URL routing', () => {
     const stranger = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'dw-stranger-')));
     try {
       process.chdir(stranger);
-      const { openedUrl } = await runOpen(['open'], 'http://127.0.0.1:9999');
+      const { openedUrl } = await runOpen(['ui', 'open'], 'http://127.0.0.1:9999');
       expect(openedUrl).toBe('http://127.0.0.1:9999');
     } finally {
       await fs.rm(stranger, { recursive: true, force: true });
@@ -86,14 +86,14 @@ describe('diffwiki open — collection-root URL routing', () => {
     });
 
     process.chdir(repo);
-    const { openedUrl } = await runOpen(['open'], 'http://127.0.0.1:9999');
+    const { openedUrl } = await runOpen(['ui', 'open'], 'http://127.0.0.1:9999');
     // Should navigate to the collection's root route, not bare home.
     expect(openedUrl).toBe('http://127.0.0.1:9999/my-repo');
   });
 
   it('logs "Opening <url>" to the console', async () => {
     process.chdir(os.tmpdir());
-    const { consoleOut } = await runOpen(['open'], 'http://127.0.0.1:9999');
+    const { consoleOut } = await runOpen(['ui', 'open'], 'http://127.0.0.1:9999');
     expect(consoleOut).toContain('Opening');
   });
 });

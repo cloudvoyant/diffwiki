@@ -13,7 +13,7 @@ diffwiki turns a repository into a self-describing wiki project with a single co
 
 ## The `diffwiki.yaml` project config
 
-The project config has two top-level blocks: a `collections:` list and a `site:` block. It is backward compatible with the single-collection form that `diffwiki init` writes, but for a multi-section site you use the extended form:
+The project config has two top-level blocks: a `collections:` list and a `site:` block. It is backward compatible with the single-collection form that `diffwiki collection init` writes, but for a multi-section site you use the extended form:
 
 ```yaml
 # diffwiki project config — drives the published site.
@@ -51,10 +51,10 @@ The diffwiki wordmark and logo are fixed — it is a wiki, not a bespoke site �
 
 ## Preview locally
 
-`diffwiki preview` renders the site from `diffwiki.yaml` — the project's declared collections and home config — not from your machine-local global `~/.diffwiki` registry. That makes the preview match exactly what will publish, regardless of what other collections you have registered:
+`diffwiki site preview` renders the site from `diffwiki.yaml` — the project's declared collections and home config — not from your machine-local global `~/.diffwiki` registry. That makes the preview match exactly what will publish, regardless of what other collections you have registered:
 
 ```bash
-diffwiki preview
+diffwiki site preview
 ```
 
 ## Build and publish a static site
@@ -62,7 +62,7 @@ diffwiki preview
 The static build produces a fully self-contained site — HTML, assets, and the client-side BM25 [search](/user-guide/search-and-rag) index — deployable to GitHub Pages or any file host. Build it straight from the committed `diffwiki.yaml` with `--project`:
 
 ```bash
-npx diffwiki export --project -o dist-site -b /my-repo/
+npx diffwiki site export --project -o dist-site -b /my-repo/
 ```
 
 `--project` seeds an ephemeral registry from the `diffwiki.yaml` collections (so the build is reproducible in CI and never depends on a machine-local registry) and runs a filtered static export. The showcase site you are reading is built with exactly this command, wired into a CI workflow that publishes to GitHub Pages on every push.
@@ -76,7 +76,7 @@ Point GitHub Pages at the resulting directory and the wiki is live, with client-
 
 ## Sharing the repo itself
 
-Publishing a static site is one way to share; the other is sharing the repository. Because a repo collection's wiki [travels with the code](/user-guide/collections), anyone who clones the repo gets the wiki too — they run `diffwiki list` and it appears alongside their own collections, ready to browse and search locally. The `diffwiki.yaml` you committed means they can also `diffwiki preview` or build the same site you do. The wiki is part of the project, not a separate artifact to distribute.
+Publishing a static site is one way to share; the other is sharing the repository. Because a repo collection's wiki [travels with the code](/user-guide/collections), anyone who clones the repo gets the wiki too — they run `diffwiki collection list` and it appears alongside their own collections, ready to browse and search locally. The `diffwiki.yaml` you committed means they can also `diffwiki site preview` or build the same site you do. The wiki is part of the project, not a separate artifact to distribute.
 
 ## Where to go next
 

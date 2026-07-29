@@ -32,18 +32,18 @@ afterEach(async () => {
   await fs.rm(repo, { recursive: true, force: true });
 });
 
-describe('diffwiki add (external collection)', () => {
+describe('diffwiki collection add (external collection)', () => {
   it('adds the current repo and lists it as [external]', async () => {
-    const res = await run(['add']);
+    const res = await run(['collection', 'add']);
     expect(res.ok).toBe(true);
     expect(res.out).toContain('Added');
-    const list = await run(['list']);
+    const list = await run(['collection', 'list']);
     expect(list.out).toContain('[external]');
   });
 
   it('refuses to add the same repo twice', async () => {
-    expect((await run(['add'])).ok).toBe(true);
-    const again = await run(['add']);
+    expect((await run(['collection', 'add'])).ok).toBe(true);
+    const again = await run(['collection', 'add']);
     expect(again.ok).toBe(false);
     expect(again.err).toContain('already added');
   });
@@ -53,7 +53,7 @@ describe('diffwiki add (external collection)', () => {
     await g(repo, ['worktree', 'add', wt]);
     process.chdir(wt);
     try {
-      const res = await run(['add']);
+      const res = await run(['collection', 'add']);
       expect(res.ok).toBe(false);
       expect(res.err).toContain('worktree');
     } finally {

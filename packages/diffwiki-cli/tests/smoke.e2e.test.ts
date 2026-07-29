@@ -14,8 +14,8 @@ describe.skipIf(!built)('packaged binary smoke test', () => {
 
   it('prints help listing subcommands', () => {
     const out = execFileSync('node', [binPath, '--help'], { encoding: 'utf8' });
-    expect(out).toContain('list');
-    expect(out).toContain('add');
-    expect(out).toContain('init');
+    expect(out).toContain('collection');
+    expect(out).toContain('article');
+    expect(out).toContain('config');
   });
 });

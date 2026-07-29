@@ -61,11 +61,11 @@ The static path is assembled from three seams:
 4. Prerender pages — for each route, call the built server bundle's `fetch` handler with the on-disk `_data` shim and write the returned markup to `<out>/<route>/index.html`.
 5. Emit `.nojekyll` — so GitHub Pages serves `_data/` paths and hashed filenames verbatim.
 
-The harness is reached through `apps/wiki/bin/wiki-server.mjs` when its first argument is `export`, mirroring how the app is spawned to serve; the command-line interface's `diffwiki export` spawns it the same way `diffwiki up` spawns the live server. Production builds (`mise run build`) also produce `apps/wiki/dist-static/`, shipped in the published package so `diffwiki export` works from an installed copy without a development environment.
+The harness is reached through `apps/wiki/bin/wiki-server.mjs` when its first argument is `export`, mirroring how the app is spawned to serve; the command-line interface's `diffwiki site export` spawns it the same way `diffwiki ui up` spawns the live server. Production builds (`mise run build`) also produce `apps/wiki/dist-static/`, shipped in the published package so `diffwiki site export` works from an installed copy without a development environment.
 
 ### Selecting collections
 
-`diffwiki export` exports every registered collection by default. `--filter <globs>` (allowlist) and `--exclude <globs>` (denylist) narrow that set — each is a comma-separated list of name globs (`*`, `?`), applied as filter-then-exclude. The selection is resolved by the pure `resolveCollectionSelection` (core), and it is **validated upfront**: a pattern that matches no collection, or a selection that ends up empty, aborts the command **before anything is generated** (the CLI checks before even spawning the app). The chosen set filters the nav tree (sidebar), `collections.json` (home pills), `search-index.json` (search), and the emitted routes/`_data/doc` — so excluded collections are absent everywhere, including search.
+`diffwiki site export` exports every registered collection by default. `--filter <globs>` (allowlist) and `--exclude <globs>` (denylist) narrow that set — each is a comma-separated list of name globs (`*`, `?`), applied as filter-then-exclude. The selection is resolved by the pure `resolveCollectionSelection` (core), and it is **validated upfront**: a pattern that matches no collection, or a selection that ends up empty, aborts the command **before anything is generated** (the CLI checks before even spawning the app). The chosen set filters the nav tree (sidebar), `collections.json` (home pills), `search-index.json` (search), and the emitted routes/`_data/doc` — so excluded collections are absent everywhere, including search.
 
 ### Environment Variables / Configuration
 

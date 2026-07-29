@@ -19,23 +19,23 @@ While people [contribute by editing markdown directly](/user-guide/continuous-le
 Agents append findings as articles, revise them as understanding improves, and tag them so they are retrievable later:
 
 ```bash
-diffwiki add-article -p "memory:auth-flow" -t "auth,findings" "# Auth flow\n\nTokens are minted in..."
-diffwiki update-article -p "memory:auth-flow" "# Auth flow\n\nCorrected: refresh happens in..."
-diffwiki add-tags -p "memory:auth-flow" "verified,security"
+diffwiki article create "memory:auth-flow" "# Auth flow\n\nTokens are minted in..." -t "auth,findings"
+diffwiki article update "memory:auth-flow" "# Auth flow\n\nCorrected: refresh happens in..."
+diffwiki tags add "memory:auth-flow" "verified,security"
 ```
 
-- `add-article -p "[collection:]title"` creates an article, with an optional markdown body and an optional repeatable `-t, --tag`.
-- `update-article -p "collection:path"` replaces an article's body.
-- `add-tags -p "collection:path"` adds a comma-separated tag list (with sibling commands `remove-tags` and `update-tags`).
+- `article create "<[collection:]title>"` creates an article, with an optional markdown body and an optional repeatable `-t, --tag`.
+- `article update "<collection:slug>"` replaces an article's body.
+- `tags add "<collection:slug>"` adds a comma-separated tag list (with sibling commands `tags remove` and `tags set`).
 
 Because these writes land as plain markdown files in a [collection](/user-guide/collections) — a global collection for cross-project memory, or a repo collection when the memory should travel with the code — every agent write is an ordinary git commit you can review, diff, and revert like a teammate's contribution.
 
 ## How agents read the wiki
 
-Agents retrieve context the same way you search: through `diffwiki query`. There is no separate agent-only retrieval path.
+Agents retrieve context the same way you search: through `diffwiki search query`. There is no separate agent-only retrieval path.
 
 ```bash
-diffwiki query -c memory "how are refresh tokens rotated"
+diffwiki search query -c memory "how are refresh tokens rotated"
 ```
 
 Keyword retrieval uses `diffwiki-ripgrep` or native BM25; semantic and hybrid retrieval use `diffwiki-qmd`. Because retrieval is user-facing [search](/user-guide/search-and-rag), you can run the exact query an agent would and see precisely what context it pulls — which is what makes diffwiki's agent memory trustworthy rather than opaque.

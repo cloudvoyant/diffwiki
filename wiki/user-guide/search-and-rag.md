@@ -27,35 +27,35 @@ Install a plugin and make it the default engine:
 ```bash
 diffwiki plugin install diffwiki-ripgrep
 diffwiki plugin install diffwiki-qmd
-diffwiki config-set defaultSearch diffwiki-qmd:hybrid
+diffwiki config set defaultSearch diffwiki-qmd:hybrid
 ```
 
-The value passed to `config-set defaultSearch` is `<engine>[:<type>]`, where the engine name is the plugin name — for example `diffwiki-qmd:hybrid` or `diffwiki-ripgrep:regex`. `plugin install` provisions the plugin end-to-end and, unless you pass `--no-default`, sets it as the default engine. List what is installed and available with `diffwiki plugin list`.
+The value passed to `config set defaultSearch` is `<engine>[:<type>]`, where the engine name is the plugin name — for example `diffwiki-qmd:hybrid` or `diffwiki-ripgrep:regex`. `plugin install` provisions the plugin end-to-end and, unless you pass `--no-default`, sets it as the default engine. List what is installed and available with `diffwiki plugin list`.
 
 ## Querying
 
 ```bash
-diffwiki query "static export"                 # uses the resolved default engine
-diffwiki query -c user-guide "search"          # limit to a single collection
-diffwiki query --engine diffwiki-ripgrep -t regex "config-.*"   # pick engine + type
+diffwiki search query "static export"                 # uses the resolved default engine
+diffwiki search query -c user-guide "search"          # limit to a single collection
+diffwiki search query --engine diffwiki-ripgrep -t regex "config-.*"   # pick engine + type
 ```
 
 Each result line is `score  collection  title  path  [snippet]`. The score scale is engine-dependent, so use it to eyeball a cutoff within a single result set rather than to compare across engines.
 
 ## Engine routing and automatic fallback
 
-`query` resolves an engine in strict precedence: an explicit `--engine`, then `config.defaultSearch`, then the first enabled search plugin, and finally the native BM25 engine. Crucially, if the chosen plugin fails or is unavailable, diffwiki captures the error and falls back to native BM25 automatically, so a search always returns results. When that happens the CLI prints a warning naming the engine that failed, so you always know whether results came from the intended engine or from the native fallback.
+`search query` resolves an engine in strict precedence: an explicit `--engine`, then `config.defaultSearch`, then the first enabled search plugin, and finally the native BM25 engine. Crucially, if the chosen plugin fails or is unavailable, diffwiki captures the error and falls back to native BM25 automatically, so a search always returns results. When that happens the CLI prints a warning naming the engine that failed, so you always know whether results came from the intended engine or from the native fallback.
 
 ## Indexing
 
-Plugins that maintain an index expose `diffwiki index`:
+Plugins that maintain an index expose `diffwiki search index`:
 
 ```bash
-diffwiki index            # rebuild the active plugin's index
-diffwiki index --embed    # also build vector embeddings (may download models)
+diffwiki search index            # rebuild the active plugin's index
+diffwiki search index --embed    # also build vector embeddings (may download models)
 ```
 
-The native engine has no index to build — it reads collections live — so `diffwiki index` reports nothing to index when native search is active. Run `diffwiki doctor` to check plugin readiness (tool installed, models present, index built, embeddings pending).
+The native engine has no index to build — it reads collections live — so `diffwiki search index` reports nothing to index when native search is active. Run `diffwiki doctor` to check plugin readiness (tool installed, models present, index built, embeddings pending).
 
 ## Search in the published site
 
@@ -69,8 +69,8 @@ Concretely: install a different engine, point the default at it, and reindex —
 
 ```bash
 diffwiki plugin install some-other-memory-db
-diffwiki config-set defaultSearch some-other-memory-db:hybrid
-diffwiki index --embed        # rebuild the new backend's index from the same markdown
+diffwiki config set defaultSearch some-other-memory-db:hybrid
+diffwiki search index --embed        # rebuild the new backend's index from the same markdown
 ```
 
 Because retrieval degrades to the always-available native BM25 engine, search keeps working even while a backend is being swapped or reindexed. You are never locked into one vector store, and switching memory systems is never a content migration — it is just rebuilding an index. (Mixing and matching multiple memory backends is on the [Roadmap](/whats-next#roadmap).)
