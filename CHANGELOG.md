@@ -1,3 +1,10 @@
+# [0.10.0](https://github.com/cloudvoyant/diffwiki/compare/v0.9.0...v0.10.0) (2026-07-29)
+
+
+### Features
+
+* **cli:** group commands into entity taxonomy with deprecated aliases ([5355820](https://github.com/cloudvoyant/diffwiki/commit/535582086309cd73ae36f0b33bf34458199cafae))
+
 # [0.9.0](https://github.com/cloudvoyant/diffwiki/compare/v0.8.0...v0.9.0) (2026-07-26)
 
 
