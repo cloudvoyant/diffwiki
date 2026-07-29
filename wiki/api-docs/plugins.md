@@ -121,7 +121,7 @@ A `null` command means the dependency is unresolvable; the plugin should report 
 `diffwiki plugin register <name> --command <argv>` registers an already-installed binary without npm (from step 2 onward, `managed:false`). Set or change the default at any time:
 
 ```
-diffwiki config-set defaultSearch diffwiki-qmd:hybrid
+diffwiki config set defaultSearch diffwiki-qmd:hybrid
 ```
 
 The `engine[:type]` value picks the engine and, optionally, one of its advertised `searchTypes`. `diffwiki plugin remove <name>` deregisters the plugin and, for managed plugins, runs `npm uninstall` in the managed root.

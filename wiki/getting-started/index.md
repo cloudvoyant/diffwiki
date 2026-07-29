@@ -29,35 +29,35 @@ The commands throughout these docs are written as bare `diffwiki <command>`, whi
 To see the web UI, start it, open it, and stop it when you're done:
 
 ```bash
-npx diffwiki up      # start the local UI
-npx diffwiki open    # open it in your browser (starts it if needed)
-npx diffwiki down    # stop it
+npx diffwiki ui up      # start the local UI
+npx diffwiki ui open    # open it in your browser (starts it if needed)
+npx diffwiki ui down    # stop it
 ```
 
 ## Write
 
-This is the heart of diffwiki: **you write and edit plain markdown files directly.** You do not use CLI commands to add articles by hand — the `add-article` / `update-article` commands exist for coding agents (see [Coding Agents](/user-guide/coding-agents)). For a human, the flow is: create a wiki, then open your editor and write `.md`/`.mdx` files.
+This is the heart of diffwiki: **you write and edit plain markdown files directly.** You do not use CLI commands to add articles by hand — the `article create` / `article update` commands exist for coding agents (see [Coding Agents](/user-guide/coding-agents)). For a human, the flow is: create a wiki, then open your editor and write `.md`/`.mdx` files.
 
 For a wiki that travels with a repo, attach one to the current repo — this writes a `diffwiki.yaml` and a wiki directory into the repo:
 
 ```bash
-diffwiki init
+diffwiki collection init
 ```
 
 For a personal knowledge base independent of any repo, create a global collection under `~/.diffwiki`:
 
 ```bash
-diffwiki create <name>
+diffwiki collection create <name>
 ```
 
-Now write. `diffwiki edit` opens the wiki in your editor — no GUI required — so you can create and edit `.md`/`.mdx` files directly; that is all "adding an article" means. It uses `$EDITOR` (or set one with `diffwiki config-set editor "<cmd>"`, or pass `--editor`):
+Now write. `diffwiki collection edit` opens the wiki in your editor — no GUI required — so you can create and edit `.md`/`.mdx` files directly; that is all "adding an article" means. It uses `$EDITOR` (or set one with `diffwiki config set editor "<cmd>"`, or pass `--editor`):
 
 ```bash
-diffwiki edit                 # open the current repo's wiki in your editor
-diffwiki edit <name>          # open a specific collection
+diffwiki collection edit                 # open the current repo's wiki in your editor
+diffwiki collection edit <name>          # open a specific collection
 ```
 
-Prefer to browse as you go? `diffwiki open` shows your notes live in the web UI. To render the repo's `diffwiki.yaml` project specifically (ignoring your global collections), use `diffwiki preview` instead.
+Prefer to browse as you go? `diffwiki ui open` shows your notes live in the web UI. To render the repo's `diffwiki.yaml` project specifically (ignoring your global collections), use `diffwiki site preview` instead.
 
 As a rule of thumb, a personal knowledge base lives under `~/.diffwiki` (global collections) while project-specific wikis live inside the repo they document (repo collections). See [Collections](/user-guide/collections) for the full taxonomy.
 
@@ -80,7 +80,7 @@ See [Coding Agents](/user-guide/coding-agents) for how this fits together.
 When you want to publish, export your wiki as a self-contained static site and deploy it anywhere — GitHub Pages, for example:
 
 ```bash
-diffwiki export --project -o dist-site -b /repo/
+diffwiki site export --project -o dist-site -b /repo/
 ```
 
 The showcase site you are reading is built the exact same way. Point GitHub Pages at the exported directory, or just share the git repo directly and let others run it locally. See [Sharing](/user-guide/sharing) for deployment details.

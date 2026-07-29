@@ -6,7 +6,7 @@
 ## Overview
 
 diffwiki stores markdown/mdx notes in named **collections**. Global collections live under
-`~/.diffwiki/collections/`; any repository can also host a wiki via `diffwiki init`. A single
+`~/.diffwiki/collections/`; any repository can also host a wiki via `diffwiki collection init`. A single
 `~/.diffwiki/registry.json` tracks every collection (global and repo) so tools can discover
 them. `DIFFWIKI_HOME` overrides the global root (used for test isolation).
 
@@ -69,7 +69,7 @@ kills the child and contributes no search modes.
 `query()` picks the engine as: explicit `opts.engine` → `config.defaultSearch`
 (`"<plugin>[:<type>]"`) when it names an enabled plugin → the first enabled search plugin →
 native. `resolveDefaultSearchMode()` computes the same default engine+type for UIs to
-pre-select. `diffwiki index` (re)builds a plugin's index via its `index` op; article
+pre-select. `diffwiki search index` (re)builds a plugin's index via its `index` op; article
 mutations fire best-effort `notify` hooks (`plugins/events.ts`) so plugins can incrementally
 reindex. `listSearchModes()` enumerates native + each enabled plugin's advertised types for
 the CLI and web dropdown. `doctor` calls each plugin's `health` op to report readiness
@@ -181,12 +181,12 @@ The full-width `TopNav` spans the top; below it the shell has **three responsive
 
 ## Static export (SSG)
 
-The wiki app is a TanStack Start (SSR) application whose data loads through server functions. For static hosting (GitHub Pages or any file host) these are swapped at build time by a single `data-source` seam (`apps/wiki/src/lib/data-source.ts`) keyed on `VITE_DIFFWIKI_STATIC` — live builds call the server functions; static builds fetch pre-generated JSON under `${BASE_URL}_data/`. Site-data builders live in `diffwiki-core` (`site.ts`: `buildNavTree`, `buildCollections`, `resolvePage`, `toTreeNodes`), shared by the live server functions, the client data-source, and the exporter. `diffwiki export` drives `apps/wiki/bin/export.mjs` (Node + core + the shipped `dist-static` bundle): it emits `_data/*.json` + `search-index.json`, copies client assets, and prerenders every route by calling the built server bundle's `fetch` handler with an on-disk `_data` fetch shim. Git branch info is omitted under `DIFFWIKI_STATIC` (a `console.warn` per affected collection); `/api/watch` SSE + `LiveReload` are compiled out of static builds. External collections (`diffwiki add`) are registered by a stable git repo id (root-commit hash, else origin URL) with `type: 'external'`, pointing at the repo's `docs/` directory; linked worktrees are refused.
+The wiki app is a TanStack Start (SSR) application whose data loads through server functions. For static hosting (GitHub Pages or any file host) these are swapped at build time by a single `data-source` seam (`apps/wiki/src/lib/data-source.ts`) keyed on `VITE_DIFFWIKI_STATIC` — live builds call the server functions; static builds fetch pre-generated JSON under `${BASE_URL}_data/`. Site-data builders live in `diffwiki-core` (`site.ts`: `buildNavTree`, `buildCollections`, `resolvePage`, `toTreeNodes`), shared by the live server functions, the client data-source, and the exporter. `diffwiki site export` drives `apps/wiki/bin/export.mjs` (Node + core + the shipped `dist-static` bundle): it emits `_data/*.json` + `search-index.json`, copies client assets, and prerenders every route by calling the built server bundle's `fetch` handler with an on-disk `_data` fetch shim. Git branch info is omitted under `DIFFWIKI_STATIC` (a `console.warn` per affected collection); `/api/watch` SSE + `LiveReload` are compiled out of static builds. External collections (`diffwiki collection add`) are registered by a stable git repo id (root-commit hash, else origin URL) with `type: 'external'`, pointing at the repo's `docs/` directory; linked worktrees are refused.
 
 See also:
 - [Static site generation](architecture/static-site-generation.md) — data-source seam, export harness, base-path handling, `dist-static` build.
 - [Search](architecture/search.md) — `buildSearchIndex`, `search-index.json`, `SearchBox` component.
-- [Collections](architecture/collections.md) — collection model, `external` type, git repo identity, `diffwiki add` vs `diffwiki init`.
+- [Collections](architecture/collections.md) — collection model, `external` type, git repo identity, `diffwiki collection add` vs `diffwiki collection init`.
 
 ## Future Work
 

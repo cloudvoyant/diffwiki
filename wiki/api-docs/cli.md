@@ -42,157 +42,195 @@ diffwiki [-v | --verbose] [--log <level>] <command> [args]
 
 Logging flags are read from `process.argv` at startup (before any command runs), so logs are configured before the first action.
 
+> **Deprecated aliases:** every pre-taxonomy command (`list`, `add-article`, `config-set`, `up`, …) still works but is hidden and prints a one-line notice to stderr (`⚠ "diffwiki <old>" is deprecated; use "diffwiki <new>".`). Article/tag aliases keep their original `-p/--path` form. Use the grouped commands below.
+
 ## Collections
 
 Collections are the top-level content units. See the [collections guide](/user-guide/collections) for concepts.
 
-### `list`
+### `collection list`
 
 List all registered collections with type, path, and (for external collections) the current git branch.
 
 ```
-diffwiki list
+diffwiki collection list
 ```
 
 No options. Example:
 
 ```
-diffwiki list
+diffwiki collection list
 ```
 
-### `create <name>`
+### `collection create <name>`
 
 Create a new global collection (stored under `~/.diffwiki/collections/<name>`).
 
 ```
-diffwiki create <name>
+diffwiki collection create <name>
 ```
 
 - `<name>` (required) — collection name.
 
 ```
-diffwiki create handbook
+diffwiki collection create handbook
 ```
 
-### `add`
+### `collection add`
 
-Add the current git repo as an **external** collection — content served from a docs directory, with no `diffwiki.yaml` written. Registered globally and discoverable via `diffwiki list`.
+Add the current git repo as an **external** collection — content served from a docs directory, with no `diffwiki.yaml` written. Registered globally and discoverable via `diffwiki collection list`.
 
 ```
-diffwiki add [-d <dir>]
+diffwiki collection add [-d <dir>]
 ```
 
 - `-d, --docs <dir>` — content dir relative to the repo root. Default: `docs`.
 
 ```
-diffwiki add --docs documentation
+diffwiki collection add --docs documentation
 ```
 
-### `init`
+### `collection init`
 
 Initialize an in-repo wiki: create the wiki directory, write a `diffwiki.yaml`, and register the collection globally.
 
 ```
-diffwiki init [-c <name>] [-p <path>]
+diffwiki collection init [-c <name>] [-p <path>]
 ```
 
 - `-c, --collection <name>` — collection name. Default: the repo name.
 - `-p, --path <path>` — wiki path within the repo. Default: `wiki`.
 
 ```
-diffwiki init --collection docs --path wiki
+diffwiki collection init --collection docs --path wiki
+```
+
+### `collection edit [name]`
+
+Open a collection directory in your editor, so you can write markdown without the web UI. Resolves the editor from `--editor`, then the `editor` config key, then `$VISUAL`, then `$EDITOR`; exits non-zero with guidance when none is set.
+
+```
+diffwiki collection edit [name] [--editor <cmd>]
+```
+
+- `[name]` — a collection name. Omitted: the collection the current directory belongs to, else the `~/.diffwiki/collections` root.
+- `--editor <cmd>` — editor command to use (overrides config `editor`, `$VISUAL`, `$EDITOR`). Split on whitespace, so `code -w` works.
+
+```
+diffwiki collection edit handbook             # open the collection directory
+diffwiki collection edit --editor "code -w"   # override the configured editor
 ```
 
 ## Articles
 
-Article commands mutate markdown files inside a collection. Targets use `collection:path` (or `[collection:]title` for `add-article`, where the collection is optional and falls back to `defaultCollection`). See [contributing](/user-guide/continuous-learning).
+Article commands mutate markdown files inside a collection. The identifier is a **positional** `collection:slug` (the deprecated aliases kept it on `-p/--path`). For `article create` the collection is optional (`[collection:]title`) and falls back to `defaultCollection`. See [contributing](/user-guide/continuous-learning).
 
-### `add-article [body]`
+### `article create "<[collection:]title>" [body]`
 
 Add an article to a collection. Prints the created file path.
 
 ```
-diffwiki add-article -p "[collection:]title" [-t <tag>...] [body]
+diffwiki article create "<[collection:]title>" [body] [-t <tag>...]
 ```
 
-- `-p, --path <target>` (required) — `"[collection:]title"`.
-- `-t, --tag <tag>` — tag; repeatable and comma-separated. Default: `[]`.
+- `<target>` (required) — positional `"[collection:]title"`.
 - `[body]` — markdown body. Defaults to a `# <title>` heading when omitted.
+- `-t, --tag <tag>` — tag; repeatable and comma-separated. Default: `[]`.
 
 ```
-diffwiki add-article -p "handbook:Onboarding" -t hr,process "# Onboarding"
+diffwiki article create "handbook:Onboarding" "# Onboarding" -t hr,process
 ```
 
-### `update-article <body>`
+### `article update "<collection:slug>" <body>`
 
 Replace an article's body (frontmatter title/tags/audience/status are preserved).
 
 ```
-diffwiki update-article -p "collection:path" <body>
+diffwiki article update "<collection:slug>" <body>
 ```
 
-- `-p, --path <target>` (required) — `"collection:path"`.
+- `<target>` (required) — positional `"collection:slug"`.
 - `<body>` (required) — the new markdown body.
 
 ```
-diffwiki update-article -p "handbook:onboarding" "# Onboarding\nUpdated."
+diffwiki article update "handbook:onboarding" "# Onboarding\nUpdated."
 ```
 
-### `remove-article`
+### `article remove "<collection:slug>"`
 
 Delete an article file.
 
 ```
-diffwiki remove-article -p "collection:path"
+diffwiki article remove "<collection:slug>"
 ```
 
-- `-p, --path <target>` (required) — `"collection:path"`.
+- `<target>` (required) — positional `"collection:slug"`.
 
 ```
-diffwiki remove-article -p "handbook:onboarding"
+diffwiki article remove "handbook:onboarding"
 ```
 
-### `add-tags <tags>` / `remove-tags <tags>` / `update-tags <tags>`
+### `article edit "<collection:slug>"`
 
-Mutate an article's tags: `add-tags` unions, `remove-tags` subtracts, `update-tags` replaces the whole set. Each prints the resulting tag list.
+Open a single article in your editor. Resolves the editor from `--editor`, then the `editor` config key, then `$VISUAL`, then `$EDITOR`; exits non-zero with guidance when none is set.
 
 ```
-diffwiki add-tags    -p "collection:path" <tags>
-diffwiki remove-tags -p "collection:path" <tags>
-diffwiki update-tags -p "collection:path" <tags>
+diffwiki article edit "<collection:slug>" [--editor <cmd>]
 ```
 
-- `-p, --path <target>` (required) — `"collection:path"`.
+- `<target>` (required) — positional `"collection:slug"`.
+- `--editor <cmd>` — editor command to use (overrides config `editor`, `$VISUAL`, `$EDITOR`). Split on whitespace, so `code -w` works.
+
+```
+diffwiki article edit "handbook:onboarding"              # open one article file
+diffwiki article edit "handbook:onboarding" --editor "code -w"
+```
+
+## Tags
+
+Tag commands mutate a single article's tags. The identifier is a **positional** `collection:slug` (the deprecated aliases kept it on `-p/--path`).
+
+### `tags add "<collection:slug>" <tags>` / `tags remove "<collection:slug>" <tags>` / `tags set "<collection:slug>" <tags>`
+
+Mutate an article's tags: `tags add` unions, `tags remove` subtracts, `tags set` replaces the whole set. Each prints the resulting tag list.
+
+```
+diffwiki tags add    "<collection:slug>" <tags>
+diffwiki tags remove "<collection:slug>" <tags>
+diffwiki tags set    "<collection:slug>" <tags>
+```
+
+- `<target>` (required) — positional `"collection:slug"`.
 - `<tags>` (required) — comma-separated tags.
 
 ```
-diffwiki add-tags -p "handbook:onboarding" hr,onboarding
+diffwiki tags add "handbook:onboarding" hr,onboarding
 ```
 
 ## Search
 
 diffwiki ships a built-in native BM25 search and can route to installed search plugins. See [search & RAG](/user-guide/search-and-rag).
 
-### `index`
+### `search index`
 
 Rebuild the search index via the active plugin. No-op (with a hint) when no index-backed plugin is installed — native search needs no index.
 
 ```
-diffwiki index [--embed]
+diffwiki search index [--embed]
 ```
 
 - `--embed` — also build vector embeddings (may download models on first run).
 
 ```
-diffwiki index --embed
+diffwiki search index --embed
 ```
 
-### `query [term]`
+### `search query [term]`
 
-Search articles via the resolved search engine, falling back to native BM25 when no engine is set or the engine fails. Prints one tab-separated line per hit: `score  collection  title  path  [snippet]`.
+Search articles via the resolved search engine, falling back to native BM25 when no engine is set or the engine fails. Prints one tab-separated line per hit: `score  collection  title  path  [snippet]`. Short alias: `diffwiki search q`.
 
 ```
-diffwiki query [--engine <name>] [-c <name>] [-t <type>] [term]
+diffwiki search query [--engine <name>] [-c <name>] [-t <type>] [term]
 ```
 
 - `--engine <name>` — search engine/plugin. Default: config `defaultSearch`, else `native`.
@@ -201,7 +239,8 @@ diffwiki query [--engine <name>] [-c <name>] [-t <type>] [term]
 - `[term]` — search term. Default: `""` (empty term browses all articles unranked).
 
 ```
-diffwiki query --engine diffwiki-qmd -t semantic "vector databases"
+diffwiki search query --engine diffwiki-qmd -t semantic "vector databases"
+diffwiki search q "vector databases"
 ```
 
 ## Plugins
@@ -217,7 +256,7 @@ diffwiki plugin install <spec> [--no-setup] [--no-default] [--prefetch-models]
 ```
 
 - `<spec>` (required) — npm package spec: `name`, `name@version`, or a local path.
-- `--no-setup` — skip the end-to-end setup after install (run `diffwiki index` later).
+- `--no-setup` — skip the end-to-end setup after install (run `diffwiki search index` later).
 - `--no-default` — do not make this the default search engine.
 - `--prefetch-models` — pre-download models during setup (heavy).
 
@@ -262,16 +301,16 @@ diffwiki plugin remove <name>
 diffwiki plugin remove diffwiki-qmd
 ```
 
-## Publish & UI
+## Site
 
-Build a static site or run the local UI. See [sharing](/user-guide/sharing).
+Build a static site or preview it locally. See [sharing](/user-guide/sharing).
 
-### `export`
+### `site export`
 
 Generate a static site deployable to GitHub Pages. Exports the global collections by default, or a single repo project with `--project`.
 
 ```
-diffwiki export -o <dir> [-b <path>] [-f <globs>] [-e <globs>] [--project [dir]]
+diffwiki site export -o <dir> [-b <path>] [-f <globs>] [-e <globs>] [--project [dir]]
 ```
 
 - `-o, --out <dir>` (required) — output directory.
@@ -281,116 +320,103 @@ diffwiki export -o <dir> [-b <path>] [-f <globs>] [-e <globs>] [--project [dir]]
 - `--project [dir]` — build only the repo project from its `diffwiki.yaml`. Default dir: cwd.
 
 ```
-diffwiki export -o ./site -b /my-repo/ -f "docs,handbook"
+diffwiki site export -o ./site -b /my-repo/ -f "docs,handbook"
 ```
 
-### `preview`
+### `site preview`
 
 Preview the site built from the repo's `diffwiki.yaml`, ignoring global collections.
 
 ```
-diffwiki preview [-p <port>]
+diffwiki site preview [-p <port>]
 ```
 
 - `-p, --port <port>` — port to serve on. Default: `4321`.
 
 ```
-diffwiki preview -p 4321
+diffwiki site preview -p 4321
 ```
 
-### `up`
+## UI
+
+Run the local diffwiki app server. See [sharing](/user-guide/sharing).
+
+### `ui up`
 
 Start the diffwiki UI (latest published `diffwiki-app`). No-op if already running.
 
 ```
-diffwiki up [-p <port>]
+diffwiki ui up [-p <port>]
 ```
 
 - `-p, --port <port>` — port to serve on. Default: `4321`.
 
 ```
-diffwiki up
+diffwiki ui up
 ```
 
-### `down`
+### `ui down`
 
 Stop the running diffwiki UI.
 
 ```
-diffwiki down
+diffwiki ui down
 ```
 
-### `status`
+### `ui status`
 
 Show whether the diffwiki UI is running (prints `running · <url> · pid … · since …` or `stopped`).
 
 ```
-diffwiki status
+diffwiki ui status
 ```
 
-### `open`
+### `ui open`
 
 Open the diffwiki UI in the browser, starting it first if needed. When the current directory belongs to a collection, opens that collection's page.
 
 ```
-diffwiki open [-p <port>]
+diffwiki ui open [-p <port>]
 ```
 
 - `-p, --port <port>` — port to serve on. Default: `4321`.
 
 ```
-diffwiki open
-```
-
-### `edit [target]`
-
-Open a collection (or a single article) in your editor, so you can write markdown without the web UI. Resolves the editor from `--editor`, then the `editor` config key, then `$VISUAL`, then `$EDITOR`; exits non-zero with guidance when none is set.
-
-```
-diffwiki edit [target] [--editor <cmd>]
-```
-
-- `[target]` — a collection name, or `"collection:slug"` for a single article. Omitted: the collection the current directory belongs to, else the `~/.diffwiki/collections` root.
-- `--editor <cmd>` — editor command to use (overrides config `editor`, `$VISUAL`, `$EDITOR`). Split on whitespace, so `code -w` works.
-
-```
-diffwiki edit handbook             # open the collection directory
-diffwiki edit handbook:onboarding  # open one article file
-diffwiki edit --editor "code -w"   # override the configured editor
+diffwiki ui open
 ```
 
 ## Config
 
 Read and write persisted config (`~/.diffwiki/config.json`).
 
-### `config-set <key> <value>`
+### `config set <key> <value>`
 
 Set a config value. `defaultCollection` must name a registered collection (validated). `defaultSearch` takes an `engine[:type]` string and is stored unconditionally (a warning prints when the engine is not installed/enabled).
 
 ```
-diffwiki config-set <key> <value>
+diffwiki config set <key> <value>
 ```
 
 - `<key>` (required) — config key (e.g. `defaultCollection`, `defaultSearch`, `editor`).
 - `<value>` (required) — config value.
 
 ```
-diffwiki config-set defaultSearch diffwiki-qmd:hybrid
-diffwiki config-set editor "code -w"        # used by `diffwiki edit`
+diffwiki config set defaultSearch diffwiki-qmd:hybrid
+diffwiki config set editor "code -w"        # used by `diffwiki collection edit` / `diffwiki article edit`
 ```
 
-### `config-get <key>`
+### `config get <key>`
 
 Read a config value. Prints `(unset)` when absent.
 
 ```
-diffwiki config-get <key>
+diffwiki config get <key>
 ```
 
 - `<key>` (required) — config key.
 
 ```
-diffwiki config-get defaultCollection
+diffwiki config get defaultCollection
 ```
 
 ## Diagnostics

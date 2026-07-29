@@ -28,7 +28,7 @@ afterEach(async () => {
 
 describe('in-repo wiki', () => {
   it('init writes diffwiki.yaml, registers the wiki, and list shows it', async () => {
-    const res = await run(['init', '-c', 'repo-wiki', '-p', 'docs/wiki']);
+    const res = await run(['collection', 'init', '-c', 'repo-wiki', '-p', 'docs/wiki']);
     expect(res.ok).toBe(true);
 
     const yaml = await fs.readFile(path.join(repo, 'diffwiki.yaml'), 'utf8');
@@ -36,12 +36,12 @@ describe('in-repo wiki', () => {
     expect(yaml).toContain('path: docs/wiki');
     await fs.access(path.join(repo, 'docs/wiki'));
 
-    const list = await run(['list']);
+    const list = await run(['collection', 'list']);
     expect(list.out).toContain('repo-wiki');
     expect(list.out).toContain('[repo]');
 
     // Articles can be added to the repo wiki via its registered name.
-    const added = await run(['add-article', '-p', 'repo-wiki:First Note', '-t', 'seed', '# First']);
+    const added = await run(['article', 'create', 'repo-wiki:First Note', '# First', '-t', 'seed']);
     expect(added.ok).toBe(true);
     const addedPath = path.resolve(added.out.trim());
     const expectedPrefix = path.resolve(path.join(repo, 'docs/wiki'));

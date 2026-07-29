@@ -10,7 +10,7 @@ A collection is the primary organisational unit in diffwiki: a named directory o
 ## Requirements
 
 - Every collection must be recorded in the registry with a name, type, and content path, and must be resolvable back to a directory on disk.
-- Adding an existing repository (`diffwiki add`) must require no configuration file — it must infer the title, content directory, and a stable identity automatically.
+- Adding an existing repository (`diffwiki collection add`) must require no configuration file — it must infer the title, content directory, and a stable identity automatically.
 - A repository must be addable only once: a second attempt on the same repository must be rejected.
 - Adding must be refused from a linked git worktree — only the primary checkout is accepted.
 - A non-git directory must be initialised as a repository before it is added.
@@ -23,27 +23,27 @@ A collection is the primary organisational unit in diffwiki: a named directory o
 
 | Type | Created by | Storage |
 |------|-----------|---------|
-| `global` | `diffwiki create <name>` | `~/.diffwiki/collections/<name>/` (diffwiki-owned) |
-| `repo` | `diffwiki init` (inside a git repo) | Any path in the repo; a `diffwiki.yaml` at the repo root records it |
-| `external` | `diffwiki add` (inside any git repo) | `<repoRoot>/<docsDir>/`; no `diffwiki.yaml` |
+| `global` | `diffwiki collection create <name>` | `~/.diffwiki/collections/<name>/` (diffwiki-owned) |
+| `repo` | `diffwiki collection init` (inside a git repo) | Any path in the repo; a `diffwiki.yaml` at the repo root records it |
+| `external` | `diffwiki collection add` (inside any git repo) | `<repoRoot>/<docsDir>/`; no `diffwiki.yaml` |
 
 All entries live in `~/.diffwiki/registry.json` and are read by `listCollections`.
 
 ### Stable, location-independent identity
 
-External collections are keyed by a repository identity that survives cloning and worktrees, so the same repository is never registered twice under different paths. The identity is the root-commit hash, falling back to the normalised `origin` URL, then the absolute path — the first stable signal available. This is why `diffwiki add` can reject a duplicate even when run from a different checkout of the same repository.
+External collections are keyed by a repository identity that survives cloning and worktrees, so the same repository is never registered twice under different paths. The identity is the root-commit hash, falling back to the normalised `origin` URL, then the absolute path — the first stable signal available. This is why `diffwiki collection add` can reject a duplicate even when run from a different checkout of the same repository.
 
 ### `add` versus `init`
 
-`diffwiki add` is the zero-config path: it infers everything. `diffwiki init` is the override path: it writes a `diffwiki.yaml` you can edit to customise the collection name or point at a specific directory. The two are complementary entry points to the same registry.
+`diffwiki collection add` is the zero-config path: it infers everything. `diffwiki collection init` is the override path: it writes a `diffwiki.yaml` you can edit to customise the collection name or point at a specific directory. The two are complementary entry points to the same registry.
 
 ```mermaid
 graph LR
-  add["diffwiki add"] --> repo["repo.ts: addExternalCollection"]
+  add["diffwiki collection add"] --> repo["repo.ts: addExternalCollection"]
   repo --> git["git.ts helpers (id, worktree, branch)"]
   repo --> reg["registry.json (external entry)"]
-  init["diffwiki init"] --> yaml["diffwiki.yaml + repo entry"] --> reg
-  create["diffwiki create"] --> reg
+  init["diffwiki collection init"] --> yaml["diffwiki.yaml + repo entry"] --> reg
+  create["diffwiki collection create"] --> reg
   reg --> list["listCollections → CLI + wiki UI"]
 ```
 
@@ -75,7 +75,7 @@ graph LR
 
 | Error class | Thrown when |
 |-------------|-------------|
-| `WorktreeNotAllowedError` | `diffwiki add` is run inside a linked git worktree |
+| `WorktreeNotAllowedError` | `diffwiki collection add` is run inside a linked git worktree |
 | `CollectionAlreadyAddedError` | The repository is already registered (same `id`) |
 | `CollectionNotFoundError` | A referenced collection name is not in the registry |
 

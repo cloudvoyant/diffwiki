@@ -14,7 +14,7 @@ A collection is a directory of markdown (`.md` / `.mdx`) notes that diffwiki tra
 
 **A personal or team knowledge base.** Your durable, cross-project notes live in a global collection under `~/.diffwiki`. This is the knowledge that outlives any single repo — research, runbooks, decisions, things you learned once and never want to relearn. It stays put on your machine (or a repo you sync), and it is always available regardless of which project you happen to be in.
 
-**Project-specific wikis.** Documentation that belongs to a codebase lives inside that codebase's repository. When you check out a project that has a diffwiki, its wiki comes with the code and is instantly discoverable alongside your global notes via `diffwiki list`. You get one unified view — your personal knowledge base plus the wikis of every project you are working on — without any of them being tangled together.
+**Project-specific wikis.** Documentation that belongs to a codebase lives inside that codebase's repository. When you check out a project that has a diffwiki, its wiki comes with the code and is instantly discoverable alongside your global notes via `diffwiki collection list`. You get one unified view — your personal knowledge base plus the wikis of every project you are working on — without any of them being tangled together.
 
 Both patterns use the same tools and the same search; the only difference is where the markdown files physically live.
 
@@ -22,34 +22,34 @@ Both patterns use the same tools and the same search; the only difference is whe
 
 ### Global collections — your knowledge base
 
-Created with `diffwiki create <name>` and stored under `~/.diffwiki`. Global collections are for knowledge that is not tied to any single repository. This is the home for a personal or shared team knowledge base.
+Created with `diffwiki collection create <name>` and stored under `~/.diffwiki`. Global collections are for knowledge that is not tied to any single repository. This is the home for a personal or shared team knowledge base.
 
 ```bash
-diffwiki create notes
+diffwiki collection create notes
 ```
 
 This creates `~/.diffwiki/notes` and registers it globally. From then on you contribute to it by editing the markdown files inside `~/.diffwiki/notes`.
 
 ### Repo collections — wikis that travel with the code
 
-Created with `diffwiki init` inside a git repository. `init` writes a `diffwiki.yaml` to the repo and places the wiki at `wiki/` by default, so the notes are committed alongside the code and travel with the repository when it is cloned, forked, or moved. This is the right choice for documentation that should version in lockstep with a codebase.
+Created with `diffwiki collection init` inside a git repository. `collection init` writes a `diffwiki.yaml` to the repo and places the wiki at `wiki/` by default, so the notes are committed alongside the code and travel with the repository when it is cloned, forked, or moved. This is the right choice for documentation that should version in lockstep with a codebase.
 
 ```bash
-diffwiki init -c my-repo -p wiki
+diffwiki collection init -c my-repo -p wiki
 ```
 
 - `-c, --collection` sets the collection name (defaults to the repo name).
 - `-p, --path` sets the wiki path within the repo (defaults to `wiki`).
 
-The collection is also registered globally, so anyone who checks out the repo and runs `diffwiki list` sees it next to their own global collections even though it physically lives inside the project. See [Sharing & Publishing](/user-guide/sharing) for how the extended `diffwiki.yaml` declares several such collections for a published site.
+The collection is also registered globally, so anyone who checks out the repo and runs `diffwiki collection list` sees it next to their own global collections even though it physically lives inside the project. See [Sharing & Publishing](/user-guide/sharing) for how the extended `diffwiki.yaml` declares several such collections for a published site.
 
 ### External collections — docs directories, unmodified
 
-Registered with `diffwiki add`, which points at an existing repository's documentation directory (`docs/` by default) without writing any config file. External collections are ideal for surfacing docs from repos you do not want to modify — you register the current git repo and diffwiki reads its docs in place.
+Registered with `diffwiki collection add`, which points at an existing repository's documentation directory (`docs/` by default) without writing any config file. External collections are ideal for surfacing docs from repos you do not want to modify — you register the current git repo and diffwiki reads its docs in place.
 
 ```bash
-diffwiki add            # registers ./docs of the current repo
-diffwiki add -d documentation   # use a different content dir
+diffwiki collection add            # registers ./docs of the current repo
+diffwiki collection add -d documentation   # use a different content dir
 ```
 
 External collections are keyed by git repo id and are worktree-aware, so registering the same repo twice does not create duplicates, and different worktrees of the same repo resolve correctly.
@@ -57,7 +57,7 @@ External collections are keyed by git repo id and are worktree-aware, so registe
 ## Listing collections
 
 ```bash
-diffwiki list
+diffwiki collection list
 ```
 
 Each row shows the collection name, its type (`global`, `repo`, or `external`), its absolute path, and — when the directory is a git working tree — the current branch. This single list is the unified view of your knowledge base plus every project wiki you have checked out. If you have no collections yet, the CLI prompts you to create one.
