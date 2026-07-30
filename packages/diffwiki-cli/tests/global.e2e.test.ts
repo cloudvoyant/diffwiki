@@ -55,7 +55,15 @@ describe('global lifecycle', () => {
   it('sets audience/status on create and toggles them on update', async () => {
     await run(['collection', 'create', 'notes']);
     const created = await run([
-      'article', 'create', 'notes:Secret', '-b', '# Secret', '--audience', 'private', '--status', 'draft',
+      'article',
+      'create',
+      'notes:Secret',
+      '-b',
+      '# Secret',
+      '--audience',
+      'private',
+      '--status',
+      'draft',
     ]);
     expect(created.ok).toBe(true);
     const file = created.out.trim();
