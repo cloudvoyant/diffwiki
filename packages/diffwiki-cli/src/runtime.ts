@@ -28,12 +28,3 @@ export const splitTags = (raw: string[]): string[] =>
     .flatMap((t) => t.split(','))
     .map((t) => t.trim())
     .filter((t) => t.length > 0);
-
-/**
- * Emit a single one-line deprecation notice to stderr for a legacy command that now
- * delegates to a new taxonomy command. stdout is never touched, so machine-readable
- * output stays byte-identical.
- */
-export const deprecated = (oldForm: string, newForm: string): void => {
-  console.error(`⚠ "diffwiki ${oldForm}" is deprecated; use "diffwiki ${newForm}".`);
-};

@@ -27,9 +27,9 @@ diffwiki collection create notes
 diffwiki config set defaultCollection notes
 
 # 2. Add an article (returns the file path it wrote)
-diffwiki article create "notes:Setting up mise" "# Setting up mise
+diffwiki article create "notes:Setting up mise" -t tooling,setup -b "# Setting up mise
 
-Install mise, then run \`mise install\`." -t tooling,setup
+Install mise, then run \`mise install\`."
 # → ~/.diffwiki/collections/notes/setting-up-mise.md
 
 # 3. See what you have
@@ -40,13 +40,13 @@ diffwiki search query mise
 ## Primary Use Case — capturing a note
 
 `diffwiki article create` is the fast path. The positional `<collection:title>` takes `[collection:]title`; if you omit `collection:`
-it uses `config.defaultCollection`. `-t` may be repeated and accepts comma-separated tags.
-The trailing argument is the optional markdown body.
+it uses `config.defaultCollection`. `-t` may be repeated and accepts comma-separated tags, and `-b/--body` sets the markdown body
+(a `# <title>` heading is written when omitted). `--audience`/`--status` set visibility and publish state.
 
 ```bash
-diffwiki article create "Rebasing safely" "# Rebasing safely
+diffwiki article create "Rebasing safely" -t git,notes -b "# Rebasing safely
 
-Always \`git pull --rebase\` before pushing to avoid clobbering remote commits." -t git,notes
+Always \`git pull --rebase\` before pushing to avoid clobbering remote commits."
 ```
 
 ## In-repo wikis
@@ -63,7 +63,7 @@ name already belongs to a different collection, it is disambiguated (`name-2`, `
 
 ## Command Reference
 
-> Commands are grouped by entity: `collection`, `article`, `tags`, `search`, `config`, `site`, `ui`, plus `plugin` and top-level `doctor`. Every pre-taxonomy command (`list`, `add-article`, `config-set`, …) still works as a **hidden, deprecated alias** — it prints a one-line deprecation notice to stderr (`⚠ "diffwiki <old>" is deprecated; use "diffwiki <new>".`) and otherwise behaves identically. Deprecated aliases keep their original `-p/--path` form for article/tag commands.
+> Commands are grouped by entity: `collection`, `article`, `tags`, `search`, `config`, `site`, `ui`, plus `plugin` and top-level `doctor`.
 
 ### `diffwiki collection list`
 
@@ -73,13 +73,13 @@ Lists every registered collection (global and repo) with its type and path.
 
 Creates a global collection directory and registers it. **Errors** if the name is taken.
 
-### `diffwiki article create "<[coll:]title>" [body] [-t tags]…`
+### `diffwiki article create "<[coll:]title>" [-b body] [-t tags]… [--audience …] [--status …]`
 
-Creates an article. The positional `<collection:title>` → `[collection:]title` (collection optional → default). `-t` → repeatable, comma-split tags. `body` → optional markdown (defaults to `# <title>`). **Returns** the article path on stdout.
+Creates an article. The positional `<collection:title>` → `[collection:]title` (collection optional → default). `-b/--body` → optional markdown (defaults to `# <title>`). `-t` → repeatable, comma-split tags. `--audience <public|private>` (default `public`) and `--status <draft|published>` (default `published`) set the frontmatter axes. **Returns** the article path on stdout.
 
-### `diffwiki article update "<coll:slug>" <body>`
+### `diffwiki article update "<coll:slug>" [-b body] [-t tags]… [--audience …] [--status …]`
 
-Replaces an article's body, preserving its title and tags.
+Updates an article's body, tags, audience, and/or status — each optional, pass at least one. `-b/--body` replaces the body; `-t/--tag` **replaces** the whole tag set; `--audience`/`--status` set those axes (setting them back to `public`/`published` clears the frontmatter). Title is always preserved.
 
 > **Path form:** `"coll:slug"` resolves the `slug` segment the same way `article create` writes it — it is slugified. So you can pass either the slug (`notes:my-title`) or the original title (`notes:My Title`); both resolve to `my-title.md`. Pass an explicit `.md`/`.mdx` filename to bypass slugifying.
 
