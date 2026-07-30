@@ -2,6 +2,7 @@ import { createFileRoute, Link } from '@tanstack/react-router';
 import { useEffect, useState } from 'react';
 import { loadSearch, loadCollections, loadSearchModes } from '../lib/data-source';
 import { PageLayout } from '../components/page-layout';
+import { SearchBox } from '../components/search-box';
 import { cn } from '../lib/utils';
 import type { CollectionInfo, SearchResultItem } from '../lib/types';
 import type { SearchMode } from 'diffwiki-core';
@@ -39,11 +40,12 @@ function formatDuration(ms: number): string {
   return ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(1)} s`;
 }
 
-/** Shown while the search loader is in flight. The query bar lives in the top nav. */
+/** Shown while the search loader is in flight. The query bar sits at the top of this page. */
 function SearchPending() {
   return (
     <PageLayout>
       <div className="flex w-full max-w-3xl flex-col gap-6">
+        <SearchBox autoFocus placeholder="Search" />
         <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground" role="status" aria-live="polite">
           <span
             className="inline-block size-4 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent"
@@ -103,7 +105,10 @@ function SearchComponent() {
   return (
     <PageLayout>
       <div className="flex w-full max-w-3xl flex-col gap-6">
-        {/* No query bar here — search is driven by the top-nav bar (⌘K). */}
+        {/* The search page's own "top nav": the query bar + filters. The area below
+            shows query time and results. The input auto-focuses on mount. */}
+        <SearchBox autoFocus placeholder="Search" />
+
         {/* Filters: collection + dynamic search-mode dropdown */}
         <div className="flex flex-wrap items-center gap-3">
           <select

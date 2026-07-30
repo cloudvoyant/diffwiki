@@ -14,14 +14,16 @@ interface AppShellProps {
 /**
  * AppShell — page skeleton.
  *
- *   Row 1 : full-width TopNav (sticky) — controls now, tabs later
- *   Row 2 : left Sidebar + content inset
+ *   Column 1 : full-height left Sidebar (primary navigation — logo, search,
+ *              collection tree, settings + GitHub at the foot).
+ *   Column 2 : content inset — a sticky TopNav (sidebar trigger, breadcrumbs,
+ *              page audience/status) above the page content and footer.
  *
- * The SidebarProvider wraps everything (so the toggle in TopNav has context) but
- * is laid out as a column: the top bar spans the full width, and the sidebar
- * begins below it. The fixed sidebar rail is offset below the bar in CSS
- * (`[data-slot='sidebar-container']`). The right-hand TOC is injected by the
- * content route ($coll.$.tsx), not here.
+ * The sidebar now sits higher in the DOM than the top nav: the SidebarProvider
+ * lays out as a row (its default flex direction), the sidebar is the first,
+ * full-viewport-height column, and the TopNav lives inside the content column
+ * to its right — it no longer spans the full width above the sidebar. The
+ * right-hand TOC is injected by the content route ($coll.$.tsx), not here.
  *
  * The content inset fills at least the viewport below the nav, with the page
  * growing (flex-1) and the footer pinned beneath it: a short page (e.g. home)
@@ -29,19 +31,16 @@ interface AppShellProps {
  */
 export function AppShell({ tree, site, children }: AppShellProps) {
   return (
-    <SidebarProvider className="flex-col">
-      <TopNav site={site} />
-
-      <div className="flex min-h-0 w-full flex-1">
-        <AppSidebar tree={tree} />
-        <SidebarInset className="min-w-0">
-          {/* Fill ≥ viewport below the nav; footer pinned beneath the content. */}
-          <div className="flex min-h-[calc(100svh-var(--nav-h))] flex-col">
-            <div className="flex flex-1 flex-col">{children}</div>
-            <SiteFooter copyright={site?.copyright} />
-          </div>
-        </SidebarInset>
-      </div>
+    <SidebarProvider>
+      <AppSidebar tree={tree} site={site} />
+      <SidebarInset className="min-w-0">
+        <TopNav tree={tree} />
+        {/* Fill ≥ viewport below the nav; footer pinned beneath the content. */}
+        <div className="flex min-h-[calc(100svh-var(--nav-h))] flex-col">
+          <div className="flex flex-1 flex-col">{children}</div>
+          <SiteFooter copyright={site?.copyright} />
+        </div>
+      </SidebarInset>
     </SidebarProvider>
   );
 }

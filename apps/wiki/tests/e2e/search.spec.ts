@@ -23,9 +23,16 @@ const test = base.extend<{ noClientErrors: void }>({
 test.describe('Search route (/search)', () => {
   test('reflects the query term from the URL in the results meta', async ({ page }) => {
     await page.goto('/search?q=intro');
-    // The /search page has no query bar (search is driven by the top-nav bar); the
-    // active query is echoed in the results meta line.
+    // The active query is echoed in the results meta line.
     await expect(page.getByTestId('search-meta')).toContainText('intro');
+  });
+
+  test('renders an auto-focused query input on the page', async ({ page }) => {
+    await page.goto('/search');
+    // The search page owns its query bar; the input auto-focuses on mount.
+    const input = page.getByRole('searchbox').first();
+    await expect(input).toBeVisible();
+    await expect(input).toBeFocused();
   });
 
   test('renders the collection filter with an "All collections" option', async ({ page }) => {
@@ -93,15 +100,30 @@ test.describe('Search route (/search)', () => {
 
   test('navigates from the home search box to /search with the query in the URL', async ({ page }) => {
     await page.goto('/');
-    // Target the content area search box (inside SidebarInset), not the sidebar's.
-    const searchInput = page.locator('[data-slot="sidebar-inset"] input[type="search"]').first();
+    // The home hero search input (the sidebar search is a button, not an input).
+    const searchInput = page.getByRole('searchbox').first();
     await expect(searchInput).toBeVisible();
     // The SearchBox form has action="/search" method="get" for progressive
     // enhancement, so native form submit works even before React hydration.
     await searchInput.fill('diffwiki');
     await searchInput.press('Enter');
     await expect(page).toHaveURL(/\/search\?.*q=diffwiki/);
-    // The /search page has no query bar; it echoes the active query in its results meta.
+    // The search page echoes the active query in its results meta.
     await expect(page.getByTestId('search-meta')).toContainText('diffwiki');
+  });
+
+  test('⌘K on /search keeps the active query instead of wiping it', async ({ page }) => {
+    // Regression: the global ⌘K used to always navigate to /search with an empty
+    // q, clearing an in-progress query when the user was already on /search. It
+    // must now no-op (focus the on-page input) and preserve q in the URL.
+    await page.goto('/search?q=intro');
+    await expect(page.getByTestId('search-meta')).toContainText('intro');
+
+    const modifier = process.platform === 'darwin' ? 'Meta' : 'Control';
+    await page.keyboard.press(`${modifier}+k`);
+
+    // Query is preserved (not reset to empty) and the on-page input holds focus.
+    await expect(page).toHaveURL(/\/search\?.*q=intro/);
+    await expect(page.getByRole('searchbox').first()).toBeFocused();
   });
 });
