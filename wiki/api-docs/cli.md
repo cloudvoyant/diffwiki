@@ -42,8 +42,6 @@ diffwiki [-v | --verbose] [--log <level>] <command> [args]
 
 Logging flags are read from `process.argv` at startup (before any command runs), so logs are configured before the first action.
 
-> **Deprecated aliases:** every pre-taxonomy command (`list`, `add-article`, `config-set`, `up`, …) still works but is hidden and prints a one-line notice to stderr (`⚠ "diffwiki <old>" is deprecated; use "diffwiki <new>".`). Article/tag aliases keep their original `-p/--path` form. Use the grouped commands below.
-
 ## Collections
 
 Collections are the top-level content units. See the [collections guide](/user-guide/collections) for concepts.
@@ -123,37 +121,43 @@ diffwiki collection edit --editor "code -w"   # override the configured editor
 
 ## Articles
 
-Article commands mutate markdown files inside a collection. The identifier is a **positional** `collection:slug` (the deprecated aliases kept it on `-p/--path`). For `article create` the collection is optional (`[collection:]title`) and falls back to `defaultCollection`. See [contributing](/user-guide/continuous-learning).
+Article commands mutate markdown files inside a collection. The identifier is a **positional** `collection:slug`. For `article create` the collection is optional (`[collection:]title`) and falls back to `defaultCollection`. See [contributing](/user-guide/continuous-learning).
 
-### `article create "<[collection:]title>" [body]`
+### `article create "<[collection:]title>"`
 
 Add an article to a collection. Prints the created file path.
 
 ```
-diffwiki article create "<[collection:]title>" [body] [-t <tag>...]
+diffwiki article create "<[collection:]title>" [-b <markdown>] [-t <tag>...] [--audience <public|private>] [--status <draft|published>]
 ```
 
 - `<target>` (required) — positional `"[collection:]title"`.
-- `[body]` — markdown body. Defaults to a `# <title>` heading when omitted.
+- `-b, --body <markdown>` — article body. Defaults to a `# <title>` heading when omitted.
 - `-t, --tag <tag>` — tag; repeatable and comma-separated. Default: `[]`.
+- `--audience <public|private>` — visibility. Default: `public`.
+- `--status <draft|published>` — publish status. Default: `published`.
 
 ```
-diffwiki article create "handbook:Onboarding" "# Onboarding" -t hr,process
+diffwiki article create "handbook:Onboarding" -b "# Onboarding" -t hr,process --status draft
 ```
 
-### `article update "<collection:slug>" <body>`
+### `article update "<collection:slug>"`
 
-Replace an article's body (frontmatter title/tags/audience/status are preserved).
+Update an article's body, tags, audience, and/or status. Each axis is optional and left untouched when its flag is omitted; pass at least one. `-t/--tag` **replaces** the whole tag set. Setting `--audience public` / `--status published` clears the frontmatter back to the default.
 
 ```
-diffwiki article update "<collection:slug>" <body>
+diffwiki article update "<collection:slug>" [-b <markdown>] [-t <tag>...] [--audience <public|private>] [--status <draft|published>]
 ```
 
 - `<target>` (required) — positional `"collection:slug"`.
-- `<body>` (required) — the new markdown body.
+- `-b, --body <markdown>` — replace the article body.
+- `-t, --tag <tag>` — replace all tags; repeatable and comma-separated.
+- `--audience <public|private>` — set visibility.
+- `--status <draft|published>` — set publish status.
 
 ```
-diffwiki article update "handbook:onboarding" "# Onboarding\nUpdated."
+diffwiki article update "handbook:onboarding" -b "# Onboarding\nUpdated." --status published
+diffwiki article update "handbook:onboarding" -t hr,onboarding   # overwrite tags only
 ```
 
 ### `article remove "<collection:slug>"`
@@ -188,7 +192,7 @@ diffwiki article edit "handbook:onboarding" --editor "code -w"
 
 ## Tags
 
-Tag commands mutate a single article's tags. The identifier is a **positional** `collection:slug` (the deprecated aliases kept it on `-p/--path`).
+Tag commands mutate a single article's tags. The identifier is a **positional** `collection:slug`.
 
 ### `tags add "<collection:slug>" <tags>` / `tags remove "<collection:slug>" <tags>` / `tags set "<collection:slug>" <tags>`
 

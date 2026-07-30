@@ -42,7 +42,7 @@ describe('diffwiki export (CLI orchestration)', () => {
   it('passes --out and --base to the export script via DIFFWIKI_APP_CMD', async () => {
     process.env.DIFFWIKI_APP_CMD = `node ${fakeExportScript}`;
 
-    const res = await run(['export', '-o', outDir, '-b', '/my-repo/']);
+    const res = await run(['site', 'export', '-o', outDir, '-b', '/my-repo/']);
     expect(res.ok, `stderr: ${res.err}`).toBe(true);
 
     const argsFile = path.join(outDir, '_args.json');
@@ -59,7 +59,7 @@ describe('diffwiki export (CLI orchestration)', () => {
   it('defaults --base to / when not provided', async () => {
     process.env.DIFFWIKI_APP_CMD = `node ${fakeExportScript}`;
 
-    await run(['export', '-o', outDir]);
+    await run(['site', 'export', '-o', outDir]);
 
     const args: string[] = JSON.parse(await fs.readFile(path.join(outDir, '_args.json'), 'utf8'));
     expect(args[args.indexOf('--base') + 1]).toBe('/');
@@ -73,7 +73,7 @@ describe('diffwiki export (CLI orchestration)', () => {
 
     // runExport throws a plain Error (not a DiffwikiError), so withErrors rethrows it.
     // That means parseAsync rejects — await to assert the error message.
-    await expect(run(['export', '-o', outDir])).rejects.toThrow(/export failed/);
+    await expect(run(['site', 'export', '-o', outDir])).rejects.toThrow(/export failed/);
   });
 
   it('rejects a bad --filter glob BEFORE spawning the export script', async () => {
@@ -92,7 +92,7 @@ describe('diffwiki export (CLI orchestration)', () => {
     // script would run and write _args.json.
     process.env.DIFFWIKI_APP_CMD = `node ${fakeExportScript}`;
 
-    const res = await run(['export', '-o', outDir, '--filter', 'nope-*']);
+    const res = await run(['site', 'export', '-o', outDir, '--filter', 'nope-*']);
 
     // withErrors turns the DiffwikiError into a clean stderr + exit 1 (no throw).
     expect(res.ok).toBe(false);

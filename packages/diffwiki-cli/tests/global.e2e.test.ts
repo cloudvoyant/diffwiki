@@ -23,7 +23,7 @@ describe('global lifecycle', () => {
     expect((await run(['collection', 'create', 'notes'])).ok).toBe(true);
     expect((await run(['config', 'set', 'defaultCollection', 'notes'])).ok).toBe(true);
 
-    const added = await run(['article', 'create', 'notes:Hello World', '# Hi', '-t', 'a,b', '-t', 'c']);
+    const added = await run(['article', 'create', 'notes:Hello World', '-b', '# Hi', '-t', 'a,b', '-t', 'c']);
     expect(added.ok).toBe(true);
     const articlePath = added.out.trim();
     expect(articlePath.endsWith('hello-world.md')).toBe(true);
@@ -40,7 +40,9 @@ describe('global lifecycle', () => {
     const added2 = await run(['article', 'create', 'From Default', '-t', 'x']);
     expect(added2.ok).toBe(true);
 
-    expect((await run(['article', 'update', 'notes:hello-world', '# Hi again'])).ok).toBe(true);
+    expect((await run(['article', 'update', 'notes:hello-world', '-b', '# Hi again'])).ok).toBe(true);
+    // update can also overwrite tags (composes setTags); body is optional here
+    expect((await run(['article', 'update', 'notes:hello-world', '-t', 'temp'])).ok).toBe(true);
     expect((await run(['tags', 'add', 'notes:hello-world', 'd,e'])).ok).toBe(true);
     expect((await run(['tags', 'remove', 'notes:hello-world', 'a'])).ok).toBe(true);
     const setTags = await run(['tags', 'set', 'notes:hello-world', 'only']);
@@ -48,6 +50,34 @@ describe('global lifecycle', () => {
 
     expect((await run(['article', 'remove', 'notes:hello-world'])).ok).toBe(true);
     await expect(fs.access(articlePath)).rejects.toBeTruthy();
+  });
+
+  it('sets audience/status on create and toggles them on update', async () => {
+    await run(['collection', 'create', 'notes']);
+    const created = await run([
+      'article',
+      'create',
+      'notes:Secret',
+      '-b',
+      '# Secret',
+      '--audience',
+      'private',
+      '--status',
+      'draft',
+    ]);
+    expect(created.ok).toBe(true);
+    const file = created.out.trim();
+    let fm = await fs.readFile(file, 'utf8');
+    expect(fm).toContain('audience: private');
+    expect(fm).toContain('status: draft');
+
+    // Setting audience back to the default (public) drops its frontmatter line; status stays.
+    expect((await run(['article', 'update', 'notes:secret', '--audience', 'public'])).ok).toBe(true);
+    fm = await fs.readFile(file, 'utf8');
+    expect(fm).not.toContain('audience:');
+    expect(fm).toContain('status: draft');
+    // (invalid --audience/--status values are rejected by Commander's choices() at
+    // parse time via process.exit, which the in-process test harness can't trap.)
   });
 
   it('reports a clean error for a duplicate collection', async () => {

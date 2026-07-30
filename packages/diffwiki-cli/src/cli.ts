@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { Command } from 'commander';
+import { Command, Option } from 'commander';
 import {
   addExternalCollection,
   addTags,
@@ -23,15 +23,18 @@ import {
   resolveCwdCollection,
   resolveEditorCommand,
   resolveEditTarget,
+  setArticleMeta,
   setConfigValue,
   setTags,
   updateArticleBody,
   type Article,
+  type Audience,
   type DiagnosticLevel,
+  type PublishStatus,
   type QueryOptions,
 } from 'diffwiki-core';
 import { version } from './version';
-import { collect, deprecated, splitTags, withErrors } from './runtime';
+import { collect, splitTags, withErrors } from './runtime';
 import { openBrowser, readState, isAlive, startUi, stopUi, waitForServer } from './ui-server';
 import { runExport } from './exporter';
 import { runPreview } from './preview';
@@ -64,18 +67,39 @@ async function createCollectionAction(name: string): Promise<void> {
   console.log(`Created collection "${entry.name}" at ${entry.path}`);
 }
 
-async function createArticleAction(target: string, body: string | undefined, tags: string[]): Promise<void> {
+interface ArticleMetaOpts {
+  body?: string;
+  tag: string[];
+  audience?: Audience;
+  status?: PublishStatus;
+}
+
+async function createArticleAction(target: string, opts: ArticleMetaOpts): Promise<void> {
   const article = await createArticle({
     target,
-    tags: splitTags(tags),
-    body,
+    tags: splitTags(opts.tag),
+    body: opts.body,
+    audience: opts.audience,
+    status: opts.status,
   });
   console.log(article.path);
 }
 
-async function updateArticleAction(target: string, body: string): Promise<void> {
-  const article = await updateArticleBody(target, body);
-  console.log(`Updated ${article.path}`);
+async function updateArticleAction(target: string, opts: ArticleMetaOpts): Promise<void> {
+  const tagList = splitTags(opts.tag);
+  const hasMeta = opts.audience !== undefined || opts.status !== undefined;
+  if (opts.body === undefined && tagList.length === 0 && !hasMeta) {
+    console.error('Nothing to update — pass -b/--body, -t/--tag, --audience, and/or --status.');
+    process.exitCode = 1;
+    return;
+  }
+  // Compose the existing core writers; each preserves the axes it doesn't touch,
+  // so any combination (or a single one) yields the correct final file.
+  let article: Article | undefined;
+  if (opts.body !== undefined) article = await updateArticleBody(target, opts.body);
+  if (tagList.length > 0) article = await setTags(target, tagList);
+  if (hasMeta) article = await setArticleMeta(target, { audience: opts.audience, status: opts.status });
+  console.log(`Updated ${article!.path}`);
 }
 
 async function removeArticleAction(target: string): Promise<void> {
@@ -353,20 +377,21 @@ export function createProgram(): Command {
     .command('create')
     .description('Add an article to a collection')
     .argument('<target>', '"[collection:]title"')
-    .argument('[body]', 'markdown body')
+    .option('-b, --body <markdown>', 'article body (default: a "# <title>" heading)')
     .option('-t, --tag <tag>', 'tag (repeatable, comma-separated)', collect, [])
-    .action(
-      withErrors((target: string, body: string | undefined, opts: { tag: string[] }) =>
-        createArticleAction(target, body, opts.tag),
-      ),
-    );
+    .addOption(new Option('--audience <audience>', 'visibility (default: public)').choices(['public', 'private']))
+    .addOption(new Option('--status <status>', 'publish status (default: published)').choices(['draft', 'published']))
+    .action(withErrors((target: string, opts: ArticleMetaOpts) => createArticleAction(target, opts)));
 
   article
     .command('update')
-    .description("Replace an article's body")
+    .description("Update an article's body, tags, audience, and/or status")
     .argument('<target>', '"collection:slug"')
-    .argument('<body>', 'new markdown body')
-    .action(withErrors((target: string, body: string) => updateArticleAction(target, body)));
+    .option('-b, --body <markdown>', 'replace the article body')
+    .option('-t, --tag <tag>', 'replace all tags (repeatable, comma-separated)', collect, [])
+    .addOption(new Option('--audience <audience>', 'set visibility').choices(['public', 'private']))
+    .addOption(new Option('--status <status>', 'set publish status').choices(['draft', 'published']))
+    .action(withErrors((target: string, opts: ArticleMetaOpts) => updateArticleAction(target, opts)));
 
   article
     .command('remove')
@@ -516,221 +541,5 @@ export function createProgram(): Command {
   // ── doctor (unchanged, top-level) ───────────────────────────────────────────
   program.command('doctor').description('Diagnose configuration issues').action(withErrors(doctorAction));
 
-  // ── deprecated aliases (hidden; delegate to the same handlers) ──────────────
-  registerDeprecatedAliases(program);
-
   return program;
-}
-
-/**
- * Register every pre-taxonomy command as a HIDDEN alias. Each keeps its original
- * flags/args, prints one deprecation line to stderr, then calls the identical shared
- * handler. Zero breaking changes: stdout and exit codes are unchanged.
- */
-function registerDeprecatedAliases(program: Command): void {
-  program.command('list', { hidden: true }).action(
-    withErrors(() => {
-      deprecated('list', 'collection list');
-      return listCollectionsAction();
-    }),
-  );
-
-  program
-    .command('add', { hidden: true })
-    .option('-d, --docs <dir>', 'content dir relative to repo root', 'docs')
-    .action(
-      withErrors((opts: { docs: string }) => {
-        deprecated('add', 'collection add');
-        return addExternalAction(opts);
-      }),
-    );
-
-  program
-    .command('create', { hidden: true })
-    .argument('<name>', 'collection name')
-    .action(
-      withErrors((name: string) => {
-        deprecated('create', 'collection create');
-        return createCollectionAction(name);
-      }),
-    );
-
-  program
-    .command('add-article', { hidden: true })
-    .requiredOption('-p, --path <target>', '"[collection:]title"')
-    .option('-t, --tag <tag>', 'tag (repeatable, comma-separated)', collect, [])
-    .argument('[body]', 'markdown body')
-    .action(
-      withErrors((body: string | undefined, opts: { path: string; tag: string[] }) => {
-        deprecated('add-article', 'article create');
-        return createArticleAction(opts.path, body, opts.tag);
-      }),
-    );
-
-  program
-    .command('update-article', { hidden: true })
-    .requiredOption('-p, --path <target>', '"collection:path"')
-    .argument('<body>', 'new markdown body')
-    .action(
-      withErrors((body: string, opts: { path: string }) => {
-        deprecated('update-article', 'article update');
-        return updateArticleAction(opts.path, body);
-      }),
-    );
-
-  program
-    .command('remove-article', { hidden: true })
-    .requiredOption('-p, --path <target>', '"collection:path"')
-    .action(
-      withErrors((opts: { path: string }) => {
-        deprecated('remove-article', 'article remove');
-        return removeArticleAction(opts.path);
-      }),
-    );
-
-  const registerDeprecatedTag = (
-    name: string,
-    newForm: string,
-    fn: (target: string, tags: string[]) => Promise<Article>,
-  ): void => {
-    program
-      .command(name, { hidden: true })
-      .requiredOption('-p, --path <target>', '"collection:path"')
-      .argument('<tags>', 'comma-separated tags')
-      .action(
-        withErrors((tagList: string, opts: { path: string }) => {
-          deprecated(name, newForm);
-          return tagsAction(fn, opts.path, tagList);
-        }),
-      );
-  };
-  registerDeprecatedTag('add-tags', 'tags add', addTags);
-  registerDeprecatedTag('remove-tags', 'tags remove', removeTags);
-  registerDeprecatedTag('update-tags', 'tags set', setTags);
-
-  program
-    .command('index', { hidden: true })
-    .option('--embed', 'also build vector embeddings (may download models on first run)')
-    .action(
-      withErrors((opts: { embed?: boolean }) => {
-        deprecated('index', 'search index');
-        return indexAction(opts);
-      }),
-    );
-
-  program
-    .command('query', { hidden: true })
-    .option('--engine <name>', 'search engine/plugin (default: config defaultSearch, else native)')
-    .option('-c, --collection <name>', 'limit to a collection')
-    .option('-t, --type <type>', 'search type (engine-defined, e.g. keyword|semantic|hybrid)')
-    .argument('[term]', 'search term', '')
-    .action(
-      withErrors((term: string, opts: { engine?: string; collection?: string; type?: string }) => {
-        deprecated('query', 'search query');
-        return queryAction(term, opts);
-      }),
-    );
-
-  program
-    .command('init', { hidden: true })
-    .option('-c, --collection <name>', 'collection name (default: repo name)')
-    .option('-p, --path <path>', 'wiki path within the repo (default: wiki)')
-    .action(
-      withErrors((opts: { collection?: string; path?: string }) => {
-        deprecated('init', 'collection init');
-        return initAction(opts);
-      }),
-    );
-
-  program
-    .command('export', { hidden: true })
-    .requiredOption('-o, --out <dir>', 'output directory')
-    .option('-b, --base <path>', 'base URL path (e.g. /my-repo/ for GitHub Pages)', '/')
-    .option('-f, --filter <globs>', 'only export collections matching these globs (comma-separated)')
-    .option('-e, --exclude <globs>', 'exclude collections matching these globs (comma-separated)')
-    .option('--project [dir]', 'build only the repo project from its diffwiki.yaml (default: cwd)')
-    .action(
-      withErrors(
-        (opts: { out: string; base: string; filter?: string; exclude?: string; project?: string | boolean }) => {
-          deprecated('export', 'site export');
-          return exportAction(opts);
-        },
-      ),
-    );
-
-  program
-    .command('config-set', { hidden: true })
-    .argument('<key>', 'config key')
-    .argument('<value>', 'config value')
-    .action(
-      withErrors((key: string, value: string) => {
-        deprecated('config-set', 'config set');
-        return configSetAction(key, value);
-      }),
-    );
-
-  program
-    .command('config-get', { hidden: true })
-    .argument('<key>', 'config key')
-    .action(
-      withErrors((key: string) => {
-        deprecated('config-get', 'config get');
-        return configGetAction(key);
-      }),
-    );
-
-  program
-    .command('up', { hidden: true })
-    .option('-p, --port <port>', 'port to serve on', '4321')
-    .action(
-      withErrors((opts: { port: string }) => {
-        deprecated('up', 'ui up');
-        return upAction(opts);
-      }),
-    );
-
-  program.command('down', { hidden: true }).action(
-    withErrors(() => {
-      deprecated('down', 'ui down');
-      return downAction();
-    }),
-  );
-
-  program.command('status', { hidden: true }).action(
-    withErrors(() => {
-      deprecated('status', 'ui status');
-      return statusAction();
-    }),
-  );
-
-  program
-    .command('open', { hidden: true })
-    .option('-p, --port <port>', 'port to serve on', '4321')
-    .action(
-      withErrors((opts: { port: string }) => {
-        deprecated('open', 'ui open');
-        return openAction(opts);
-      }),
-    );
-
-  program
-    .command('edit', { hidden: true })
-    .argument('[target]', 'collection or "collection:slug" (default: the current repo collection)')
-    .option('--editor <cmd>', 'editor command (overrides config `editor`, $VISUAL, $EDITOR)')
-    .action(
-      withErrors((target: string | undefined, opts: { editor?: string }) => {
-        deprecated('edit', 'collection edit / article edit');
-        return editAction(target, opts.editor);
-      }),
-    );
-
-  program
-    .command('preview', { hidden: true })
-    .option('-p, --port <port>', 'port to serve on', '4321')
-    .action(
-      withErrors((opts: { port: string }) => {
-        deprecated('preview', 'site preview');
-        return previewAction(opts);
-      }),
-    );
 }

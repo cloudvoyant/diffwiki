@@ -19,13 +19,14 @@ While people [contribute by editing markdown directly](/user-guide/continuous-le
 Agents append findings as articles, revise them as understanding improves, and tag them so they are retrievable later:
 
 ```bash
-diffwiki article create "memory:auth-flow" "# Auth flow\n\nTokens are minted in..." -t "auth,findings"
-diffwiki article update "memory:auth-flow" "# Auth flow\n\nCorrected: refresh happens in..."
+diffwiki article create "memory:auth-flow" -b "# Auth flow\n\nTokens are minted in..." -t "auth,findings"
+diffwiki article update "memory:auth-flow" -b "# Auth flow\n\nCorrected: refresh happens in..."
+diffwiki article update "memory:auth-flow" --status draft   # mark work-in-progress
 diffwiki tags add "memory:auth-flow" "verified,security"
 ```
 
-- `article create "<[collection:]title>"` creates an article, with an optional markdown body and an optional repeatable `-t, --tag`.
-- `article update "<collection:slug>"` replaces an article's body.
+- `article create "<[collection:]title>"` creates an article. `-b/--body` sets the markdown body (optional); `-t, --tag` is repeatable; `--audience <public|private>` and `--status <draft|published>` set frontmatter (defaults `public`/`published`).
+- `article update "<collection:slug>"` updates any of body (`-b`), tags (`-t`, replaces the set), audience, or status — pass at least one.
 - `tags add "<collection:slug>"` adds a comma-separated tag list (with sibling commands `tags remove` and `tags set`).
 
 Because these writes land as plain markdown files in a [collection](/user-guide/collections) — a global collection for cross-project memory, or a repo collection when the memory should travel with the code — every agent write is an ordinary git commit you can review, diff, and revert like a teammate's contribution.

@@ -5,7 +5,7 @@ import { findCollection } from './collections';
 import { slugify } from './slugify';
 import { parseArticle, serializeArticle } from './frontmatter';
 import { ArticleNotFoundError, CollectionNotFoundError, InvalidTargetError, NoDefaultCollectionError } from './errors';
-import type { Article, PluginEvent } from './types';
+import type { Article, Audience, PluginEvent, PublishStatus } from './types';
 
 /**
  * Fire a lifecycle hook without adding a static import edge into the plugin
@@ -71,13 +71,23 @@ function ensureMdPath(file: string): string {
   return rel;
 }
 
-export async function createArticle(opts: { target: string; tags: string[]; body?: string }): Promise<Article> {
+export async function createArticle(opts: {
+  target: string;
+  tags: string[];
+  body?: string;
+  audience?: Audience;
+  status?: PublishStatus;
+}): Promise<Article> {
   const { collection, title } = parseAddTarget(opts.target);
   const { name, dir } = await resolveCollectionDir(collection);
   const filePath = path.join(dir, `${slugify(title)}.md`);
   const body = opts.body ?? `# ${title}\n`;
   await fs.mkdir(dir, { recursive: true });
-  await fs.writeFile(filePath, serializeArticle({ title, tags: opts.tags, body }), 'utf8');
+  await fs.writeFile(
+    filePath,
+    serializeArticle({ title, tags: opts.tags, body, audience: opts.audience, status: opts.status }),
+    'utf8',
+  );
   void fireHook('article-created', name, path.relative(dir, filePath));
   return { title, tags: opts.tags, path: filePath, collection: name };
 }
@@ -144,6 +154,28 @@ export function removeTags(target: string, tags: string[]): Promise<Article> {
 
 export function setTags(target: string, tags: string[]): Promise<Article> {
   return mutateTags(target, () => Array.from(new Set(tags)));
+}
+
+/**
+ * Set an article's audience and/or status. Unspecified axes are left as-is; the
+ * serializer drops frontmatter for default values (public/published), so setting
+ * an axis back to its default cleans it out of the file.
+ */
+export async function setArticleMeta(
+  target: string,
+  meta: { audience?: Audience; status?: PublishStatus },
+): Promise<Article> {
+  const { filePath, dir, raw, collection } = await loadArticle(target);
+  const parsed = parseArticle(raw);
+  const audience = meta.audience ?? parsed.audience;
+  const status = meta.status ?? parsed.status;
+  await fs.writeFile(
+    filePath,
+    serializeArticle({ title: parsed.title, tags: parsed.tags, audience, status, body: parsed.body }),
+    'utf8',
+  );
+  void fireHook('article-updated', collection, path.relative(dir, filePath));
+  return { title: parsed.title, tags: parsed.tags, path: filePath, collection };
 }
 
 export async function removeArticle(target: string): Promise<string> {

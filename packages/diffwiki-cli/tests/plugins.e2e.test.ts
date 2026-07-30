@@ -61,7 +61,7 @@ afterEach(async () => {
 
 describe('plugin lifecycle (fixture subprocess plugin, no npm/network)', () => {
   it('register -> list -> doctor -> index -> query -> default routing -> remove', async () => {
-    expect((await run(['create', 'stub'])).ok).toBe(true);
+    expect((await run(['collection', 'create', 'stub'])).ok).toBe(true);
 
     const reg = await run(['plugin', 'register', 'stub', '--command', 'node', scriptPath]);
     expect(reg.ok).toBe(true);
@@ -79,18 +79,18 @@ describe('plugin lifecycle (fixture subprocess plugin, no npm/network)', () => {
     expect(doc.out).toContain('stub ready');
     expect(doc.out).toContain('first search is instant');
 
-    const idx = await run(['index']);
+    const idx = await run(['search', 'index']);
     expect(idx.ok).toBe(true);
     expect(idx.out).toContain('Indexed');
 
-    const q = await run(['query', 'hello', '--engine', 'stub']);
+    const q = await run(['search', 'query', 'hello', '--engine', 'stub']);
     expect(q.ok).toBe(true);
     expect(q.out).toContain('1 result(s)');
     expect(q.out).toContain('stub hit for hello');
     expect(q.out).toContain('a canned snippet');
 
-    expect((await run(['config-set', 'defaultSearch', 'stub'])).ok).toBe(true);
-    const q2 = await run(['query', 'hello']);
+    expect((await run(['config', 'set', 'defaultSearch', 'stub'])).ok).toBe(true);
+    const q2 = await run(['search', 'query', 'hello']);
     expect(q2.ok).toBe(true);
     expect(q2.out).toContain('stub hit for hello');
 
@@ -101,7 +101,7 @@ describe('plugin lifecycle (fixture subprocess plugin, no npm/network)', () => {
   });
 
   it('doctor surfaces the tool-missing diagnostic and exits non-zero', async () => {
-    expect((await run(['create', 'stub'])).ok).toBe(true);
+    expect((await run(['collection', 'create', 'stub'])).ok).toBe(true);
     expect((await run(['plugin', 'register', 'stub', '--command', 'node', scriptPath])).ok).toBe(true);
 
     process.env.DIFFWIKI_FIXTURE_TOOL_MISSING = '1';
@@ -111,8 +111,8 @@ describe('plugin lifecycle (fixture subprocess plugin, no npm/network)', () => {
   });
 
   it('doctor warns when defaultSearch points at an uninstalled engine', async () => {
-    expect((await run(['create', 'stub'])).ok).toBe(true);
-    expect((await run(['config-set', 'defaultSearch', 'ghost:semantic'])).ok).toBe(true);
+    expect((await run(['collection', 'create', 'stub'])).ok).toBe(true);
+    expect((await run(['config', 'set', 'defaultSearch', 'ghost:semantic'])).ok).toBe(true);
 
     const doc = await run(['doctor']);
     expect(doc.out).toContain('defaultSearch "ghost:semantic" is not installed/enabled — using native');
@@ -138,7 +138,7 @@ describe.skipIf(!rgOnPath)('real ripgrep plugin e2e (rg on PATH)', () => {
       stdio: 'ignore',
     });
 
-    expect((await run(['create', 'rg-test'])).ok).toBe(true);
+    expect((await run(['collection', 'create', 'rg-test'])).ok).toBe(true);
     const collDir = path.join(home, 'collections', 'rg-test');
     await fs.writeFile(
       path.join(collDir, 'searchable.md'),
@@ -156,7 +156,7 @@ describe.skipIf(!rgOnPath)('real ripgrep plugin e2e (rg on PATH)', () => {
     const origCwd = process.cwd();
     try {
       process.chdir(externalDir);
-      await run(['init', '--collection', 'external-rg', '--path', '.']);
+      await run(['collection', 'init', '--collection', 'external-rg', '--path', '.']);
     } finally {
       process.chdir(origCwd);
     }
@@ -165,7 +165,7 @@ describe.skipIf(!rgOnPath)('real ripgrep plugin e2e (rg on PATH)', () => {
     expect(reg.ok).toBe(true);
     expect(reg.out).toContain('Registered "diffwiki-ripgrep"');
 
-    const q = await run(['query', 'quick brown fox', '--engine', 'diffwiki-ripgrep']);
+    const q = await run(['search', 'query', 'quick brown fox', '--engine', 'diffwiki-ripgrep']);
     expect(q.ok).toBe(true);
     expect(q.out).toContain('result(s)');
     expect(q.out).toContain('Quick Brown Fox');
@@ -193,7 +193,7 @@ describe.skipIf(!(process.env.DIFFWIKI_E2E_REAL && qmdOnPath))(
         stdio: 'ignore',
       });
 
-      expect((await run(['create', 'qmd-test'])).ok).toBe(true);
+      expect((await run(['collection', 'create', 'qmd-test'])).ok).toBe(true);
       const collDir = path.join(home, 'collections', 'qmd-test');
       await fs.writeFile(
         path.join(collDir, 'qmd-article.md'),
@@ -205,11 +205,11 @@ describe.skipIf(!(process.env.DIFFWIKI_E2E_REAL && qmdOnPath))(
       expect(reg.ok).toBe(true);
       expect(reg.out).toContain('Registered "diffwiki-qmd"');
 
-      const idx = await run(['index']);
+      const idx = await run(['search', 'index']);
       expect(idx.ok).toBe(true);
       expect(idx.out).toContain('Indexed');
 
-      const q = await run(['query', 'quantum', '--engine', 'diffwiki-qmd', '-t', 'keyword']);
+      const q = await run(['search', 'query', 'quantum', '--engine', 'diffwiki-qmd', '-t', 'keyword']);
       expect(q.ok).toBe(true);
       expect(q.out).toContain('result(s)');
       expect(q.out).toContain('Quantum');
@@ -298,7 +298,7 @@ describe('plugin install setup surfacing (local package, no network)', () => {
       // Each install makes itself the default; the most recent install wins.
       expect(instA.out).toContain('Set "diffwiki-search-a" as the default search engine');
       expect(instB.out).toContain('Set "diffwiki-search-b" as the default search engine');
-      expect((await run(['config-get', 'defaultSearch'])).out).toContain('diffwiki-search-b');
+      expect((await run(['config', 'get', 'defaultSearch'])).out).toContain('diffwiki-search-b');
     } finally {
       await fs.rm(a, { recursive: true, force: true });
       await fs.rm(b, { recursive: true, force: true });
