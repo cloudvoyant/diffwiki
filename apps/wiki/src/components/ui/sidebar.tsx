@@ -193,17 +193,15 @@ function Sidebar({
       data-slot="sidebar"
     >
       {/* Sidebar layout regime (see docs/architecture/app-shell.md):
-          - tablet (md..desk): the gap reserves --sidebar-width, so the rail PUSHES
-            content (and reflows to 0 when collapsed) — the tablet "layout shift".
-          - desktop (>=desk / 84rem): the gap is forced to 0 so content centres in
-            the full viewport with symmetric gutters; the fixed rail then OVERLAYS
-            the left gutter instead of pushing. */}
+          at every md+ width the gap reserves --sidebar-width, so the sidebar
+          PUSHES content (the content lane starts at the sidebar's right edge)
+          and reflows to 0 when collapsed. The sidebar is the outermost, primary
+          navigation column — it must never be overlaid by the top nav. */}
       <div
         data-slot="sidebar-gap"
         className={cn(
           'relative w-(--sidebar-width) bg-transparent transition-[width] duration-200 ease-linear',
           'group-data-[collapsible=offcanvas]:w-0',
-          'min-[84rem]:w-0!',
           'group-data-[side=right]:rotate-180',
           variant === 'floating' || variant === 'inset'
             ? 'group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)+(--spacing(4)))]'

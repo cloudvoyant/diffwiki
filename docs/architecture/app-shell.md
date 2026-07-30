@@ -12,28 +12,34 @@ The app shell is the persistent chrome of the wiki app — a full-height left na
 - The content lane must always be centred with **symmetric left/right gutters** at every breakpoint.
 - Three responsive layouts, applied to **every** page regardless of whether it has a TOC:
   - **Mobile**: the sidebar is an overlay sheet; narrow gutters.
-  - **Tablet**: the sidebar is an inline rail that **pushes** content (a layout shift), reflowing to fill when collapsed; medium gutters.
-  - **Desktop**: the sidebar **overlays** the left gutter (it does not push); left gutter == right gutter.
+  - **Tablet/Desktop** (`md+`): the sidebar is an inline, full-height left column that **pushes** content (the content lane starts at the sidebar's right edge), reflowing to fill when collapsed. The sidebar is the outermost, primary-navigation column and is never overlaid by the top nav.
 - The TOC must **not** be a separate layout — it only occupies the right gutter on desktop when that gutter is wide enough; it must never displace the content lane, so a page with a TOC and one without lay out identically.
 - Layout must be expressed in **Tailwind utilities with `cn()`**, not hand-written `@media` rules in `styles.css`.
 
 ## Design
 
-### Why the tablet→desktop switch exists
+### The sidebar always pushes
 
-The sidebar and TOC are 16rem (`--sidebar-w` / `--toc-w`) and the content lane is 48rem (`--content-max`). For the sidebar to "slide over" the left gutter without covering content, that gutter must be at least as wide as the sidebar. The gutter is `(viewport − content-lane) / 2`, so overlay is only possible once the viewport is wide enough — about `content-max + 2 × sidebar-w` ≈ **84rem (1344px)**. Below that, the gutters are too thin, so the rail pushes content instead (the tablet "layout shift"). This is why one breakpoint governs the switch.
+The sidebar is the outermost, full-height primary-navigation column, so at every `md+`
+width it **pushes** the content inset (the content lane begins at the sidebar's right
+edge) — it is never overlaid by the top nav. The `84rem` breakpoint no longer switches
+push↔overlay; it only governs whether the content inset shows the TOC in its right
+gutter (below `84rem` there is no room, above it there is).
 
 ### One rule, TOC-independent
 
-The content lane centres in the viewport at desktop via a 3-column grid `[1fr | content | 1fr]`: the equal `1fr` gutters keep the lane centred, the fixed sidebar overlays the left gutter, and the TOC (when present) lives in the right gutter cell. Because the TOC has its own cell, adding or removing it never moves the lane.
+Within the content inset the content lane centres via a 3-column grid `[1fr | content | 1fr]`
+at desktop: the equal `1fr` gutters keep the lane centred **inside the inset**, and the
+TOC (when present) lives in the right gutter cell. Because the TOC has its own cell,
+adding or removing it never moves the lane.
 
 ```mermaid
 graph TD
-  subgraph Desktop[">= 84rem — overlay"]
-    L["left gutter (1fr)\nsidebar overlays"] --- C["content lane\nminmax(0, --content-max)"] --- R["right gutter (1fr)\nTOC when present"]
+  subgraph Shell["md+ — sidebar pushes"]
+    SB["sidebar (reserves --sidebar-w)\nfull-height, primary nav"] --- INSET["content inset"]
   end
-  subgraph Tablet["768px .. 84rem — push"]
-    S["sidebar rail (reserves --sidebar-w)"] --- CI["content inset\ncontent lane centred (mx-auto)"]
+  subgraph Inset[">= 84rem inset — content lane + TOC"]
+    L["left gutter (1fr)"] --- C["content lane\nminmax(0, --content-max)"] --- R["right gutter (1fr)\nTOC when present"]
   end
   subgraph Mobile["< 768px — overlay sheet"]
     CM["content lane, full width\nsidebar in a Sheet"]
@@ -42,7 +48,7 @@ graph TD
 
 ### Encapsulation
 
-The responsive logic lives in two places only: the Sidebar primitive controls the push-vs-overlay regime (via the sidebar-gap width), and `PageLayout` owns the content lane, gutters, and TOC placement. Routes just render `<PageLayout aside={...}>`; they never touch gutters or breakpoints.
+The responsive logic lives in two places only: the Sidebar primitive controls the push regime (via the sidebar-gap width, which reserves `--sidebar-width` at all `md+` widths), and `PageLayout` owns the content lane, gutters, and TOC placement. Routes just render `<PageLayout aside={...}>`; they never touch gutters or breakpoints.
 
 ## Implementation
 
@@ -63,26 +69,26 @@ AppShell (SidebarProvider, row)
 
 ### Key mechanisms
 
-- **Sidebar regime** (`components/ui/sidebar.tsx`): the `[data-slot='sidebar-gap']` element reserves `--sidebar-width` (push) but is forced to `min-[84rem]:w-0!` at desktop, so content centres in the full viewport while the fixed container stays at `left-0`, overlaying the left gutter. The sidebar is now the outermost column and the primary navigation surface, so the fixed container spans the full viewport height (`inset-y-0 h-svh`) rather than starting below the top bar.
-- **Content + gutters** (`components/page-layout.tsx`): below `84rem` the lane is `mx-auto max-w-[var(--content-max)]` (centred in the inset); at `min-[84rem]` a `grid-cols-[1fr_minmax(0,var(--content-max))_1fr]` gives equal gutters with the TOC in the right cell.
+- **Sidebar regime** (`components/ui/sidebar.tsx`): the `[data-slot='sidebar-gap']` element reserves `--sidebar-width` at all `md+` widths (push) and reflows to `0` only when the sidebar is collapsed, so the content inset always begins at the sidebar's right edge — the top nav never spans over the sidebar. The sidebar is the outermost column and the primary navigation surface, so the fixed container spans the full viewport height (`inset-y-0 h-svh`) rather than starting below the top bar.
+- **Content + gutters** (`components/page-layout.tsx`): the lane is `mx-auto max-w-[var(--content-max)]`, centred within the content inset (never under the sidebar); at `min-[84rem]` a `grid-cols-[1fr_minmax(0,var(--content-max))_1fr]` gives equal gutters inside the inset with the TOC in the right cell.
 - **Mobile** is the shadcn default (`md:block` hides the rail below 768px; a Sheet takes over) — no custom code.
 - **DOM hierarchy** (`components/app-shell.tsx`): the `SidebarProvider` lays out as a row; `AppSidebar` is the first column and the `TopNav` renders inside `SidebarInset` (the content column), sticky at `top-0`. The top nav therefore no longer spans the full width above the sidebar — the sidebar sits higher in the DOM as primary navigation.
 
 ### Layout tokens & breakpoint
 
-| Token / breakpoint | Value              | Controls                                       |
-| ------------------ | ------------------ | ---------------------------------------------- |
-| `--nav-h`          | `3.5rem`           | Top bar height; sidebar/TOC top offset.        |
-| `--sidebar-w`      | `16rem`            | Sidebar rail width.                            |
-| `--toc-w`          | `16rem`            | TOC width in the right gutter.                 |
-| `--content-max`    | `48rem`            | Content lane max width.                        |
-| mobile breakpoint  | `768px` (`md`)     | Sheet ↔ inline rail (`use-mobile.ts`).         |
-| desktop breakpoint | `84rem` (`1344px`) | Push ↔ overlay; TOC show/hide (`min-[84rem]`). |
+| Token / breakpoint | Value              | Controls                                        |
+| ------------------ | ------------------ | ----------------------------------------------- |
+| `--nav-h`          | `3.5rem`           | Top bar height; sidebar/TOC top offset.         |
+| `--sidebar-w`      | `16rem`            | Sidebar rail width.                             |
+| `--toc-w`          | `16rem`            | TOC width in the right gutter.                  |
+| `--content-max`    | `48rem`            | Content lane max width.                         |
+| mobile breakpoint  | `768px` (`md`)     | Sheet ↔ inline rail (`use-mobile.ts`).          |
+| desktop breakpoint | `84rem` (`1344px`) | TOC show/hide inside the inset (`min-[84rem]`). |
 
 ## References
 
 - `apps/wiki/src/components/page-layout.tsx` — content lane, gutters, TOC placement.
 - `apps/wiki/src/components/app-shell.tsx` — top bar + sidebar + inset composition.
-- `apps/wiki/src/components/ui/sidebar.tsx` — the sidebar-gap/container regime (push vs overlay).
+- `apps/wiki/src/components/ui/sidebar.tsx` — the sidebar-gap/container push regime.
 - `apps/wiki/src/hooks/use-mobile.ts` — the 768px mobile breakpoint.
 - [`docs/architecture/static-site-generation.md`](static-site-generation.md) — how the shell behaves in a static export.
