@@ -1,3 +1,10 @@
+# [0.11.0](https://github.com/cloudvoyant/diffwiki/compare/v0.10.0...v0.11.0) (2026-07-30)
+
+
+### Features
+
+* **cli:** article metadata flags and remove deprecated aliases ([#11](https://github.com/cloudvoyant/diffwiki/issues/11)) ([add748c](https://github.com/cloudvoyant/diffwiki/commit/add748c715318f8a3d554863ba0a629e585fa241))
+
 # [0.10.0](https://github.com/cloudvoyant/diffwiki/compare/v0.9.0...v0.10.0) (2026-07-29)
 
 
