@@ -3,6 +3,7 @@ import { useSidebar } from '@/components/ui/sidebar';
 import { Button } from '@/components/ui/button';
 import { Breadcrumbs } from '@/components/breadcrumbs';
 import { PageStatusIndicator } from '@/components/page-status-indicator';
+import { cn } from '@/lib/utils';
 import type { CollectionTree } from '@/lib/types';
 
 /**
@@ -35,8 +36,18 @@ function SidebarToggle() {
  * `md` breakpoint. Height is governed by the --nav-h CSS custom property.
  */
 export function TopNav({ tree }: { tree: CollectionTree[] }) {
+  const { state, isMobile } = useSidebar();
+  // On desktop (>=84rem) the sidebar OVERLAYS the left gutter and sits ABOVE this
+  // bar. When it's open, pad the nav's controls out past the sidebar width so the
+  // trigger isn't hidden behind it; collapsed → no offset (trigger sits flush left).
+  const openOnDesktop = !isMobile && state === 'expanded';
   return (
-    <header className="sticky top-0 z-40 flex h-[var(--nav-h)] items-center gap-3 border-b bg-background px-2.5">
+    <header
+      className={cn(
+        'sticky top-0 z-40 flex h-[var(--nav-h)] items-center gap-3 border-b bg-background px-2.5 transition-[padding-left] duration-200 ease-linear',
+        openOnDesktop && 'min-[84rem]:pl-[calc(var(--sidebar-width)+1rem)]',
+      )}
+    >
       <SidebarToggle />
       <div className="hidden min-w-0 flex-1 md:flex">
         <Breadcrumbs tree={tree} />

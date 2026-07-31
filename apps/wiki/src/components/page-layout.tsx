@@ -5,11 +5,12 @@ import { cn } from '../lib/utils';
  * Page layout — owns the content lane, gutters, and optional TOC for every route
  * (mobile / tablet / desktop; see docs/architecture/app-shell.md).
  *
- * The sidebar always PUSHES this content inset (it is the outermost column), so
- * the lane centres within the inset — never under the sidebar:
- *   - below the desktop breakpoint the lane simply centres (`mx-auto`);
+ * The content lane is always centred with symmetric gutters:
+ *   - below the desktop breakpoint the lane simply centres (`mx-auto`) inside the
+ *     content inset — the sidebar has pushed it, giving the tablet "layout shift";
  *   - at desktop (`>=84rem`) a 3-column grid `[1fr | content | 1fr]` gives equal
- *     gutters inside the inset, and the TOC (when present) occupies the right one.
+ *     gutters in the FULL viewport: the fixed sidebar overlays the left one (it
+ *     sits above this bar via its z-index), and the TOC (when present) the right.
  *
  * The TOC never displaces the content lane — it lives in its own gutter cell, so a
  * page with a TOC and one without are laid out identically; the TOC just fills the
@@ -23,7 +24,7 @@ export function PageLayout({ children, aside }: { children: ReactNode; aside?: R
         'min-[84rem]:grid min-[84rem]:grid-cols-[1fr_minmax(0,var(--content-max))_1fr] min-[84rem]:items-start min-[84rem]:gap-x-10',
       )}
     >
-      {/* Left gutter — keeps the content lane centred within the inset. */}
+      {/* Left gutter — the fixed sidebar overlays this on desktop. */}
       <div aria-hidden className="hidden min-[84rem]:block" />
 
       <div className="mx-auto w-full min-w-0 max-w-[var(--content-max)] min-[84rem]:mx-0">{children}</div>
