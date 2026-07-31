@@ -44,7 +44,7 @@ export function TopNav({ tree }: { tree: CollectionTree[] }) {
   return (
     <header
       className={cn(
-        'sticky top-0 z-40 flex h-[var(--nav-h)] items-center gap-3 border-b bg-background px-2.5 transition-[padding-left] duration-200 ease-linear',
+        'sticky top-0 z-40 flex h-[var(--nav-h)] items-center gap-3 border-b bg-background px-2.5 pr-5 transition-[padding-left] duration-200 ease-linear',
         openOnDesktop && 'min-[84rem]:pl-[calc(var(--sidebar-width)+1rem)]',
       )}
     >
