@@ -1,3 +1,10 @@
+# [0.12.0](https://github.com/cloudvoyant/diffwiki/compare/v0.11.0...v0.12.0) (2026-07-31)
+
+
+### Features
+
+* **wiki:** sidebar-primary navigation (DIFF-48) ([#12](https://github.com/cloudvoyant/diffwiki/issues/12)) ([b1acecf](https://github.com/cloudvoyant/diffwiki/commit/b1acecfc3a1ae3b4b59f17c7604c8046d83e3e66))
+
 # [0.11.0](https://github.com/cloudvoyant/diffwiki/compare/v0.10.0...v0.11.0) (2026-07-30)
 
 
