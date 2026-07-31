@@ -23,33 +23,55 @@ const test = base.extend<{ noClientErrors: void }>({
 test.describe('Search route (/search)', () => {
   test('reflects the query term from the URL in the results meta', async ({ page }) => {
     await page.goto('/search?q=intro');
-    // The /search page has no query bar (search is driven by the top-nav bar); the
-    // active query is echoed in the results meta line.
+    // The active query is echoed in the results meta line.
     await expect(page.getByTestId('search-meta')).toContainText('intro');
   });
 
-  test('renders the collection filter with an "All collections" option', async ({ page }) => {
+  test('renders an auto-focused query input on the page', async ({ page }) => {
+    await page.goto('/search');
+    // The search page owns its query bar; the input auto-focuses on mount.
+    const input = page.getByRole('searchbox').first();
+    await expect(input).toBeVisible();
+    await expect(input).toBeFocused();
+  });
+
+  test('renders the collection filter menu with an "All collections" option', async ({ page }) => {
     await page.goto('/search?q=intro');
-    const filter = page.getByLabel(/filter by collection/i);
+    // The collection filter is now a dropdown-menu button; its label defaults to
+    // "All collections" when nothing is selected.
+    const filter = page.getByRole('button', { name: /filter by collection/i });
     await expect(filter).toBeVisible();
-    await expect(filter.getByRole('option', { name: /all collections/i })).toHaveCount(1);
+    await expect(filter).toContainText(/all collections/i);
+    // Re-click inside toPass: a click that lands before React hydration attaches
+    // the Radix trigger handlers is swallowed, so retry until the menu opens.
+    const option = page.getByRole('menuitem', { name: /all collections/i });
+    await expect(async () => {
+      if (await option.isVisible()) return;
+      await filter.click();
+      await expect(option).toBeVisible({ timeout: 1000 });
+    }).toPass();
   });
 
-  test('mode dropdown always contains the native · bm25 option', async ({ page }) => {
+  test('mode menu always contains the native · bm25 option', async ({ page }) => {
     await page.goto('/search?q=intro');
-    const modeSelect = page.getByLabel(/search mode/i);
-    await expect(modeSelect).toBeVisible();
+    const modeButton = page.getByRole('button', { name: /search mode/i });
+    await expect(modeButton).toBeVisible();
     // listSearchModes() always prepends native · bm25 regardless of installed plugins.
-    await expect(modeSelect.getByRole('option', { name: /native · bm25/i })).toHaveCount(1);
+    const option = page.getByRole('menuitem', { name: /native · bm25/i });
+    await expect(async () => {
+      if (await option.isVisible()) return;
+      await modeButton.click();
+      await expect(option).toBeVisible({ timeout: 1000 });
+    }).toPass();
   });
 
-  test('mode dropdown value matches the engine and type params when provided', async ({ page }) => {
+  test('mode menu button label matches the engine and type params when provided', async ({ page }) => {
     // Navigate directly with engine and type params set.
     await page.goto('/search?q=intro&engine=native&type=basic');
-    const modeSelect = page.getByLabel(/search mode/i);
-    await expect(modeSelect).toBeVisible();
-    // The select should reflect the engine:type from the URL params.
-    await expect(modeSelect).toHaveValue('native:basic');
+    const modeButton = page.getByRole('button', { name: /search mode/i });
+    await expect(modeButton).toBeVisible();
+    // The button label should reflect the engine:type from the URL params.
+    await expect(modeButton).toContainText(/native · bm25/i);
   });
 
   test('renders either a results list or a no-results message for a non-empty query', async ({ page }) => {
@@ -93,15 +115,30 @@ test.describe('Search route (/search)', () => {
 
   test('navigates from the home search box to /search with the query in the URL', async ({ page }) => {
     await page.goto('/');
-    // Target the content area search box (inside SidebarInset), not the sidebar's.
-    const searchInput = page.locator('[data-slot="sidebar-inset"] input[type="search"]').first();
+    // The home hero search input (the sidebar search is a button, not an input).
+    const searchInput = page.getByRole('searchbox').first();
     await expect(searchInput).toBeVisible();
     // The SearchBox form has action="/search" method="get" for progressive
     // enhancement, so native form submit works even before React hydration.
     await searchInput.fill('diffwiki');
     await searchInput.press('Enter');
     await expect(page).toHaveURL(/\/search\?.*q=diffwiki/);
-    // The /search page has no query bar; it echoes the active query in its results meta.
+    // The search page echoes the active query in its results meta.
     await expect(page.getByTestId('search-meta')).toContainText('diffwiki');
+  });
+
+  test('⌘K on /search keeps the active query instead of wiping it', async ({ page }) => {
+    // Regression: the global ⌘K used to always navigate to /search with an empty
+    // q, clearing an in-progress query when the user was already on /search. It
+    // must now no-op (focus the on-page input) and preserve q in the URL.
+    await page.goto('/search?q=intro');
+    await expect(page.getByTestId('search-meta')).toContainText('intro');
+
+    const modifier = process.platform === 'darwin' ? 'Meta' : 'Control';
+    await page.keyboard.press(`${modifier}+k`);
+
+    // Query is preserved (not reset to empty) and the on-page input holds focus.
+    await expect(page).toHaveURL(/\/search\?.*q=intro/);
+    await expect(page.getByRole('searchbox').first()).toBeFocused();
   });
 });

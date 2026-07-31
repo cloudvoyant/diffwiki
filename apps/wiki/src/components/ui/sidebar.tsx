@@ -192,12 +192,8 @@ function Sidebar({
       data-side={side}
       data-slot="sidebar"
     >
-      {/* Sidebar layout regime (see docs/architecture/app-shell.md):
-          - tablet (md..desk): the gap reserves --sidebar-width, so the rail PUSHES
-            content (and reflows to 0 when collapsed) — the tablet "layout shift".
-          - desktop (>=desk / 84rem): the gap is forced to 0 so content centres in
-            the full viewport with symmetric gutters; the fixed rail then OVERLAYS
-            the left gutter instead of pushing. */}
+      {/* Layout regime: push on tablet, overlay-above-top-nav on desktop.
+          See docs/architecture/app-shell.md. */}
       <div
         data-slot="sidebar-gap"
         className={cn(
@@ -213,9 +209,7 @@ function Sidebar({
       <div
         data-slot="sidebar-container"
         className={cn(
-          'fixed inset-y-0 z-10 hidden h-svh w-(--sidebar-width) transition-[left,right,width] duration-200 ease-linear md:flex',
-          // The fixed rail starts below the full-width TopNav (app customization).
-          'top-(--nav-h) bottom-auto h-[calc(100svh-var(--nav-h))]',
+          'fixed inset-y-0 z-50 hidden h-svh w-(--sidebar-width) transition-[left,right,width] duration-200 ease-linear md:flex',
           side === 'left'
             ? 'left-0 group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)]'
             : 'right-0 group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)]',

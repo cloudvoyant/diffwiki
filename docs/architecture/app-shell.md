@@ -5,7 +5,7 @@
 
 ## Overview
 
-The app shell is the persistent chrome of the wiki app — a full-width top bar, a left collection sidebar, and the content inset — plus the page layout that positions the content lane, its gutters, and the optional table of contents (TOC). It exists so every route (home, article, listing, search) shares one responsive frame with a single, predictable rule for where content sits at each screen size. Without it, each page would re-implement gutters and the sidebar/TOC relationship and drift apart.
+The app shell is the persistent chrome of the wiki app — a full-height left navigation sidebar (logo, search, collection tree, settings + GitHub) and, in the content column to its right, a slim top bar (sidebar trigger, breadcrumbs, page audience/status) above the content inset — plus the page layout that positions the content lane, its gutters, and the optional table of contents (TOC). It exists so every route (home, article, listing, search) shares one responsive frame with a single, predictable rule for where content sits at each screen size. Without it, each page would re-implement gutters and the sidebar/TOC relationship and drift apart.
 
 ## Requirements
 
@@ -49,22 +49,24 @@ The responsive logic lives in two places only: the Sidebar primitive controls th
 ### Component Tree
 
 ```
-AppShell (SidebarProvider, flex-col)
-├─ TopNav                     full-width sticky bar (sidebar trigger, breadcrumbs, theme, GitHub)
-└─ div.flex (row)
-   ├─ AppSidebar (Sidebar)    fixed rail / push gap / mobile Sheet
-   │  └─ NavTree              collection tree (+ external-collection git badges)
-   └─ SidebarInset            content area
-      └─ <route> → PageLayout
-         ├─ content lane      mx-auto max-w-(--content-max), always centred
-         └─ aside (TOC)       right-gutter cell, desktop only, sticky
+AppShell (SidebarProvider, row)
+├─ AppSidebar (Sidebar)        full-height left column — PRIMARY NAV
+│  ├─ SidebarHeader            logo/wordmark home link + Search button (⌘K → /search)
+│  ├─ SidebarContent → NavTree collection tree (+ external-collection git badges)
+│  └─ SidebarFooter            settings dialog + GitHub link
+└─ SidebarInset                content column
+   ├─ TopNav                   sticky bar: sidebar trigger, breadcrumbs (md+), page audience/status (far right)
+   └─ <route> → PageLayout
+      ├─ content lane          mx-auto max-w-(--content-max), always centred
+      └─ aside (TOC)           right-gutter cell, desktop only, sticky
 ```
 
 ### Key mechanisms
 
-- **Sidebar regime** (`components/ui/sidebar.tsx`): the `[data-slot='sidebar-gap']` element reserves `--sidebar-width` (push) but is forced to `min-[84rem]:w-0!` at desktop, so content centres in the full viewport while the fixed container stays at `left-0`, overlaying the left gutter. The container is offset below the top bar with `top-(--nav-h) bottom-auto h-[calc(100svh-var(--nav-h))]`.
+- **Sidebar regime** (`components/ui/sidebar.tsx`): the `[data-slot='sidebar-gap']` element reserves `--sidebar-width` (push) but is forced to `min-[84rem]:w-0!` at desktop, so content centres in the full viewport while the fixed container stays at `left-0`, overlaying the left gutter. The sidebar is now the outermost column and the primary navigation surface, so the fixed container spans the full viewport height (`inset-y-0 h-svh`) rather than starting below the top bar.
 - **Content + gutters** (`components/page-layout.tsx`): below `84rem` the lane is `mx-auto max-w-[var(--content-max)]` (centred in the inset); at `min-[84rem]` a `grid-cols-[1fr_minmax(0,var(--content-max))_1fr]` gives equal gutters with the TOC in the right cell.
 - **Mobile** is the shadcn default (`md:block` hides the rail below 768px; a Sheet takes over) — no custom code.
+- **DOM hierarchy** (`components/app-shell.tsx`): the `SidebarProvider` lays out as a row; `AppSidebar` is the first column and the `TopNav` renders inside `SidebarInset` (the content column), sticky at `top-0`. The top nav therefore no longer spans the full width above the sidebar — the sidebar sits higher in the DOM as primary navigation.
 
 ### Layout tokens & breakpoint
 

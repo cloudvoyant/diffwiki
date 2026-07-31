@@ -265,9 +265,9 @@
   font-size: inherit;
 }
 
-/* The sidebar layout regime (push on tablet, overlay on desktop) and its nav-height
-   offset now live in Tailwind classes on the Sidebar primitive (components/ui/sidebar.tsx)
-   and PageLayout — see docs/architecture/app-shell.md. */
+/* The sidebar layout regime (push on tablet, overlay on desktop) lives in Tailwind
+   classes on the Sidebar primitive (components/ui/sidebar.tsx) and PageLayout. The
+   sidebar is now full-height (no nav-height offset) — see docs/architecture/app-shell.md. */
 
 /* Sidebar uses page background (not a distinct surface) on both desktop rail and mobile sheet. */
 [data-sidebar='sidebar'] {

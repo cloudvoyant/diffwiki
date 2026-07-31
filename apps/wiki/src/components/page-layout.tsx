@@ -9,8 +9,8 @@ import { cn } from '../lib/utils';
  *   - below the desktop breakpoint the lane simply centres (`mx-auto`) inside the
  *     content inset — the sidebar has pushed it, giving the tablet "layout shift";
  *   - at desktop (`>=84rem`) a 3-column grid `[1fr | content | 1fr]` gives equal
- *     gutters: the fixed sidebar overlays the left one, and the TOC (when present)
- *     occupies the right one.
+ *     gutters in the FULL viewport: the fixed sidebar overlays the left one (it
+ *     sits above this bar via its z-index), and the TOC (when present) the right.
  *
  * The TOC never displaces the content lane — it lives in its own gutter cell, so a
  * page with a TOC and one without are laid out identically; the TOC just fills the

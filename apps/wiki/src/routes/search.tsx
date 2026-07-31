@@ -1,7 +1,17 @@
 import { createFileRoute, Link } from '@tanstack/react-router';
 import { useEffect, useState } from 'react';
+import { Check, ChevronDown, X } from 'lucide-react';
 import { loadSearch, loadCollections, loadSearchModes } from '../lib/data-source';
 import { PageLayout } from '../components/page-layout';
+import { SearchBox } from '../components/search-box';
+import { Badge } from '../components/ui/badge';
+import { Button } from '../components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '../components/ui/dropdown-menu';
 import { cn } from '../lib/utils';
 import type { CollectionInfo, SearchResultItem } from '../lib/types';
 import type { SearchMode } from 'diffwiki-core';
@@ -39,11 +49,12 @@ function formatDuration(ms: number): string {
   return ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(1)} s`;
 }
 
-/** Shown while the search loader is in flight. The query bar lives in the top nav. */
+/** Shown while the search loader is in flight. The query bar sits at the top of this page. */
 function SearchPending() {
   return (
     <PageLayout>
       <div className="flex w-full max-w-3xl flex-col gap-6">
+        <SearchBox autoFocus placeholder="Search" />
         <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground" role="status" aria-live="polite">
           <span
             className="inline-block size-4 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent"
@@ -100,45 +111,112 @@ function SearchComponent() {
 
   const q = search.q.trim();
 
+  // Labels for the selected collection and the current mode, used both in the
+  // menu-button labels and the in-box pills.
+  const selectedCollection = params.c ? collections.find((c: CollectionInfo) => c.name === params.c) : undefined;
+  const collectionLabel = selectedCollection ? (selectedCollection.title ?? selectedCollection.name) : params.c;
+  const currentMode = modes.find((m: SearchMode) => `${m.plugin}:${m.type}` === currentModeKey);
+  const defaultModeKey = `${defaultMode.engine}:${defaultMode.type}`;
+  const isNonDefaultMode = currentModeKey !== defaultModeKey;
+
+  const clearCollection = () => void navigate({ to: '/search', search: (prev) => ({ ...prev, c: undefined }) });
+  const clearMode = () =>
+    void navigate({ to: '/search', search: (prev) => ({ ...prev, engine: undefined, type: undefined }) });
+
+  // Selection pills rendered inside the search box (before the typed text).
+  const pills =
+    params.c || isNonDefaultMode ? (
+      <>
+        {params.c && (
+          <Badge variant="secondary" className="gap-1 pr-1">
+            {collectionLabel}
+            <button
+              type="button"
+              aria-label={`Remove collection filter ${collectionLabel}`}
+              onClick={clearCollection}
+              className="flex size-3.5 items-center justify-center rounded-full hover:bg-foreground/10"
+            >
+              <X className="size-3" aria-hidden="true" />
+            </button>
+          </Badge>
+        )}
+        {isNonDefaultMode && currentMode && (
+          <Badge variant="secondary" className="gap-1 pr-1">
+            {currentMode.label}
+            <button
+              type="button"
+              aria-label={`Remove search mode ${currentMode.label}`}
+              onClick={clearMode}
+              className="flex size-3.5 items-center justify-center rounded-full hover:bg-foreground/10"
+            >
+              <X className="size-3" aria-hidden="true" />
+            </button>
+          </Badge>
+        )}
+      </>
+    ) : undefined;
+
   return (
     <PageLayout>
       <div className="flex w-full max-w-3xl flex-col gap-6">
-        {/* No query bar here — search is driven by the top-nav bar (⌘K). */}
-        {/* Filters: collection + dynamic search-mode dropdown */}
-        <div className="flex flex-wrap items-center gap-3">
-          <select
-            value={params.c ?? ''}
-            onChange={(e) => {
-              const value = e.target.value || undefined;
-              void navigate({ to: '/search', search: (prev) => ({ ...prev, c: value }) });
-            }}
-            aria-label="Filter by collection"
-            className="rounded-md border border-input bg-background px-3 py-1.5 text-sm text-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-ring"
-          >
-            <option value="">All collections</option>
-            {collections.map((c: CollectionInfo) => (
-              <option key={c.name} value={c.name}>
-                {c.title ?? c.name}
-              </option>
-            ))}
-          </select>
+        {/* The search page's own "top nav": the query bar + filter menu buttons on
+            one row. The area below shows query time and results. The input
+            auto-focuses on mount. Selected filters appear as pills inside the box. */}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="min-w-48 flex-1">
+            <SearchBox autoFocus placeholder="Search" leading={pills} />
+          </div>
+
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="shrink-0" aria-label="Filter by collection">
+                {collectionLabel ?? 'All collections'}
+                <ChevronDown className="size-4 opacity-60" aria-hidden="true" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onSelect={clearCollection}>
+                <Check className={cn('size-4', params.c ? 'opacity-0' : 'opacity-100')} aria-hidden="true" />
+                All collections
+              </DropdownMenuItem>
+              {collections.map((c: CollectionInfo) => (
+                <DropdownMenuItem
+                  key={c.name}
+                  onSelect={() => void navigate({ to: '/search', search: (prev) => ({ ...prev, c: c.name }) })}
+                >
+                  <Check
+                    className={cn('size-4', params.c === c.name ? 'opacity-100' : 'opacity-0')}
+                    aria-hidden="true"
+                  />
+                  {c.title ?? c.name}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
 
           {modes.length > 0 && (
-            <select
-              value={currentModeKey}
-              onChange={(e) => handleModeChange(e.target.value)}
-              aria-label="Search mode"
-              className="rounded-md border border-input bg-background px-3 py-1.5 text-sm text-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-ring"
-            >
-              {modes.map((m: SearchMode) => {
-                const key = `${m.plugin}:${m.type}`;
-                return (
-                  <option key={key} value={key}>
-                    {m.label}
-                  </option>
-                );
-              })}
-            </select>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="shrink-0" aria-label="Search mode">
+                  {currentMode?.label ?? currentModeKey}
+                  <ChevronDown className="size-4 opacity-60" aria-hidden="true" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                {modes.map((m: SearchMode) => {
+                  const key = `${m.plugin}:${m.type}`;
+                  return (
+                    <DropdownMenuItem key={key} onSelect={() => handleModeChange(key)}>
+                      <Check
+                        className={cn('size-4', currentModeKey === key ? 'opacity-100' : 'opacity-0')}
+                        aria-hidden="true"
+                      />
+                      {m.label}
+                    </DropdownMenuItem>
+                  );
+                })}
+              </DropdownMenuContent>
+            </DropdownMenu>
           )}
         </div>
 

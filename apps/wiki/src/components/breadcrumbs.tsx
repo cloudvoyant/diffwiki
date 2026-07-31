@@ -1,8 +1,9 @@
-import { Fragment, type ReactNode } from 'react';
+import { Fragment } from 'react';
 import { Link, useRouterState } from '@tanstack/react-router';
 import { ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { CollectionTree, TreeNode } from '@/lib/types';
+import { resolvePath } from '@/lib/resolve-path';
+import type { CollectionTree } from '@/lib/types';
 
 interface Crumb {
   label: string;
@@ -14,25 +15,11 @@ interface Crumb {
 
 /** Resolve the breadcrumb trail for a pathname from the collection nav tree. */
 function buildCrumbs(tree: CollectionTree[], pathname: string): Crumb[] {
-  if (!pathname || pathname === '/') return [];
-  const collName = decodeURIComponent(pathname.split('/').filter(Boolean)[0] ?? '');
-  const ct = tree.find((t) => t.collection.name === collName);
-  if (!ct) return [{ label: collName }];
-  const collLabel = ct.collection.title ?? collName;
-
-  const chain: TreeNode[] = [];
-  const walk = (nodes: TreeNode[]): boolean => {
-    for (const node of nodes) {
-      chain.push(node);
-      if (node.path === pathname) return true;
-      if (node.children && walk(node.children)) return true;
-      chain.pop();
-    }
-    return false;
-  };
-  walk(ct.nodes);
-
-  return [{ label: collLabel, coll: collName }, ...chain.map((n) => ({ label: n.title ?? n.name, path: n.path }))];
+  const r = resolvePath(tree, pathname);
+  if (!r) return [];
+  if (!r.collection) return [{ label: r.collName }];
+  const collLabel = r.collection.title ?? r.collName;
+  return [{ label: collLabel, coll: r.collName }, ...r.chain.map((n) => ({ label: n.title ?? n.name, path: n.path }))];
 }
 
 /**
@@ -53,7 +40,7 @@ function crumbSplat(c: Crumb, prefix: string): string | undefined {
  * The first crumb always carries the collection name; intermediate crumbs are
  * links whose splat is their route path minus the leading "/{coll}/".
  */
-export function Breadcrumbs({ tree, trailing }: { tree: CollectionTree[]; trailing?: ReactNode }) {
+export function Breadcrumbs({ tree }: { tree: CollectionTree[] }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const crumbs = buildCrumbs(tree, pathname);
   if (crumbs.length === 0) return null;
@@ -90,8 +77,6 @@ export function Breadcrumbs({ tree, trailing }: { tree: CollectionTree[]; traili
           </Fragment>
         );
       })}
-      {/* Inline trailing slot (e.g. the DRAFT mark), sitting right after the title crumb. */}
-      {trailing && <span className="flex shrink-0 items-center">{trailing}</span>}
     </nav>
   );
 }
