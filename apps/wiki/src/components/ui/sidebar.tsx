@@ -192,13 +192,8 @@ function Sidebar({
       data-side={side}
       data-slot="sidebar"
     >
-      {/* Sidebar layout regime (see docs/architecture/app-shell.md):
-          - tablet (md..desk): the gap reserves --sidebar-width, so the rail PUSHES
-            content (and reflows to 0 when collapsed) — the tablet "layout shift".
-          - desktop (>=desk / 84rem): the gap is forced to 0 so content centres in
-            the full viewport with symmetric gutters; the fixed rail then OVERLAYS
-            the left gutter instead of pushing. The rail sits ABOVE the top nav
-            (see the sidebar-container z-index) so it is never covered by it. */}
+      {/* Layout regime: push on tablet, overlay-above-top-nav on desktop.
+          See docs/architecture/app-shell.md. */}
       <div
         data-slot="sidebar-gap"
         className={cn(
