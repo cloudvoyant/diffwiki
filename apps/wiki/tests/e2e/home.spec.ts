@@ -19,10 +19,6 @@ test.describe('Home route (/)', () => {
   });
 
   test('the sidebar exposes a Search button (not an input)', async ({ page }) => {
-    // The sidebar search is a button that navigates to /search — not a text field.
-    // Unlike the home hero SearchBox (a native form with action="/search"), the
-    // button navigates via the router, so it only works once React has hydrated
-    // the onClick handler. Retry the click until navigation takes effect.
     const searchButton = page.getByRole('button', { name: /^search$/i });
     await expect(searchButton).toBeVisible();
     await expect(async () => {

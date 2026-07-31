@@ -1,7 +1,8 @@
 import { useRouterState } from '@tanstack/react-router';
 import { AudienceBadge } from '@/components/audience-badge';
 import { DraftMark } from '@/components/draft-mark';
-import type { Audience, CollectionTree, PublishStatus, TreeNode } from '@/lib/types';
+import { resolvePath } from '@/lib/resolve-path';
+import type { Audience, CollectionTree, PublishStatus } from '@/lib/types';
 
 interface Resolved {
   audience?: Audience;
@@ -10,27 +11,14 @@ interface Resolved {
 
 /** Resolve the audience/status for a pathname from the collection nav tree. */
 function resolve(tree: CollectionTree[], pathname: string): Resolved | null {
-  if (!pathname || pathname === '/') return null;
-  const collName = decodeURIComponent(pathname.split('/').filter(Boolean)[0] ?? '');
-  const ct = tree.find((t) => t.collection.name === collName);
-  if (!ct) return null;
-
-  let found: Resolved | null = null;
-  const walk = (nodes: TreeNode[]): boolean => {
-    for (const node of nodes) {
-      if (node.path === pathname) {
-        found = { audience: node.audience, status: node.status };
-        return true;
-      }
-      if (node.children && walk(node.children)) return true;
-    }
-    return false;
-  };
-  walk(ct.nodes);
-
-  // Fall back to the collection's own audience/status (e.g. a collection landing
-  // page) when no article node matches the exact path.
-  return found ?? { audience: ct.collection.audience, status: ct.collection.status };
+  const r = resolvePath(tree, pathname);
+  if (!r || !r.collection) return null;
+  // The matched node (chain's last element) wins; otherwise fall back to the
+  // collection's own audience/status (e.g. a collection landing page).
+  const node = r.chain.at(-1);
+  return node
+    ? { audience: node.audience, status: node.status }
+    : { audience: r.collection.audience, status: r.collection.status };
 }
 
 /**
