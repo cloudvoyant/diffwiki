@@ -35,28 +35,43 @@ test.describe('Search route (/search)', () => {
     await expect(input).toBeFocused();
   });
 
-  test('renders the collection filter with an "All collections" option', async ({ page }) => {
+  test('renders the collection filter menu with an "All collections" option', async ({ page }) => {
     await page.goto('/search?q=intro');
-    const filter = page.getByLabel(/filter by collection/i);
+    // The collection filter is now a dropdown-menu button; its label defaults to
+    // "All collections" when nothing is selected.
+    const filter = page.getByRole('button', { name: /filter by collection/i });
     await expect(filter).toBeVisible();
-    await expect(filter.getByRole('option', { name: /all collections/i })).toHaveCount(1);
+    await expect(filter).toContainText(/all collections/i);
+    // Re-click inside toPass: a click that lands before React hydration attaches
+    // the Radix trigger handlers is swallowed, so retry until the menu opens.
+    const option = page.getByRole('menuitem', { name: /all collections/i });
+    await expect(async () => {
+      if (await option.isVisible()) return;
+      await filter.click();
+      await expect(option).toBeVisible({ timeout: 1000 });
+    }).toPass();
   });
 
-  test('mode dropdown always contains the native · bm25 option', async ({ page }) => {
+  test('mode menu always contains the native · bm25 option', async ({ page }) => {
     await page.goto('/search?q=intro');
-    const modeSelect = page.getByLabel(/search mode/i);
-    await expect(modeSelect).toBeVisible();
+    const modeButton = page.getByRole('button', { name: /search mode/i });
+    await expect(modeButton).toBeVisible();
     // listSearchModes() always prepends native · bm25 regardless of installed plugins.
-    await expect(modeSelect.getByRole('option', { name: /native · bm25/i })).toHaveCount(1);
+    const option = page.getByRole('menuitem', { name: /native · bm25/i });
+    await expect(async () => {
+      if (await option.isVisible()) return;
+      await modeButton.click();
+      await expect(option).toBeVisible({ timeout: 1000 });
+    }).toPass();
   });
 
-  test('mode dropdown value matches the engine and type params when provided', async ({ page }) => {
+  test('mode menu button label matches the engine and type params when provided', async ({ page }) => {
     // Navigate directly with engine and type params set.
     await page.goto('/search?q=intro&engine=native&type=basic');
-    const modeSelect = page.getByLabel(/search mode/i);
-    await expect(modeSelect).toBeVisible();
-    // The select should reflect the engine:type from the URL params.
-    await expect(modeSelect).toHaveValue('native:basic');
+    const modeButton = page.getByRole('button', { name: /search mode/i });
+    await expect(modeButton).toBeVisible();
+    // The button label should reflect the engine:type from the URL params.
+    await expect(modeButton).toContainText(/native · bm25/i);
   });
 
   test('renders either a results list or a no-results message for a non-empty query', async ({ page }) => {
