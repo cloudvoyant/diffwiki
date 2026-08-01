@@ -1,6 +1,6 @@
 ---
 name: dw-dream
-description: Periodically improve, dedupe, and prune the diffwiki. Triggers on "dw dream", "tidy the wiki", "improve the wiki", "prune the wiki", "wiki maintenance". Safe-by-default: leaves drafts/deprecations for review, never deletes, never auto-publishes. Run manually or on a schedule.
+description: Periodically improve, dedupe, and prune the diffwiki. Triggers on "dw dream", "tidy the wiki", "improve the wiki", "prune the wiki", "wiki maintenance". Safe-by-default — leaves drafts/deprecations for review, never deletes, never auto-publishes. Run manually or on a schedule.
 ---
 
 # dw-dream
