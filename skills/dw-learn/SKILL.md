@@ -1,35 +1,28 @@
 ---
 name: dw-learn
-description: Learn from your agent sessions and draft many wiki entries. Triggers on "dw learn", "learn from this session", "capture what we did", "mine my sessions into the wiki". Captures the current + past project sessions into a hidden transcripts collection, then mines them into deduped drafts.
+description: Learn durable wiki knowledge from a source. Triggers on "dw learn", "learn from this session", "capture what we did", "mine my sessions", "learn from a repo", "learn from a codebase". Dispatcher — pass a mode (session for this conversation, history for past project sessions, repo for a local or external codebase); bare "dw learn" defaults to session. Mutates only via the diffwiki CLI; every entry is a draft.
 ---
 
 # dw-learn
 
-Capture this project's agent sessions, then mine them into tight knowledge drafts. Mutate only via the `diffwiki` CLI (and `dw-remember`). If `diffwiki` is missing, run `/dw-install`.
+Turn a source into tight, template-conformant knowledge drafts. Pick a **mode** by source:
 
-## Phase A — Capture
+| Mode | Source | Reference |
+|---|---|---|
+| `session` (default) | the current live conversation | `references/session.md` |
+| `history` | past on-disk sessions for this project | `references/history.md` |
+| `repo` | a local or external code repository | `references/repo.md` |
 
-1. **Ensure the store.** If `diffwiki collection list` lacks `transcripts`, create it hidden: `diffwiki collection create transcripts --hidden`.
-2. **Identify the project.** Use the repo name (git toplevel basename) or cwd basename as `<project>`.
-3. **Current session.** Introspect your own conversation and fill the `~/.diffwiki/templates/session-transcript-template.md` shape: Worked on / Issues & learnings / Decisions & patterns / Key tool actions / Open threads. Terse and factual.
-4. **Historical sessions (best-effort, project-scoped).** Follow `references/capture.md`: locate YOUR tool's past transcripts, keep only those whose working dir is this project, and normalize each into the same shape. Skip sessions already captured (a matching `transcripts/<project>/…` entry exists).
-5. **Write each transcript:**
-   ```bash
-   diffwiki article create "transcripts:<project>/<YYYY-MM-DD>-<shortid>" \
-     -b "$(cat /tmp/dw-transcript.md)" -t "transcript,<tool>,<project>" --audience system
-   ```
-   These land in the hidden `transcripts` collection — invisible to `dw-recall` and the UI unless `showSystem` is on.
+Mutate only through the `diffwiki` CLI (and `dw-remember`). If `diffwiki` is missing, run `/dw-install`.
 
-## Phase B — Mine
+## Dispatch
 
-6. **Read the project's transcripts.** `diffwiki search query "" -c transcripts` (explicit `-c` reveals the hidden collection), filtered to `<project>` entries; read their bodies.
-7. **Cluster nuggets.** Per `references/harvest.md`, extract distinct durable knowledge (a recurring problem→fix → recipe; a multi-step setup → recipe-steps; a workflow → guide; a decision → the relevant shape). Discard one-off chatter.
-8. **Dedupe.** For each candidate, `dw-recall <keywords>`; if the wiki already covers it, mark as UPDATE (or drop).
-9. **Draft.** For each approved candidate, invoke `dw-remember` (create/update, `status: draft`). Batch mode — don't show each entry individually.
-10. **Summarize.** List transcripts captured and drafts created/updated, then `diffwiki lint -c <touched collections>` and report health.
+1. **Parse the mode** from the first argument. Normalize: empty → `session`; `current`/`this` → `session`; `past`/`sessions` → `history`; `code`/`codebase` → `repo`. Everything after the mode token is that mode's input (e.g. a repo path or URL for `repo`). If the first token is free-text prose rather than a mode/alias, treat it as `session` (the user is describing what to capture); if it is ambiguous, show the three modes and ask.
+2. **Run the mode.** Read and follow `references/<mode>.md`. Every mode ends by running the shared mine pipeline in `references/mine.md`.
 
-## Rules
-- Transcripts are `--audience system` (hidden); knowledge drafts are `status: draft`. Nothing auto-publishes.
-- Capture only THIS project's sessions. Prefer UPDATE over duplicate CREATE when mining.
-- Keep each entry in budget; split oversized nuggets. Brevity over completeness.
+## Rules (all modes)
+- Knowledge drafts ship `status: draft`; nothing auto-publishes. Session/history transcripts are `--audience system` (hidden).
+- Capture only THIS project's material — except `repo` mode, which may target an external repository the user names explicitly.
+- Prefer UPDATE over duplicate CREATE when mining (dedupe via `dw-recall`). Keep every entry in its template budget — brevity over completeness.
 - Never fabricate references; use `dw-remember --research` for candidates needing verified sources.
+- Never write secrets/tokens seen in a session or repo — redact.
