@@ -1,3 +1,10 @@
+# [0.13.0](https://github.com/cloudvoyant/diffwiki/compare/v0.12.0...v0.13.0) (2026-08-01)
+
+
+### Features
+
+* **skills:** dw-* agent skills, plus core lint and system audience ([a554a1e](https://github.com/cloudvoyant/diffwiki/commit/a554a1ef204c08d51712c9b0393d2d03e5144761)), closes [#14](https://github.com/cloudvoyant/diffwiki/issues/14)
+
 # [0.12.0](https://github.com/cloudvoyant/diffwiki/compare/v0.11.0...v0.12.0) (2026-07-31)
 
 
