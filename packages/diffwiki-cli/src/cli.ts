@@ -10,6 +10,7 @@ import {
   getConfigValue,
   initRepoWiki,
   installPlugin,
+  lintCollections,
   listCollections,
   listAvailablePlugins,
   listPlugins,
@@ -62,9 +63,9 @@ async function addExternalAction(opts: { docs: string }): Promise<void> {
   console.log('Registered globally — discoverable via: diffwiki collection list');
 }
 
-async function createCollectionAction(name: string): Promise<void> {
-  const entry = await createCollection(name);
-  console.log(`Created collection "${entry.name}" at ${entry.path}`);
+async function createCollectionAction(name: string, opts: { hidden?: boolean }): Promise<void> {
+  const entry = await createCollection(name, opts.hidden ? { audience: 'system' } : undefined);
+  console.log(`Created ${entry.audience === 'system' ? 'hidden ' : ''}collection "${entry.name}" at ${entry.path}`);
 }
 
 interface ArticleMetaOpts {
@@ -132,7 +133,17 @@ async function indexAction(opts: { embed?: boolean }): Promise<void> {
 }
 
 async function queryAction(term: string, opts: { engine?: string; collection?: string; type?: string }): Promise<void> {
-  const queryOpts: QueryOptions = { engine: opts.engine, collection: opts.collection, type: opts.type };
+  const names = opts.collection
+    ? opts.collection
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean)
+    : undefined;
+  const queryOpts: QueryOptions = {
+    engine: opts.engine,
+    collection: names && names.length === 1 ? names[0] : names,
+    type: opts.type,
+  };
   const outcome = await search(term, queryOpts);
   const hits = outcome.hits;
   console.log(`${hits.length} result(s)`);
@@ -251,6 +262,21 @@ async function doctorAction(): Promise<void> {
   }
 }
 
+async function lintAction(opts: { collections: string }): Promise<void> {
+  const result = await lintCollections(opts.collections);
+  for (const file of result.files) {
+    if (file.findings.length === 0) {
+      console.log(`✓ ${file.path}`);
+      continue;
+    }
+    for (const f of file.findings) {
+      console.log(`${f.level === 'error' ? '✖' : '!'} ${file.path}: ${f.message}`);
+    }
+  }
+  console.log(`\n${result.fileCount} file(s), ${result.errorCount} error(s), ${result.warnCount} warning(s)`);
+  if (result.errorCount > 0) process.exitCode = 1;
+}
+
 async function upAction(opts: { port: string }): Promise<void> {
   const existing = await readState();
   if (existing && isAlive(existing.pid)) {
@@ -348,7 +374,8 @@ export function createProgram(): Command {
     .command('create')
     .description('Create a new global collection')
     .argument('<name>', 'collection name')
-    .action(withErrors((name: string) => createCollectionAction(name)));
+    .option('--hidden', 'create as a hidden system collection (audience: system)')
+    .action(withErrors((name: string, opts: { hidden?: boolean }) => createCollectionAction(name, opts)));
 
   collection
     .command('add')
@@ -379,8 +406,16 @@ export function createProgram(): Command {
     .argument('<target>', '"[collection:]title"')
     .option('-b, --body <markdown>', 'article body (default: a "# <title>" heading)')
     .option('-t, --tag <tag>', 'tag (repeatable, comma-separated)', collect, [])
-    .addOption(new Option('--audience <audience>', 'visibility (default: public)').choices(['public', 'private']))
-    .addOption(new Option('--status <status>', 'publish status (default: published)').choices(['draft', 'published']))
+    .addOption(
+      new Option('--audience <audience>', 'visibility (default: public)').choices(['public', 'private', 'system']),
+    )
+    .addOption(
+      new Option('--status <status>', 'publish status (default: published)').choices([
+        'draft',
+        'published',
+        'deprecated',
+      ]),
+    )
     .action(withErrors((target: string, opts: ArticleMetaOpts) => createArticleAction(target, opts)));
 
   article
@@ -389,8 +424,8 @@ export function createProgram(): Command {
     .argument('<target>', '"collection:slug"')
     .option('-b, --body <markdown>', 'replace the article body')
     .option('-t, --tag <tag>', 'replace all tags (repeatable, comma-separated)', collect, [])
-    .addOption(new Option('--audience <audience>', 'set visibility').choices(['public', 'private']))
-    .addOption(new Option('--status <status>', 'set publish status').choices(['draft', 'published']))
+    .addOption(new Option('--audience <audience>', 'set visibility').choices(['public', 'private', 'system']))
+    .addOption(new Option('--status <status>', 'set publish status').choices(['draft', 'published', 'deprecated']))
     .action(withErrors((target: string, opts: ArticleMetaOpts) => updateArticleAction(target, opts)));
 
   article
@@ -433,7 +468,7 @@ export function createProgram(): Command {
     .alias('q')
     .description('Search articles via the resolved search engine (native fallback if none)')
     .option('--engine <name>', 'search engine/plugin (default: config defaultSearch, else native)')
-    .option('-c, --collection <name>', 'limit to a collection')
+    .option('-c, --collection <names>', 'limit to a collection (comma-separated for a set)')
     .option('-t, --type <type>', 'search type (engine-defined, e.g. keyword|semantic|hybrid)')
     .argument('[term]', 'search term', '')
     .action(
@@ -540,6 +575,13 @@ export function createProgram(): Command {
 
   // ── doctor (unchanged, top-level) ───────────────────────────────────────────
   program.command('doctor').description('Diagnose configuration issues').action(withErrors(doctorAction));
+
+  // ── lint ──────────────────────────────────────────────────────────────────
+  program
+    .command('lint')
+    .description('Lint articles against the template shapes (frontmatter, budgets, references)')
+    .option('-c, --collections <scope>', 'current | all | comma-separated names', 'current')
+    .action(withErrors((opts: { collections: string }) => lintAction(opts)));
 
   return program;
 }

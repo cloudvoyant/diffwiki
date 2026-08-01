@@ -54,3 +54,9 @@ export async function getConfigValue(key: string): Promise<string | undefined> {
   const value = config[key];
   return typeof value === 'string' ? value : undefined;
 }
+
+/** Whether system-audience content should be shown (config `showSystem` set to true or "true"). */
+export async function showSystemEnabled(): Promise<boolean> {
+  const config = (await readConfig()) as Record<string, unknown>;
+  return config.showSystem === true || config.showSystem === 'true';
+}

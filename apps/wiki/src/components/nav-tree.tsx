@@ -65,6 +65,7 @@ function NavLink({
   to,
   label,
   showLock,
+  audience,
   showDraft,
   extra,
   style,
@@ -73,6 +74,7 @@ function NavLink({
   to: string;
   label: string;
   showLock: boolean;
+  audience?: TreeNode['audience'];
   showDraft: boolean;
   extra?: ReactNode;
   style?: CSSProperties;
@@ -90,7 +92,7 @@ function NavLink({
       <span className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-1.5">
         <span className={NAV_LABEL}>{label}</span>
         {extra}
-        {showLock && <AudienceIcon audience="private" />}
+        {showLock && <AudienceIcon audience={audience} />}
       </span>
       {showDraft && <DraftMark className="shrink-0 self-center" />}
     </Link>
@@ -124,15 +126,15 @@ export function NavTree({ nodes }: { nodes: TreeNode[] }) {
 /** What this node passes to its children. */
 function childInherit(node: TreeNode, inherit: Inherit): Inherit {
   return {
-    audienceHidden: inherit.audienceHidden || node.audience === 'private',
+    audienceHidden: inherit.audienceHidden || node.audience === 'private' || node.audience === 'system',
     draftAncestor: inherit.draftAncestor || node.status === 'draft',
   };
 }
 
 /** The row markers for a node, given its inherited state. */
 function markers(node: TreeNode, inherit: Inherit) {
-  // Audience lock: only on the top-most private node (children inherit, suppressed).
-  const showLock = !inherit.audienceHidden && node.audience === 'private';
+  // Audience marker: only on the top-most non-public node (children inherit, suppressed).
+  const showLock = !inherit.audienceHidden && (node.audience === 'private' || node.audience === 'system');
   // Draft: on every draft node in the subtree, including inherited children.
   const showDraft = node.status === 'draft' || inherit.draftAncestor;
   return { showLock, showDraft };
@@ -174,6 +176,7 @@ function BranchNode({ node, inherit, depth }: { node: TreeNode; inherit: Inherit
             to={node.path ?? '/'}
             label={label}
             showLock={showLock}
+            audience={node.audience}
             showDraft={showDraft}
             extra={node.meta?.branch && <GitBadge branch={node.meta.branch} behind={node.meta.behind} />}
             onClick={() => setOpen(true)}
@@ -209,6 +212,7 @@ function LeafNode({ node, inherit, depth }: { node: TreeNode; inherit: Inherit; 
           to={node.path ?? '/'}
           label={label}
           showLock={showLock}
+          audience={node.audience}
           showDraft={showDraft}
           style={{ paddingLeft: `${BASE_PL_REM + depth * INDENT_REM + CARET_REM}rem` }}
         />

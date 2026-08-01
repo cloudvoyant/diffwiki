@@ -69,19 +69,19 @@ name already belongs to a different collection, it is disambiguated (`name-2`, `
 
 Lists every registered collection (global and repo) with its type and path.
 
-### `diffwiki collection create <name>`
+### `diffwiki collection create <name> [--hidden]`
 
-Creates a global collection directory and registers it. **Errors** if the name is taken.
+Creates a global collection directory and registers it. **Errors** if the name is taken. `--hidden` marks it a **system** collection (audience `system`) — hidden by default from search, recall, lint, and the UI (reveal with `showSystem`).
 
 ### `diffwiki article create "<[coll:]title>" [-b body] [-t tags]… [--audience …] [--status …]`
 
-Creates an article. The positional `<collection:title>` → `[collection:]title` (collection optional → default). `-b/--body` → optional markdown (defaults to `# <title>`). `-t` → repeatable, comma-split tags. `--audience <public|private>` (default `public`) and `--status <draft|published>` (default `published`) set the frontmatter axes. **Returns** the article path on stdout.
+Creates an article. The positional `<collection:title>` → `[collection:]title` (collection optional → default). `-b/--body` → optional markdown (defaults to `# <title>`). `-t` → repeatable, comma-split tags. `--audience <public|private|system>` (default `public`) and `--status <draft|published|deprecated>` (default `published`) set the frontmatter axes. The title may be a nested path (`coll:guide/setup`) — every segment is slugified into subdirectories. **Returns** the article path on stdout.
 
 ### `diffwiki article update "<coll:slug>" [-b body] [-t tags]… [--audience …] [--status …]`
 
 Updates an article's body, tags, audience, and/or status — each optional, pass at least one. `-b/--body` replaces the body; `-t/--tag` **replaces** the whole tag set; `--audience`/`--status` set those axes (setting them back to `public`/`published` clears the frontmatter). Title is always preserved.
 
-> **Path form:** `"coll:slug"` resolves the `slug` segment the same way `article create` writes it — it is slugified. So you can pass either the slug (`notes:my-title`) or the original title (`notes:My Title`); both resolve to `my-title.md`. Pass an explicit `.md`/`.mdx` filename to bypass slugifying.
+> **Path form:** `"coll:slug"` resolves the `slug` segment the same way `article create` writes it — every path segment is slugified. So you can pass either the slug (`notes:my-title`) or the original title (`notes:My Title`), and nested paths (`notes:guide/setup` or `notes:Guide/Setup`) resolve to `guide/setup.md`. Pass an explicit `.md`/`.mdx` filename to bypass slugifying.
 
 ### `diffwiki tags add | remove | set "<coll:slug>" <comma,separated,tags>`
 
@@ -91,12 +91,12 @@ Adds, removes, or replaces (`tags set`) an article's tags.
 
 Deletes an article file.
 
-### `diffwiki search query [--engine name] [-c collection] [-t type] [term]`
+### `diffwiki search query [--engine name] [-c collection[,…]] [-t type] [term]`
 
-Full-text search across every registered collection (short alias: `diffwiki search q`). Prints one tab-separated result per line (`collection` · `title` · `path`, plus a snippet when the engine returns one). An empty term lists all articles.
+Full-text search across every registered collection (short alias: `diffwiki search q`). Prints one tab-separated result per line (`collection` · `title` · `path`, plus a snippet when the engine returns one). An empty term lists all articles. `system`-audience collections and articles are excluded by default — reveal them by naming a collection explicitly with `-c`, or by setting `showSystem`.
 
 - `--engine <name>` — the search engine to use. Defaults to `config.defaultSearch`, else the first enabled search plugin, else the built-in `native` BM25 engine.
-- `-c, --collection <name>` — limit the search to one collection.
+- `-c, --collection <names>` — limit the search to a collection, or a comma-separated set (`-c notes,knowledge-base`).
 - `-t, --type <type>` — engine-defined search type (e.g. `keyword`, `semantic`, `hybrid` for the QMD plugin). Ignored by the native engine.
 
 The native engine ranks with BM25 over title/tags/collection/body and needs no setup. If a plugin is unavailable or errors, `search query` transparently falls back to native.
@@ -136,11 +136,15 @@ Creates an in-repo wiki, writes `diffwiki.yaml`, and registers it globally.
 
 ### `diffwiki config set <key> <value>` / `diffwiki config get <key>`
 
-Reads/writes `~/.diffwiki/config.json`. Keys include `defaultCollection` and `defaultSearch` (a `<engine[:type]>` string selecting the default search engine and, optionally, its type).
+Reads/writes `~/.diffwiki/config.json`. Keys include `defaultCollection`, `defaultSearch` (a `<engine[:type]>` string selecting the default search engine and, optionally, its type), `editor`, and `showSystem` (boolean — set `true` to reveal `system`-audience content in search and the wiki UI).
 
 ### `diffwiki collection edit [name] [--editor cmd]` / `diffwiki article edit "<coll:slug>" [--editor cmd]`
 
 Opens a collection directory (`collection edit`, default: the current repo collection) or a single article (`article edit`) in your editor. The editor is resolved from `--editor`, then config `editor`, then `$VISUAL`/`$EDITOR`.
+
+### `diffwiki lint [-c current|all|<names>]`
+
+Lints articles against the five template shapes — checks frontmatter, token budgets, reference presence, lingering `draft` status, and `diffwiki-template` tag leaks. `-c` selects scope: `current` (the cwd's collection, default), `all`, or a comma-separated list. Skips `system` collections. Exits non-zero if any error-level finding exists. (The `dw-lint` agent skill wraps this.)
 
 ### `diffwiki doctor`
 
@@ -151,9 +155,9 @@ Diagnoses configuration: home/registry presence, collection paths, and default-c
 - **`DIFFWIKI_HOME`** — overrides `~/.diffwiki` (used by tests to sandbox state).
 - **`~/.diffwiki/registry.json`** — `{ version, collections: [{ name, type, path, createdAt
 }] }`.
-- **`~/.diffwiki/config.json`** — `{ defaultCollection?: string, defaultSearch?: string }`.
+- **`~/.diffwiki/config.json`** — `{ defaultCollection?: string, defaultSearch?: string, editor?: string, showSystem?: boolean }`.
 - **`~/.diffwiki/plugins.json`** — the registry of installed/registered search plugins.
-- **`diffwiki.yaml`** (in-repo) — `{ collection, path }`.
+- **`diffwiki.yaml`** (in-repo) — legacy `{ collection, path }`, or the extended `{ site?, collections: [...], context?: { collections: [...] } }` where `context.collections` lists the collections recall/search filters to by default.
 
 ## Local Web UI (`apps/wiki`)
 
@@ -362,3 +366,7 @@ Deployment is automatic: `.github/workflows/pages.yml` builds and deploys to Git
 ## References
 
 - [Commander.js](https://www.npmjs.com/package/commander)
+
+## Agent skills
+
+Install the skills via agentskills; if diffwiki isn't installed yet, run `/dw-install`. Then: `/dw-init` to set up a wiki, `/dw-remember <what>` to capture a draft, `/dw-recall <query>` to pull snippets into context, `/dw-lint` to check the wiki, `/dw-learn` to capture + mine your sessions, `/dw-dream` to maintain the wiki. Full reference: [Agent skills](./agent-skills.md).

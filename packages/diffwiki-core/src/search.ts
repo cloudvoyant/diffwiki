@@ -23,8 +23,7 @@ async function readArticleParts(collDir: string, slug: string): Promise<{ tags: 
 
 async function flatten(coll: string, collDir: string, nodes: ArticleNode[], out: SearchDoc[]): Promise<void> {
   for (const n of nodes) {
-    // Static export must not index private/draft articles, nor anything inside a
-    // private/draft folder (the whole subtree is unpublished).
+    if (n.audience === 'system') continue;
     if (isStatic() && (n.audience === 'private' || n.status === 'draft')) continue;
     if (n.slug && !n.children) {
       // Leaf article — read its real tags + body and tokenize every ranked field.
@@ -61,6 +60,7 @@ export async function buildSearchIndex(collection?: string): Promise<SearchDoc[]
     try {
       const collEntry = await findCollection(e.name);
       const collDir = path.resolve(collEntry?.path ?? e.path);
+      if (collEntry?.audience === 'system') continue; // system collections never enter the static index
       // Static export skips whole private/draft collections (marked via their index page).
       if (isStatic()) {
         const cm = await collectionMeta(collDir);

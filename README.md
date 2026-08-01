@@ -21,6 +21,7 @@ full-text search and a local web UI.
   client-side search) deployable to GitHub Pages or any file host.
 - **Local web UI** — a TanStack Start app (`apps/wiki`) for browsing collections, reading
   rendered articles, and searching, launched with `diffwiki ui up`/`open`.
+- **Agent skills** — `/dw-remember`, `/dw-recall`, `/dw-lint`, `/dw-learn`, `/dw-dream` plus a `diffwiki lint` command and a hidden `transcripts` collection. Install via agentskills; see [docs/agent-skills.md](docs/agent-skills.md).
 
 ## Requirements
 

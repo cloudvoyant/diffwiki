@@ -7,6 +7,7 @@ import type {
   HomeCard,
   ProjectCollection,
   ProjectConfig,
+  ProjectContext,
   SiteConfig,
   SiteCopyright,
   SiteHome,
@@ -66,6 +67,15 @@ function normaliseSite(raw: unknown): SiteConfig | undefined {
   };
 }
 
+/** Narrow an unknown YAML `context` block into a validated ProjectContext (or undefined). */
+function normaliseContext(raw: unknown): ProjectContext | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const r = raw as Record<string, unknown>;
+  if (!Array.isArray(r.collections)) return undefined;
+  const collections = r.collections.filter((c): c is string => typeof c === 'string');
+  return collections.length > 0 ? { collections } : undefined;
+}
+
 /**
  * Read and normalise the repo-root `diffwiki.yaml`. Supports the extended form
  * ({ site, collections[] }) AND the legacy single-collection form
@@ -108,7 +118,13 @@ export async function readProjectConfig(dir: string): Promise<ProjectConfig | un
   }
 
   const site = normaliseSite(parsed.site);
-  return { ...(site ? { site } : {}), collections };
+  const context = normaliseContext(parsed.context);
+  return { ...(site ? { site } : {}), ...(context ? { context } : {}), collections };
+}
+
+/** The `context.collections` list from `diffwiki.yaml`, or `[]` when absent. */
+export async function readContextCollections(dir: string): Promise<string[]> {
+  return (await readProjectConfig(dir))?.context?.collections ?? [];
 }
 
 /**

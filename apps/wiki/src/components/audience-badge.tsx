@@ -1,19 +1,19 @@
-import { Globe, Lock } from 'lucide-react';
+import { Globe, Lock, Shield } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import type { Audience } from '@/lib/types';
 
+const META = {
+  public: { Icon: Globe, label: 'Public', hint: 'Public — published to the static site' },
+  private: { Icon: Lock, label: 'Private', hint: 'Private — never published to the static site' },
+  system: { Icon: Shield, label: 'System', hint: 'System — diffwiki-internal; hidden unless showSystem is enabled' },
+} as const;
+
 // ── Page badge (shown above the article title) ───────────────────────────────
 
-/**
- * Audience pill for the article page: a muted (gray) icon pill — globe for
- * public, lock for private. Always renders; an absent audience is public.
- */
+/** Audience pill for the article page: a muted icon pill — globe/lock/shield. */
 export function AudienceBadge({ audience = 'public', className }: { audience?: Audience; className?: string }) {
-  const isPrivate = audience === 'private';
-  const Icon = isPrivate ? Lock : Globe;
-  const label = isPrivate ? 'Private' : 'Public';
-  const hint = isPrivate ? 'Private — never published to the static site' : 'Public — published to the static site';
+  const { Icon, label, hint } = META[audience] ?? META.public;
   return (
     <Badge
       variant="outline"
@@ -28,20 +28,18 @@ export function AudienceBadge({ audience = 'public', className }: { audience?: A
 
 // ── Sidebar marker ───────────────────────────────────────────────────────────
 
-/**
- * Subtle audience marker for the sidebar: a small muted gray lock for private
- * entries; nothing for public. Understated so it doesn't draw the eye.
- */
+/** Subtle sidebar marker: a muted lock for private, shield for system; nothing for public. */
 export function AudienceIcon({ audience, className }: { audience?: Audience; className?: string }) {
-  if (audience !== 'private') return null;
+  if (audience !== 'private' && audience !== 'system') return null;
+  const { Icon, label, hint } = META[audience];
   return (
     <span
       role="img"
-      aria-label="Private"
-      title="Private — never published to the static site"
+      aria-label={label}
+      title={hint}
       className={cn('ml-1.5 inline-flex shrink-0 items-center text-muted-foreground/70', className)}
     >
-      <Lock className="size-3" aria-hidden />
+      <Icon className="size-3" aria-hidden />
     </span>
   );
 }
