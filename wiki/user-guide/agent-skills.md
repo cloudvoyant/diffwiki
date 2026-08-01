@@ -11,7 +11,7 @@ diffwiki ships agent skills that let you and your agents author, recall, lint, l
 - **/dw-remember** — capture one piece of knowledge as a tight, correctly-templated **draft**, routed to the project wiki or the knowledge base, with optional researched references.
 - **/dw-recall** — pull the most relevant entries into context as compact snippets; agents call it to ground their work.
 - **/dw-lint** — check entries against the template rules and offer to tighten failures.
-- **/dw-learn** — capture your project's agent sessions into a hidden transcripts store, then mine them into drafts.
+- **/dw-learn** — learn knowledge from a source and mine it into drafts. Pick a mode: `session` (this conversation, the default), `history` (your past sessions in this project), or `repo` (a local or external codebase). Session and history capture into a hidden transcripts store first; repo reads the codebase directly.
 - **/dw-dream** — a periodic pass that improves, dedupes, and prunes the wiki safely, leaving drafts and deprecations for review.
 
 ## System content

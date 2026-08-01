@@ -8,7 +8,7 @@ Claude-Code / agent skills for diffwiki. Install via the agentskills CLI (they a
 - `dw-remember` — create/update one tight, templated draft (routes project vs knowledge-base).
 - `dw-recall` — fetch relevant entries as compact snippets (never surfaces system content).
 - `dw-lint` — run `diffwiki lint`; offer fixes via dw-reviewer.
-- `dw-learn` — capture the session(s) into the hidden `transcripts` collection, then mine into drafts.
+- `dw-learn` — learn knowledge from a source and mine it into drafts: `session` (this conversation, default), `history` (past project sessions), or `repo` (a local/external codebase). Session/history capture into the hidden `transcripts` collection first.
 - `dw-dream` — periodic improve/dedupe/prune using the transcripts collection.
 
 ## Agents
