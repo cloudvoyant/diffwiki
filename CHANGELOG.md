@@ -1,3 +1,10 @@
+# [0.14.0](https://github.com/cloudvoyant/diffwiki/compare/v0.13.0...v0.14.0) (2026-08-01)
+
+
+### Features
+
+* **skills:** dw-learn source modes + dw-dream frontmatter fix & guard ([5b93e11](https://github.com/cloudvoyant/diffwiki/commit/5b93e11e511ebaafa2612a8cdc39e7ff01737157))
+
 # [0.13.0](https://github.com/cloudvoyant/diffwiki/compare/v0.12.0...v0.13.0) (2026-08-01)
 
 
