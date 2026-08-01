@@ -3,10 +3,10 @@
 import type { GraphNode, GraphEdge, LinkGraph, LocalGraph } from 'diffwiki-core';
 export type { GraphNode, GraphEdge, LinkGraph, LocalGraph };
 
-/** Audience axis — who an article is for (mirrors diffwiki-core). Private is never published. */
-export type Audience = 'public' | 'private';
-/** Lifecycle axis — readiness (mirrors diffwiki-core). Draft is not yet published. */
-export type PublishStatus = 'draft' | 'published';
+/** Audience axis — who an article is for (mirrors diffwiki-core). Private is never published; system is diffwiki-internal. */
+export type Audience = 'public' | 'private' | 'system';
+/** Lifecycle axis — readiness (mirrors diffwiki-core). Draft is not yet published; deprecated is superseded. */
+export type PublishStatus = 'draft' | 'published' | 'deprecated';
 
 export interface NodeMeta {
   branch?: string;

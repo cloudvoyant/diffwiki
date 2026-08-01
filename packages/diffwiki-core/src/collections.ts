@@ -2,7 +2,7 @@ import fs from 'node:fs/promises';
 import { collectionDir } from './paths';
 import { readRegistry, registerCollection, unregisterCollection } from './registry';
 import { CollectionExistsError, CollectionNotFoundError } from './errors';
-import type { CollectionEntry, PluginEvent } from './types';
+import type { Audience, CollectionEntry, PluginEvent } from './types';
 
 /**
  * Fire a lifecycle hook without a static import edge into the loader graph
@@ -30,7 +30,7 @@ export async function findCollectionById(id: string): Promise<CollectionEntry | 
   return (await readRegistry()).collections.find((c) => c.id === id);
 }
 
-export async function createCollection(name: string): Promise<CollectionEntry> {
+export async function createCollection(name: string, opts?: { audience?: Audience }): Promise<CollectionEntry> {
   if (await findCollection(name)) throw new CollectionExistsError(name);
   const dir = collectionDir(name);
   await fs.mkdir(dir, { recursive: true });
@@ -39,6 +39,7 @@ export async function createCollection(name: string): Promise<CollectionEntry> {
     type: 'global',
     path: dir,
     createdAt: new Date().toISOString(),
+    ...(opts?.audience ? { audience: opts.audience } : {}),
   };
   await registerCollection(entry);
   void fireHook('collection-added', name);

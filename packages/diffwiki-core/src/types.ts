@@ -1,7 +1,7 @@
-/** Audience axis — who an article is for. Private is never published. Missing/invalid → 'public'. */
-export type Audience = 'public' | 'private';
-/** Lifecycle axis — readiness. Draft is not yet published. Missing/invalid → 'published'. */
-export type PublishStatus = 'draft' | 'published';
+/** Audience axis — who an article is for. Private is never published; system is diffwiki-internal (hidden unless `showSystem`). Missing/invalid → 'public'. */
+export type Audience = 'public' | 'private' | 'system';
+/** Lifecycle axis — readiness. Draft is unpublished; deprecated is superseded. Missing/invalid → 'published'. */
+export type PublishStatus = 'draft' | 'published' | 'deprecated';
 
 export type CollectionType = 'global' | 'repo' | 'external';
 
@@ -11,6 +11,8 @@ export interface CollectionEntry {
   /** Absolute path to the collection's content directory. */
   path: string;
   createdAt: string;
+  /** Marks a diffwiki-internal collection (e.g. `transcripts`). 'system' hides it unless `showSystem`. */
+  audience?: Audience;
   /** External only: stable git repo id (see `repoId`). Identity + dedupe key. */
   id?: string;
   /** External only: absolute repo root (branch/behind + open-at-root). */
@@ -29,6 +31,8 @@ export interface Config {
   defaultSearch?: string;
   /** Editor command used by `diffwiki edit` (e.g. "code -w", "hx"). Falls back to $VISUAL/$EDITOR. */
   editor?: string;
+  /** Reveal system-audience content in search, nav, and the UI (default: false). Stored as boolean or "true". */
+  showSystem?: boolean;
 }
 
 export interface Article {
@@ -91,6 +95,12 @@ export interface ProjectCollection {
   order?: number;
 }
 
+/** Optional recall/search context from `diffwiki.yaml` → `context`. */
+export interface ProjectContext {
+  /** Collection names recall/search should filter to by default. */
+  collections: string[];
+}
+
 /**
  * Normalised repo-root `diffwiki.yaml`. The extended form carries `site` +
  * `collections[]`; the legacy `{ collection, path }` form is folded into a
@@ -99,6 +109,7 @@ export interface ProjectCollection {
 export interface ProjectConfig {
   site?: SiteConfig;
   collections: ProjectCollection[];
+  context?: ProjectContext;
 }
 
 /** A node in a collection's article tree. Branches have `children`; leaves have `slug`. */
@@ -149,9 +160,12 @@ export type PluginKind = 'search';
 export const NATIVE_ENGINE = 'native';
 export interface QueryOptions {
   engine?: string;
-  collection?: string;
+  /** Limit to a single collection name, or a set of names. Empty/undefined = all. */
+  collection?: string | string[];
   type?: string;
   limit?: number;
+  /** Reveal system-audience content (default: config `showSystem`, else false). */
+  showSystem?: boolean;
 }
 export interface QueryHit {
   collection: string;

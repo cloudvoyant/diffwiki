@@ -2,7 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { readConfig } from './config';
 import { findCollection } from './collections';
-import { slugify } from './slugify';
+import { slugifyPath } from './slugify';
 import { parseArticle, serializeArticle } from './frontmatter';
 import { ArticleNotFoundError, CollectionNotFoundError, InvalidTargetError, NoDefaultCollectionError } from './errors';
 import type { Article, Audience, PluginEvent, PublishStatus } from './types';
@@ -58,17 +58,14 @@ async function resolveCollectionDir(name: string | undefined): Promise<{ name: s
 }
 
 /**
- * Resolve the `-p "coll:path"` segment to a filename. `add` writes files by
- * `slugify(title)`, so a lookup passed the original title (e.g. "My Title")
- * must slugify to match (`my-title.md`). An already-slugified path or one with an
- * explicit `.md`/`.mdx` extension is preserved as-is.
+ * Resolve the `-p "coll:path"` segment to a filename. `create` writes files by
+ * `slugifyPath(title)`, so a lookup passed the original title (e.g. "My Project/My Title")
+ * must slugify EVERY segment to match (`my-project/my-title.md`) — not just the
+ * basename. An explicit `.md`/`.mdx` path is already resolved and preserved as-is.
  */
 function ensureMdPath(file: string): string {
   if (/\.mdx?$/.test(file)) return file;
-  const dir = path.dirname(file);
-  const base = slugify(path.basename(file));
-  const rel = dir === '.' ? `${base}.md` : path.join(dir, `${base}.md`);
-  return rel;
+  return `${slugifyPath(file)}.md`;
 }
 
 export async function createArticle(opts: {
@@ -80,9 +77,9 @@ export async function createArticle(opts: {
 }): Promise<Article> {
   const { collection, title } = parseAddTarget(opts.target);
   const { name, dir } = await resolveCollectionDir(collection);
-  const filePath = path.join(dir, `${slugify(title)}.md`);
+  const filePath = path.join(dir, `${slugifyPath(title)}.md`);
   const body = opts.body ?? `# ${title}\n`;
-  await fs.mkdir(dir, { recursive: true });
+  await fs.mkdir(path.dirname(filePath), { recursive: true });
   await fs.writeFile(
     filePath,
     serializeArticle({ title, tags: opts.tags, body, audience: opts.audience, status: opts.status }),

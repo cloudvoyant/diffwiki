@@ -128,14 +128,14 @@ Article commands mutate markdown files inside a collection. The identifier is a 
 Add an article to a collection. Prints the created file path.
 
 ```
-diffwiki article create "<[collection:]title>" [-b <markdown>] [-t <tag>...] [--audience <public|private>] [--status <draft|published>]
+diffwiki article create "<[collection:]title>" [-b <markdown>] [-t <tag>...] [--audience <public|private|system>] [--status <draft|published|deprecated>]
 ```
 
-- `<target>` (required) — positional `"[collection:]title"`.
+- `<target>` (required) — positional `"[collection:]title"`. May be a nested path (`collection:guide/setup`) — each segment is slugified into a subdirectory.
 - `-b, --body <markdown>` — article body. Defaults to a `# <title>` heading when omitted.
 - `-t, --tag <tag>` — tag; repeatable and comma-separated. Default: `[]`.
-- `--audience <public|private>` — visibility. Default: `public`.
-- `--status <draft|published>` — publish status. Default: `published`.
+- `--audience <public|private|system>` — visibility. Default: `public`. `system` marks diffwiki-internal content, hidden by default.
+- `--status <draft|published|deprecated>` — publish status. Default: `published`.
 
 ```
 diffwiki article create "handbook:Onboarding" -b "# Onboarding" -t hr,process --status draft
@@ -146,14 +146,14 @@ diffwiki article create "handbook:Onboarding" -b "# Onboarding" -t hr,process --
 Update an article's body, tags, audience, and/or status. Each axis is optional and left untouched when its flag is omitted; pass at least one. `-t/--tag` **replaces** the whole tag set. Setting `--audience public` / `--status published` clears the frontmatter back to the default.
 
 ```
-diffwiki article update "<collection:slug>" [-b <markdown>] [-t <tag>...] [--audience <public|private>] [--status <draft|published>]
+diffwiki article update "<collection:slug>" [-b <markdown>] [-t <tag>...] [--audience <public|private|system>] [--status <draft|published|deprecated>]
 ```
 
-- `<target>` (required) — positional `"collection:slug"`.
+- `<target>` (required) — positional `"collection:slug"` (nested paths supported, e.g. `collection:guide/setup`).
 - `-b, --body <markdown>` — replace the article body.
 - `-t, --tag <tag>` — replace all tags; repeatable and comma-separated.
-- `--audience <public|private>` — set visibility.
-- `--status <draft|published>` — set publish status.
+- `--audience <public|private|system>` — set visibility.
+- `--status <draft|published|deprecated>` — set publish status.
 
 ```
 diffwiki article update "handbook:onboarding" -b "# Onboarding\nUpdated." --status published
@@ -234,11 +234,11 @@ diffwiki search index --embed
 Search articles via the resolved search engine, falling back to native BM25 when no engine is set or the engine fails. Prints one tab-separated line per hit: `score  collection  title  path  [snippet]`. Short alias: `diffwiki search q`.
 
 ```
-diffwiki search query [--engine <name>] [-c <name>] [-t <type>] [term]
+diffwiki search query [--engine <name>] [-c <name[,...]>] [-t <type>] [term]
 ```
 
 - `--engine <name>` — search engine/plugin. Default: config `defaultSearch`, else `native`.
-- `-c, --collection <name>` — limit to a single collection.
+- `-c, --collection <names>` — limit to a collection, or a comma-separated set (`-c notes,knowledge-base`). `system`-audience collections/articles are excluded unless named here or `showSystem` is set.
 - `-t, --type <type>` — search type (engine-defined, e.g. `keyword|semantic|hybrid`).
 - `[term]` — search term. Default: `""` (empty term browses all articles unranked).
 
@@ -401,12 +401,13 @@ Set a config value. `defaultCollection` must name a registered collection (valid
 diffwiki config set <key> <value>
 ```
 
-- `<key>` (required) — config key (e.g. `defaultCollection`, `defaultSearch`, `editor`).
+- `<key>` (required) — config key (e.g. `defaultCollection`, `defaultSearch`, `editor`, `showSystem`).
 - `<value>` (required) — config value.
 
 ```
 diffwiki config set defaultSearch diffwiki-qmd:hybrid
 diffwiki config set editor "code -w"        # used by `diffwiki collection edit` / `diffwiki article edit`
+diffwiki config set showSystem true         # reveal system-audience content in search + the wiki UI
 ```
 
 ### `config get <key>`
@@ -424,6 +425,16 @@ diffwiki config get defaultCollection
 ```
 
 ## Diagnostics
+
+### `lint`
+
+Lint articles against the five template shapes — frontmatter, token budgets, reference presence, lingering `draft` status, and `diffwiki-template` tag leaks. Skips `system` collections. Exits non-zero when any error-level finding exists.
+
+```
+diffwiki lint [-c current|all|<names>]
+```
+
+- `-c, --collections <scope>` — `current` (the cwd's collection, default), `all`, or a comma-separated list.
 
 ### `doctor`
 

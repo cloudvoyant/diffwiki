@@ -15,7 +15,7 @@ import path from 'node:path';
 import type { Dirent } from 'node:fs';
 import { listCollections } from './collections';
 import { parseArticle } from './frontmatter';
-import { readConfig } from './config';
+import { readConfig, showSystemEnabled } from './config';
 import { CollectionNotFoundError } from './errors';
 import { getLogger } from './logger';
 import { loadSearchProvider } from './plugins/host';
@@ -66,19 +66,29 @@ interface DocEntry {
  * When `term` is empty, returns all articles unranked (no score) to preserve
  * the "browse all" behavior.
  */
+/** Normalise a collection option (string | string[] | undefined) to a trimmed name list. */
+function normalizeCollections(collection?: string | string[]): string[] {
+  if (collection === undefined) return [];
+  const names = Array.isArray(collection) ? collection : [collection];
+  return names.map((n) => n.trim()).filter(Boolean);
+}
+
 export async function nativeSearch(
   term: string,
   collections: CollectionEntry[],
-  collection?: string,
+  collection?: string | string[],
+  hideSystem = false,
 ): Promise<QueryHit[]> {
   let targets = collections;
-  if (collection) {
-    const one = collections.find((c) => c.name === collection);
-    if (!one) throw new CollectionNotFoundError(collection);
-    targets = [one];
+  const names = normalizeCollections(collection);
+  if (names.length > 0) {
+    for (const n of names) {
+      if (!collections.some((c) => c.name === n)) throw new CollectionNotFoundError(n);
+    }
+    const wanted = new Set(names);
+    targets = collections.filter((c) => wanted.has(c.name));
   }
 
-  // Gather all documents
   const docs: DocEntry[] = [];
   for (const entry of targets) {
     for (const full of await collectMarkdownFiles(entry.path)) {
@@ -88,6 +98,7 @@ export async function nativeSearch(
       let body = '';
       try {
         const parsed = parseArticle(await fs.readFile(full, 'utf8'));
+        if (hideSystem && parsed.audience === 'system') continue;
         if (parsed.title) title = parsed.title;
         tags = parsed.tags;
         body = parsed.body;
@@ -109,7 +120,6 @@ export async function nativeSearch(
     }
   }
 
-  // Rank with the shared BM25 scorer (empty term → all docs unranked).
   return rankDocs(term, docs).map((d) => ({
     collection: d.collectionName,
     path: d.filePath,
@@ -194,28 +204,58 @@ export interface SearchOutcome {
  * `{ fellBackToNative: false }` with the engine's hits. This lets callers
  * distinguish "the engine broke" from "the engine found nothing".
  */
+/**
+ * Drop hits whose article is system-audience. Plugins don't carry `audience` on
+ * the wire, and `searchable` only excludes system *collections* — a system-audience
+ * article inside a normal collection would otherwise leak through a plugin engine.
+ */
+async function dropSystemHits(hits: QueryHit[]): Promise<QueryHit[]> {
+  const kept: QueryHit[] = [];
+  for (const hit of hits) {
+    try {
+      if (parseArticle(await fs.readFile(hit.path, 'utf8')).audience === 'system') continue;
+    } catch {
+      /* unreadable — keep it rather than silently drop */
+    }
+    kept.push(hit);
+  }
+  return kept;
+}
+
 export async function search(term: string, opts?: QueryOptions): Promise<SearchOutcome> {
   const collections = await listCollections();
+  const wanted = normalizeCollections(opts?.collection);
+  for (const n of wanted) {
+    if (!collections.some((c) => c.name === n)) throw new CollectionNotFoundError(n);
+  }
+  const showSystem = opts?.showSystem ?? (await showSystemEnabled());
+  // Explicitly naming collections is an override; otherwise hide system content.
+  const hideSystem = !showSystem && wanted.length === 0;
+  const searchable = hideSystem ? collections.filter((c) => c.audience !== 'system') : collections;
+  const filterHits = (hits: QueryHit[]): QueryHit[] =>
+    wanted.length > 0 ? hits.filter((h) => wanted.includes(h.collection)) : hits;
   const engine = opts?.engine ?? (await resolveDefaultEngine());
   log.debug(`resolved search engine "${engine}"`);
   if (engine === NATIVE_ENGINE) {
-    const hits = await nativeSearch(term, collections, opts?.collection);
+    const hits = await nativeSearch(term, searchable, opts?.collection, hideSystem);
     return { hits, engine, fellBackToNative: false };
   }
   const provider = await loadSearchProvider(engine);
   if (!provider) {
     const error = `no provider found for engine "${engine}"`;
     log.warn(`engine "${engine}" unavailable, falling back to native: ${error}`);
-    const hits = await nativeSearch(term, collections, opts?.collection);
+    const hits = await nativeSearch(term, searchable, opts?.collection, hideSystem);
     return { hits, engine, fellBackToNative: true, error };
   }
   try {
-    const hits = await provider.handleSearch(term, collections, opts);
+    const providerOpts: QueryOptions = { ...opts, collection: wanted.length === 1 ? wanted[0] : undefined };
+    const raw = filterHits(await provider.handleSearch(term, searchable, providerOpts));
+    const hits = hideSystem ? await dropSystemHits(raw) : raw;
     return { hits, engine, fellBackToNative: false };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     log.warn(`engine "${engine}" failed, falling back to native: ${message}`);
-    const hits = await nativeSearch(term, collections, opts?.collection);
+    const hits = await nativeSearch(term, searchable, opts?.collection, hideSystem);
     return { hits, engine, fellBackToNative: true, error: message };
   }
 }

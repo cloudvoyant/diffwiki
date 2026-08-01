@@ -42,6 +42,10 @@ export * from './search';
 // Diagnostics
 export { doctor } from './doctor';
 
+// Linter
+export { lintArticle, lintCollections } from './lint';
+export type { LintLevel, LintFinding, LintFileResult, LintResult } from './lint';
+
 // Logging (LogTape wrappers; core NEVER configures — apps do)
 export { getLogger, resolveLogLevel } from './logger';
 export type { DiffwikiLogLevel } from './logger';

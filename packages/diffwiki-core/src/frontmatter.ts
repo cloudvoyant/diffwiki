@@ -35,14 +35,14 @@ const YAML_ENGINE = {
 };
 const MATTER_OPTS = { engines: { yaml: YAML_ENGINE } } as const;
 
-/** Coerce a frontmatter `audience` value; anything but 'private' → 'public'. */
+/** Coerce a frontmatter `audience` value; 'private'/'system' pass through, else → 'public'. */
 function coerceAudience(value: unknown): Audience {
-  return value === 'private' ? 'private' : 'public';
+  return value === 'private' || value === 'system' ? value : 'public';
 }
 
-/** Coerce a frontmatter `status` value; anything but 'draft' → 'published'. */
+/** Coerce a frontmatter `status` value; 'draft'/'deprecated' pass through, else → 'published'. */
 function coerceStatus(value: unknown): PublishStatus {
-  return value === 'draft' ? 'draft' : 'published';
+  return value === 'draft' || value === 'deprecated' ? value : 'published';
 }
 
 /**
@@ -98,7 +98,7 @@ export function parseArticle(raw: string): ParsedArticle {
 export function serializeArticle(article: SerializableArticle): string {
   const front: Record<string, unknown> = { title: article.title, tags: article.tags };
   // Only non-default axes are written, keeping public/published files clean.
-  if (article.audience === 'private') front.audience = 'private';
-  if (article.status === 'draft') front.status = 'draft';
+  if (article.audience === 'private' || article.audience === 'system') front.audience = article.audience;
+  if (article.status === 'draft' || article.status === 'deprecated') front.status = article.status;
   return matter.stringify(article.body, front, MATTER_OPTS);
 }

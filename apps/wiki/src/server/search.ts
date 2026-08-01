@@ -1,5 +1,12 @@
 import { createServerFn } from '@tanstack/react-start';
-import { search, listCollections, listSearchModes, resolveDefaultSearchMode, type SearchMode } from 'diffwiki-core';
+import {
+  search,
+  listCollections,
+  listSearchModes,
+  resolveDefaultSearchMode,
+  showSystemEnabled,
+  type SearchMode,
+} from 'diffwiki-core';
 import { hitToResult } from '../lib/search';
 import type { SearchResultItem } from '../lib/types';
 
@@ -41,8 +48,9 @@ export const runSearch = createServerFn({ method: 'GET' })
     if (!q) return { q: data.q, results: [], tookMs: 0 };
 
     const started = Date.now();
+    const showSystem = await showSystemEnabled();
     const [outcome, collections] = await Promise.all([
-      search(q, { engine: data.engine, collection: data.collection, type: data.type }),
+      search(q, { engine: data.engine, collection: data.collection, type: data.type, showSystem }),
       listCollections(),
     ]);
     const tookMs = Date.now() - started;

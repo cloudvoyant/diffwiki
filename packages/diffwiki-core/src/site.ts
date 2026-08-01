@@ -23,8 +23,12 @@ const isStatic = (): boolean => process.env.DIFFWIKI_STATIC === '1';
  *  In static builds, private (audience) or draft (status) articles are dropped
  *  entirely (no nav row, and — since routes + per-doc JSON derive from this tree
  *  — no route/JSON). */
-export function toTreeNodes(coll: string, nodes: ArticleNode[]): TreeNode[] {
-  const visible = isStatic() ? nodes.filter((n) => n.audience !== 'private' && n.status !== 'draft') : nodes;
+export function toTreeNodes(coll: string, nodes: ArticleNode[], showSystem = false): TreeNode[] {
+  const visible = nodes.filter((n) => {
+    if (!showSystem && n.audience === 'system') return false;
+    if (isStatic() && (n.audience === 'private' || n.status === 'draft')) return false;
+    return true;
+  });
   return visible.map((n) =>
     n.children
       ? {
@@ -33,7 +37,7 @@ export function toTreeNodes(coll: string, nodes: ArticleNode[]): TreeNode[] {
           path: n.slug ? `/${coll}/${n.slug}` : undefined,
           ...(n.audience ? { audience: n.audience } : {}),
           ...(n.status ? { status: n.status } : {}),
-          children: toTreeNodes(coll, n.children),
+          children: toTreeNodes(coll, n.children, showSystem),
         }
       : {
           name: n.name,
@@ -55,49 +59,54 @@ async function gitInfo(e: CollectionEntry): Promise<{ branch?: string; behind?: 
   return s ? { branch: s.branch, behind: s.hasUpstream ? s.behind : undefined } : {};
 }
 
-export async function buildCollections(): Promise<CollectionInfo[]> {
+export async function buildCollections(opts?: { showSystem?: boolean }): Promise<CollectionInfo[]> {
+  const showSystem = opts?.showSystem ?? false;
   const entries = await listCollections();
   const infos = await Promise.all(
     entries.map(async (e): Promise<CollectionInfo> => {
-      const { title, audience, status } = await collectionMeta(e.path);
+      const meta = await collectionMeta(e.path);
+      const audience = meta.audience ?? e.audience;
       return {
         name: e.name,
         type: e.type,
         path: e.path,
-        ...(title ? { title } : {}),
+        ...(meta.title ? { title: meta.title } : {}),
         ...(await gitInfo(e)),
         ...(audience ? { audience } : {}),
-        ...(status ? { status } : {}),
+        ...(meta.status ? { status: meta.status } : {}),
       };
     }),
   );
-  // A collection marked private (audience) or draft (status) in its index is dropped from static builds.
-  return isStatic() ? infos.filter((c) => c.audience !== 'private' && c.status !== 'draft') : infos;
+  // system collections are hidden unless showSystem; private/draft are dropped from static builds.
+  const visible = showSystem ? infos : infos.filter((c) => c.audience !== 'system');
+  return isStatic() ? visible.filter((c) => c.audience !== 'private' && c.status !== 'draft') : visible;
 }
 
-export async function buildNavTree(): Promise<CollectionTree[]> {
+export async function buildNavTree(opts?: { showSystem?: boolean }): Promise<CollectionTree[]> {
+  const showSystem = opts?.showSystem ?? false;
   const entries = await listCollections();
   const trees = await Promise.all(
     entries.map(async (e): Promise<CollectionTree> => {
-      const { title, audience, status } = await collectionMeta(e.path);
+      const meta = await collectionMeta(e.path);
+      const audience = meta.audience ?? e.audience;
       return {
         collection: {
           name: e.name,
           type: e.type,
           path: e.path,
-          ...(title ? { title } : {}),
+          ...(meta.title ? { title: meta.title } : {}),
           ...(await gitInfo(e)),
           ...(audience ? { audience } : {}),
-          ...(status ? { status } : {}),
+          ...(meta.status ? { status: meta.status } : {}),
         },
-        nodes: toTreeNodes(e.name, await listArticleTree(e.name)),
+        nodes: toTreeNodes(e.name, await listArticleTree(e.name), showSystem),
       };
     }),
   );
-  // Drop private/draft collections entirely from static builds (nav → routes → JSON all derive from here).
+  const visible = showSystem ? trees : trees.filter((t) => t.collection.audience !== 'system');
   return isStatic()
-    ? trees.filter((t) => t.collection.audience !== 'private' && t.collection.status !== 'draft')
-    : trees;
+    ? visible.filter((t) => t.collection.audience !== 'private' && t.collection.status !== 'draft')
+    : visible;
 }
 
 function findNode(nodes: ArticleNode[], slug: string): ArticleNode | undefined {

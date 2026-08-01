@@ -9,3 +9,13 @@ export function slugify(input: string): string {
     .replace(/-+$/g, '');
   return slug.length > 0 ? slug : 'untitled';
 }
+
+/** Slugify a `/`-separated path segment-by-segment, preserving the separators. */
+export function slugifyPath(input: string): string {
+  const segs = input
+    .split('/')
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0)
+    .map((s) => slugify(s));
+  return segs.length > 0 ? segs.join('/') : 'untitled';
+}

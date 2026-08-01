@@ -191,3 +191,9 @@ See also:
 ## Future Work
 
 - CI publish-gating and per-package release artifacts (see the plan's Future Work).
+
+## Agent skills layer
+
+The agent skills layer sits on top of the diffwiki CLI: a `skills/` tree (repo root) of agent skills (`dw-*`) and specialist agents that let an agentic environment author, recall, lint, and maintain the wiki. The CLI is the only seam between agents and content — skills never touch the store directly; every mutation goes through a CLI command.
+
+The layer leans on four CLI capabilities. `diffwiki lint` enforces template conformance. A `system` audience (revealed with the `showSystem` toggle) keeps internal collections such as `transcripts` hidden from recall, search, lint, and the site. Multi-collection search scopes recall to a named set — `diffwiki.yaml` `context.collections`, or a comma-separated `-c`. Nested article paths address entries like `transcripts/<project>/<slug>`. Session transcripts are captured by each agent introspecting its own session — the CLI does no per-tool parsing — and written into the hidden `transcripts` collection. See [Agent skills](./agent-skills.md).
