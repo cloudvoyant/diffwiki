@@ -9,7 +9,7 @@ Maintain the whole wiki in a bounded, reversible pass. Read `references/cycle.md
 
 ## Steps
 
-1. **Scope + budget.** Default to `-c all`; allow a single collection. Cap the pass (e.g. up to N improvements + N merges) and report anything skipped.
+1. **Scope + budget.** Default to `-c all`; allow a single collection. Cap the pass. If `--dry-run` is passed, write all proposals to `~/.diffwiki/dream/<YYYYMMDD-HHMMSS>-proposal.md` instead of calling the CLI — print the path and stop after reporting.
 
 2. **Gather signal.** Optionally run `/dw-learn` (capture phase) first so recent work is in the transcripts collection, then:
    ```bash
@@ -18,7 +18,7 @@ Maintain the whole wiki in a bounded, reversible pass. Read `references/cycle.md
    ```
    Plus browse the entries in scope.
 
-3. **Improve.** For each entry with lint errors, staleness, or thin content: dispatch `dw-researcher` (refresh/verify references, web-check currency) then `dw-author`/`dw-reviewer` to rewrite tighter. Apply via `diffwiki article update … --status draft`.
+3. **Improve.** Read `references/cycle.md` for the full improvement substeps. At a high level: load templates, run lint + STE check together, validate correctness, then rewrite.
 
 4. **Dedupe.** Find near-duplicates with `dw-recall`/`diffwiki search query`. Merge the best content into one canonical entry (update, draft), and mark the superseded one:
    ```bash

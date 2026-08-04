@@ -13,6 +13,7 @@ diffwiki ships agent skills that let you and your agents author, recall, lint, l
 - **/dw-lint** — check entries against the template rules and offer to tighten failures.
 - **/dw-learn** — learn knowledge from a source and mine it into drafts. Pick a mode: `session` (this conversation, the default), `history` (your past sessions in this project), or `repo` (a local or external codebase). Session and history capture into a hidden transcripts store first; repo reads the codebase directly.
 - **/dw-dream** — a periodic pass that improves, dedupes, and prunes the wiki safely, leaving drafts and deprecations for review.
+- **/dw-help** — explain the diffwiki CLI commands and all available dw-* skills; useful for new users or when you've forgotten what's available.
 
 ## System content
 
