@@ -1,3 +1,10 @@
+# [0.17.0](https://github.com/cloudvoyant/diffwiki/compare/v0.16.0...v0.17.0) (2026-08-04)
+
+
+### Features
+
+* **skills:** add dw-help skill and improve dw-dream (templates, STE, correctness, dry-run) ([18c30ef](https://github.com/cloudvoyant/diffwiki/commit/18c30efcc140f5076649fd3120c4df8cda6a8588))
+
 # [0.16.0](https://github.com/cloudvoyant/diffwiki/compare/v0.15.0...v0.16.0) (2026-08-04)
 
 
