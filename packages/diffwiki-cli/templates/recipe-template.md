@@ -1,7 +1,7 @@
 ---
 shape: recipe
 purpose: One contained pattern with a single canonical example.
-budget: [300, 1000]
+budget: [50, 1000]
 ---
 
 <!--

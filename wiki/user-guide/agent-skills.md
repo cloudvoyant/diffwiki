@@ -20,7 +20,7 @@ diffwiki keeps its own working data — like captured session transcripts — in
 
 ## Template shapes
 
-Each entry conforms to one of four shapes, discovered via `diffwiki templates list`:
+Each entry conforms to one of five shapes, discovered via `diffwiki templates list`:
 
 | Shape | Use when |
 |---|---|
@@ -28,6 +28,7 @@ Each entry conforms to one of four shapes, discovered via `diffwiki templates li
 | `recipe` | One contained pattern with a single canonical example |
 | `recipe-with-steps` | An ordered sequence: install X, configure Y, run Z |
 | `reference` | Lookup table: CLI flags, config keys, env vars, API endpoints |
+| `collection-index` | A collection's root index — groups articles by topic with one-line descriptions and links |
 
 Shapes carry their own authoring rules in the template file. Add your own by dropping a `*-template.md` with `shape:`/`purpose:`/`budget:` frontmatter into `~/.diffwiki/templates/`.
 

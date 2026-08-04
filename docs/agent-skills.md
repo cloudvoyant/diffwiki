@@ -44,13 +44,14 @@ Agents ship bundled inside each skill and are vendored from `skills/shared/agent
 
 ## Authoring rules
 
-Entries are tight snippets for LLM context — verbosity is a defect. Each conforms to a template shape with a token budget, ships `status: draft` until promoted, and carries real, researched references. The four bundled shapes are:
+Entries are tight snippets for LLM context — verbosity is a defect. Each conforms to a template shape with a token budget, ships `status: draft` until promoted, and carries real, researched references. The five bundled shapes are:
 
 | Shape | Purpose | Budget |
 |---|---|---|
 | `guide` | Teaches the reasoning behind a topic — connects related patterns and explains why they work | 1500–5000 tok |
-| `recipe` | One contained pattern with a single canonical example | 300–1000 tok |
-| `recipe-with-steps` | An ordered sequence — do X, then Y, then Z | 500–1500 tok |
+| `recipe` | One contained pattern with a single canonical example | 50–1000 tok  |
+| `recipe-with-steps` | An ordered sequence — do X, then Y, then Z | 100–1500 tok |
 | `reference` | Authoritative description of commands, flags, config keys, types, or APIs — consult while working | 300–2000 tok |
+| `collection-index` | Groups and links a collection's articles by topic — headings and bullet links only, no prose | 100–500 tok |
 
 Shapes are **discovered from the CLI, not hard-coded** — `diffwiki templates list` prints each shape, its purpose, and budget, read from that template's own frontmatter (`shape:`/`purpose:`/`budget:`). Customizing is just editing or dropping a `*-template.md` with those fields into `~/.diffwiki/templates/`.
