@@ -1,3 +1,10 @@
+# [0.16.0](https://github.com/cloudvoyant/diffwiki/compare/v0.15.0...v0.16.0) (2026-08-04)
+
+
+### Features
+
+* **templates:** add collection-index shape and fix recipe lint budgets ([d5972ae](https://github.com/cloudvoyant/diffwiki/commit/d5972ae9bff3b2001220ab86bcabe4a15defe2b4))
+
 # [0.15.0](https://github.com/cloudvoyant/diffwiki/compare/v0.14.0...v0.15.0) (2026-08-04)
 
 
