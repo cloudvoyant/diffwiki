@@ -33,6 +33,7 @@ context:
 - **dw-lint** — wraps `diffwiki lint`; offers to tighten failures via `dw-reviewer`.
 - **dw-learn** — learn knowledge from a source, then mine it into deduped drafts. Three modes: `session` (this conversation, the default), `history` (past project sessions), and `repo` (a local or external codebase). `session`/`history` capture into the hidden `transcripts` collection; `repo` reads a codebase directly (no transcript). Bare `/dw-learn` runs `session`.
 - **dw-dream** — periodic improve/dedupe/prune using the transcripts collection; safe-by-default (drafts + deprecations only).
+- **dw-help** — explain the diffwiki CLI and available dw-* skills; orient new users.
 
 ## Agents
 
