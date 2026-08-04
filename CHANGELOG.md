@@ -1,3 +1,10 @@
+# [0.15.0](https://github.com/cloudvoyant/diffwiki/compare/v0.14.0...v0.15.0) (2026-08-04)
+
+
+### Features
+
+* **search:** improve qmd quality, add ripgrep+fzf, template system ([0671fe9](https://github.com/cloudvoyant/diffwiki/commit/0671fe9ba9d8bda929e77ea727d37149d2b0c089))
+
 # [0.14.0](https://github.com/cloudvoyant/diffwiki/compare/v0.13.0...v0.14.0) (2026-08-01)
 
 
