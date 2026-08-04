@@ -10,7 +10,7 @@ order: 5
 
 # Using with Coding Agents
 
-diffwiki is designed to be an agent's long-term memory that a human can actually see. As coding agents work, they capture what they learn into your wiki as markdown; those notes are git-tracked, [searchable](/user-guide/search-and-rag), and [publishable](/user-guide/sharing) — so the memory store is observable, not a black-box vector database. This page covers the agent-facing surface: the CLI commands agents use to write, how they read the wiki back through search, and the planned `/dw` skill.
+diffwiki is designed to be an agent's long-term memory that a human can actually see. As coding agents work, they capture what they learn into your wiki as markdown; those notes are git-tracked, [searchable](/user-guide/search-and-rag), and [publishable](/user-guide/sharing) — so the memory store is observable, not a black-box vector database. This page covers the agent-facing surface: the CLI commands agents use to write, how they read the wiki back through search, and the `dw-*` agent skills.
 
 While people [contribute by editing markdown directly](/user-guide/continuous-learning), agents need a programmatic way to write. That is what the article CLI commands are for — they are aimed at agents and automation, not at people.
 
@@ -41,15 +41,17 @@ diffwiki search query -c memory "how are refresh tokens rotated"
 
 Keyword retrieval uses `diffwiki-ripgrep` or native BM25; semantic and hybrid retrieval use `diffwiki-qmd`. Because retrieval is user-facing [search](/user-guide/search-and-rag), you can run the exact query an agent would and see precisely what context it pulls — which is what makes diffwiki's agent memory trustworthy rather than opaque.
 
-## The `/dw` skill (coming soon)
+## The `dw-*` agent skills
 
-🚧 A dedicated `/dw` skill for coding agents is planned to make this loop first-class inside an agent session:
+diffwiki ships a set of agent skills for the full authoring and learning loop. Install them via the agentskills CLI:
 
-- `/dw query` — a fast lookup for quick, in-the-loop retrieval.
-- `/dw search` — a deeper, more thorough search when a quick lookup is not enough.
-- `/dw learn` — consolidates what was learned in a session (or across a user's sessions) and writes those learnings back into the wiki as durable memory, closing the self-improvement loop described in [Continuous learning](/user-guide/continuous-learning).
+- **/dw-remember** — route to the best-fit collection, pick a template shape, and write or update one entry as a draft. Accepts `--research` to gather verified references first.
+- **/dw-recall** — pull the most relevant entries into context as compact snippets, honoring `context.collections`. Agents call this to ground their work before writing.
+- **/dw-learn** — learn from a source and mine it into drafts. Three modes: `session` (this conversation), `history` (past project sessions), or `repo` (a local or external codebase). Session and history capture into a hidden transcripts store before mining.
+- **/dw-lint** — check entries against the template rules and offer to tighten failures via the `dw-reviewer` agent.
+- **/dw-dream** — a periodic pass that improves, dedupes, and prunes the wiki safely.
 
-Until it ships, agents use the CLI commands above directly.
+See [Agent Skills](/user-guide/agent-skills) for the full skill list and the template shapes they use.
 
 ## Observable memory by construction
 

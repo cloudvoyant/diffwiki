@@ -16,17 +16,13 @@ path: <path>
 diffwiki collection create <name>   # → ~/.diffwiki/collections/<name>
 ```
 
-## Recall context (edit diffwiki.yaml)
-Append (or merge) a top-level `context` block. The reader accepts it next to either the legacy `{collection, path}` form or an extended `collections:` list:
-```yaml
-context:
-  collections: [<this-collection>, knowledge-base, <language-collection>]
-```
-Verify:
+## Recall context (via the CLI — never hand-edit diffwiki.yaml)
+Set the recall context with the `context` command; it edits `diffwiki.yaml` in place, preserving your other keys and comments (and creating the file if needed):
 ```bash
-diffwiki search query "" -c <this-collection>   # sanity: collection resolves
+diffwiki context set <this-collection>,knowledge-base,<language-collection>
+diffwiki context show      # verify
 ```
-Only list collection NAMES that appear in `diffwiki collection list`.
+Use only collection NAMES that appear in `diffwiki collection list` (the command warns on unknown names). `context add <names>` / `context remove <names>` adjust the list incrementally.
 
 ## Indexing (if a plugin is installed)
 ```bash

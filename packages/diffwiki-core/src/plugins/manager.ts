@@ -326,6 +326,21 @@ export async function registerPlugin(name: string, command: string[]): Promise<P
   return record;
 }
 
+/**
+ * Best-effort repair: re-run each enabled search plugin's `setup` op, which
+ * (re)installs missing system tools (via the plugin's auto-installer) and
+ * re-provisions the plugin. Returns per-plugin setup outcomes. Powers
+ * `diffwiki doctor --fix`.
+ */
+export async function repairPlugins(): Promise<Array<{ name: string; setup: SetupOutcome }>> {
+  const enabled = (await readPluginRegistry()).plugins.filter((p) => p.enabled && p.kind === 'search');
+  const out: Array<{ name: string; setup: SetupOutcome }> = [];
+  for (const p of enabled) {
+    out.push({ name: p.name, setup: await runSetup(p.command, p.name) });
+  }
+  return out;
+}
+
 /** Uninstall a managed plugin's package and deregister it. */
 export async function removePlugin(name: string): Promise<void> {
   const record = (await readPluginRegistry()).plugins.find((p) => p.name === name);

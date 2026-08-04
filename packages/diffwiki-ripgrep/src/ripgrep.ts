@@ -1,5 +1,11 @@
 /**
- * ripgrep CLI helpers — spawn `rg`, parse `--json` output, extract cheap titles.
+ * ripgrep + fzf helpers.
+ *
+ * The plugin's single search mode combines two tools: `rg` (ripgrep) scans the
+ * markdown for candidate lines matching any query token (fast, high recall),
+ * then `fzf --filter` fuzzy-ranks those candidates against the full query (each
+ * space-separated term ANDed, typo-tolerant). When fzf is unavailable the raw
+ * ripgrep candidates are returned in file order (degraded, still useful).
  *
  * @module
  */
@@ -9,10 +15,10 @@ import { createReadStream } from 'node:fs';
 import { basename, extname } from 'node:path';
 import { createInterface } from 'node:readline';
 import { commandExists } from 'diffwiki-core/plugin';
-import type { SpawnRgFn, ReadFileFn, RunRgOptions } from './types.js';
+import type { SpawnRgFn, SpawnFzfFn, ReadFileFn, RunRgOptions, RgLine } from './types.js';
 
 // Re-export so existing imports from ripgrep.js continue to resolve.
-export type { SpawnRgFn, ReadFileFn, RunRgOptions } from './types.js';
+export type { SpawnRgFn, SpawnFzfFn, ReadFileFn, RunRgOptions } from './types.js';
 
 /** Real rg spawner: exit 1 (no matches) → empty string; exit 2+ → throws. */
 export const spawnRg: SpawnRgFn = (args) =>
@@ -28,6 +34,26 @@ export const spawnRg: SpawnRgFn = (args) =>
         reject(new Error(`rg exited with code ${code}`));
       }
     });
+  });
+
+/** Real fzf spawner: writes `input` to stdin; exit 1 (no match) → empty string; exit 2+ → throws. */
+export const spawnFzf: SpawnFzfFn = (args, input) =>
+  new Promise<string>((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    const proc = spawn('fzf', args, { stdio: ['pipe', 'pipe', 'ignore'] });
+    proc.stdout.on('data', (chunk: Buffer) => chunks.push(chunk));
+    proc.on('error', reject);
+    proc.on('close', (code) => {
+      if (code === 0 || code === 1) {
+        resolve(Buffer.concat(chunks).toString('utf8'));
+      } else {
+        reject(new Error(`fzf exited with code ${code}`));
+      }
+    });
+    proc.stdin.on('error', () => {
+      /* ignore EPIPE if fzf closes stdin early */
+    });
+    proc.stdin.end(input);
   });
 
 /** Read up to 20 lines from `absPath`; resolves early once 20 lines are collected. */
@@ -48,29 +74,84 @@ export const readFileLines: ReadFileFn = (absPath) =>
     stream.on('error', reject);
   });
 
-/** True if `rg` is on PATH. Accepts an injected spawner for test compatibility. */
-export async function rgOnPath(spawnFn: SpawnRgFn = spawnRg): Promise<boolean> {
-  if (spawnFn !== spawnRg) {
-    // Test-injected spawner -- use the old probe logic
+/** True if a command is on PATH. Accepts an injected spawner for test compatibility. */
+async function toolOnPath(name: string, probe: (() => Promise<unknown>) | null): Promise<boolean> {
+  if (probe) {
     try {
-      await spawnFn(['--version']);
+      await probe();
       return true;
     } catch {
       return false;
     }
   }
-  return commandExists('rg');
+  return commandExists(name);
 }
 
-/** Run `rg --json` with the given pattern and collection root paths. */
-export async function runRg(spawnFn: SpawnRgFn, pattern: string, roots: string[], opts: RunRgOptions): Promise<string> {
+/** True if `rg` is on PATH. Accepts an injected spawner for test compatibility. */
+export async function rgOnPath(spawnFn: SpawnRgFn = spawnRg): Promise<boolean> {
+  return toolOnPath('rg', spawnFn === spawnRg ? null : () => spawnFn(['--version']));
+}
+
+/** True if `fzf` is on PATH. Accepts an injected spawner for test compatibility. */
+export async function fzfOnPath(fzfFn: SpawnFzfFn = spawnFzf): Promise<boolean> {
+  return toolOnPath('fzf', fzfFn === spawnFzf ? null : () => fzfFn(['--version'], ''));
+}
+
+/** Split a query into lowercased word tokens (letters/digits/underscore runs). */
+export function tokenize(query: string): string[] {
+  return query.toLowerCase().match(/[\p{L}\p{N}_]+/gu) ?? [];
+}
+
+/** Escape a token for use inside a ripgrep regex alternation. */
+function escapeRegex(token: string): string {
+  return token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Run ripgrep for candidate lines matching ANY query token (an OR alternation,
+ * smart-case), emitting plain `path:line:text` lines over `*.md`/`*.mdx`. High
+ * recall by design — fzf does the precise ranking. Returns '' when the query has
+ * no usable tokens.
+ */
+export async function runRg(spawnFn: SpawnRgFn, query: string, roots: string[], opts: RunRgOptions): Promise<string> {
+  const tokens = tokenize(query);
+  if (tokens.length === 0 || roots.length === 0) return '';
+  const pattern = tokens.map(escapeRegex).join('|');
   const limit = opts.limit > 0 ? opts.limit : 20;
-  const args: string[] = ['--json', '--line-number', '--max-count', String(limit), '--glob', '*.{md,mdx}'];
-  if (opts.fixedStrings) {
-    args.push('--fixed-strings', '-i');
-  }
-  args.push('--', pattern, ...roots);
+  const args: string[] = [
+    '--line-number',
+    '--no-heading',
+    '--with-filename',
+    '--color',
+    'never',
+    '--smart-case',
+    '--max-count',
+    String(limit),
+    '--glob',
+    '*.{md,mdx}',
+    '-e',
+    pattern,
+    '--',
+    ...roots,
+  ];
   return spawnFn(args);
+}
+
+/**
+ * Fuzzy-rank ripgrep candidate lines with `fzf --filter`. fzf's default
+ * extended-search mode ANDs each space-separated term (fuzzily), so the whole
+ * query must match; output is ordered best-first. Returns '' on no match.
+ */
+export async function fuzzyRank(fzfFn: SpawnFzfFn, candidates: string, query: string): Promise<string> {
+  if (candidates.trim().length === 0) return '';
+  return fzfFn(['--filter', query], candidates);
+}
+
+/** Parse a plain ripgrep line `path:line:text` (path may contain no newline). Returns null if unparseable. */
+export function parseRgLine(line: string): RgLine | null {
+  const m = /^(.*?):(\d+):(.*)$/.exec(line);
+  if (!m) return null;
+  return { path: m[1], lineNumber: Number(m[2]), text: m[3] };
 }
 
 /** Extract a cheap title: first YAML `title:`, first ATX heading, or filename. */

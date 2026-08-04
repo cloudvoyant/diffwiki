@@ -1,6 +1,6 @@
 {
   "name": "diffwiki",
-  "version": "0.13.0",
+  "version": "0.14.0",
   "description": "diffwiki command-line interface",
   "license": "MIT",
   "type": "module",
@@ -8,7 +8,8 @@
     "diffwiki": "./dist/bin.js"
   },
   "files": [
-    "dist"
+    "dist",
+    "templates"
   ],
   "publishConfig": {
     "access": "public"

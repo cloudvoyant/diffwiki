@@ -91,14 +91,14 @@ describe.skipIf(!rgPresent)('ripgrep e2e -- real rg subprocess (one-shot)', () =
     const result = res.result as Record<string, unknown>;
     expect(result.name).toBe('diffwiki-ripgrep');
     expect(result.kind).toBe('search');
-    expect((result.capabilities as Record<string, unknown>).searchTypes).toEqual(['text', 'regex']);
+    expect((result.capabilities as Record<string, unknown>).searchTypes).toEqual(['fuzzy']);
   });
 
   it('search returns a real hit for the seeded phrase', async () => {
     const res = await invokePlugin('search', {
       term: 'quick brown fox',
       collections: [{ name: 'mycollection', path: collectionDir }],
-      type: 'text',
+      type: 'fuzzy',
       limit: 5,
     });
     expect(res.ok).toBe(true);
@@ -108,7 +108,11 @@ describe.skipIf(!rgPresent)('ripgrep e2e -- real rg subprocess (one-shot)', () =
     expect(hit.collection).toBe('mycollection');
     expect(hit.relPath).toBe('notes.md');
     expect(typeof hit.title).toBe('string');
-    expect((hit.snippet as string).toLowerCase()).toContain('quick brown fox');
+    // The snippet is the matched line. Which line ranks first depends on fzf
+    // (which may be absent in CI → plain ripgrep order), so only assert a
+    // non-empty snippet here rather than a specific line.
+    expect(typeof hit.snippet).toBe('string');
+    expect((hit.snippet as string).length).toBeGreaterThan(0);
   });
 
   it('health reports ready:true with rg present', async () => {
@@ -122,16 +126,19 @@ describe.skipIf(!rgPresent)('ripgrep e2e -- real rg subprocess (one-shot)', () =
     expect(result.readiness.firstSearchCost).toBe('instant');
   });
 
-  it('regex search returns a real hit using a regex pattern', async () => {
+  it('matches multi-word queries regardless of word order (token recall)', async () => {
+    // The old fixed-strings "text" mode could not match "fox quick" against
+    // "quick brown fox"; the fuzzy mode tokenizes, so word order is irrelevant.
     const res = await invokePlugin('search', {
-      term: 'qu[ia]ck',
+      term: 'fox quick',
       collections: [{ name: 'mycollection', path: collectionDir }],
-      type: 'regex',
+      type: 'fuzzy',
       limit: 5,
     });
     expect(res.ok).toBe(true);
     const result = res.result as { hits: Array<Record<string, unknown>> };
     expect(result.hits.length).toBeGreaterThan(0);
     expect(result.hits[0].collection).toBe('mycollection');
+    expect(result.hits[0].relPath).toBe('notes.md');
   });
 });

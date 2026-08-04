@@ -34,6 +34,9 @@ jobs:
       - name: Install dependencies
         run: mise run install
 
+      - name: Validate agent skills
+        run: mise run skills:validate
+
       - name: Run tests
         run: mise run test
 

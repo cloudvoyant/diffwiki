@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { parse as parseYaml } from 'yaml';
+import { parse as parseYaml, parseDocument } from 'yaml';
 import type {
   CollectionEntry,
   HomeCard,
@@ -125,6 +125,28 @@ export async function readProjectConfig(dir: string): Promise<ProjectConfig | un
 /** The `context.collections` list from `diffwiki.yaml`, or `[]` when absent. */
 export async function readContextCollections(dir: string): Promise<string[]> {
   return (await readProjectConfig(dir))?.context?.collections ?? [];
+}
+
+/**
+ * Write the recall/search `context.collections` list into `dir/diffwiki.yaml`,
+ * **preserving every other key and comment** (edited via the YAML Document API).
+ * Creates the file if absent. This is the single supported way to manage recall
+ * context — callers (the CLI, `dw-init`) should use it rather than hand-editing
+ * the YAML. Returns the file path written.
+ */
+export async function setContextCollections(dir: string, collections: string[]): Promise<string> {
+  const file = path.join(dir, PROJECT_CONFIG_FILE);
+  let raw = '';
+  try {
+    raw = await fs.readFile(file, 'utf8');
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+    // absent → start from an empty document (created on write)
+  }
+  const doc = parseDocument(raw);
+  doc.setIn(['context', 'collections'], collections);
+  await fs.writeFile(file, doc.toString(), 'utf8');
+  return file;
 }
 
 /**

@@ -1,23 +1,20 @@
 # dw-remember — template resolution + shape choice
 
+## Discover shapes from the CLI (don't hard-code them)
+
+The available shapes, their purpose, and their token budget come from the CLI — each is read from that template's own frontmatter, so the set is whatever templates exist (bundled + any the user added):
+
+```bash
+diffwiki templates list          # shape · purpose · [budget]
+diffwiki templates list --json   # machine-readable: [{shape, purpose, budget, file}]
+```
+
+Pick the shape whose **purpose** best matches the knowledge, and stay within its **budget** (`diffwiki lint` enforces it). If `templates list` is empty, run `diffwiki templates init` (or `/dw-init`).
+
 ## Resolve the template file
-Templates live at `~/.diffwiki/templates/<shape>-template.md`, seeded from the bundled defaults by `/dw-install` (and `/dw-init`); users may drop their own there to override. If the dir is empty, run `/dw-install`.
 
-Shapes → filenames:
-- `recipe` → `recipe-template.md`
-- `recipe-steps` → `recipe-with-steps-template.md`
-- `guide` → `guide-template.md`
-- `system-design` → `system-design-template.md`
-- `component-design` → `component-design-template.md`
+Templates live at `~/.diffwiki/templates/<shape>-template.md` (a user copy overrides the bundled default). Pass the chosen file's path to `dw-author`. Each template's HTML comment section contains the authoring rules — `dw-author` reads these before writing.
 
-## Choose the shape (budgets are what `diffwiki lint` enforces)
-- One contained pattern + one canonical example → **recipe** (300–1000 tok).
-- An ordered sequence (do X, then Y, then Z) → **recipe-steps** (500–1500).
-- Ties several patterns together, narrative → **guide** (1500–5000).
-- A whole system's architecture → **system-design** (2000–6000).
-- One component's contract + internals → **component-design** (1000–3000).
+## Customizing / adding a shape
 
-Full rules: `~/.diffwiki/templates/taxonomy.md`.
-
-## User templates
-Users may add their own shapes under `~/.diffwiki/templates/`. If a user template is chosen, pass ITS path to `dw-author`; the author still strips guidance comments and placeholders and obeys the References + brevity rules.
+Drop a `*-template.md` into `~/.diffwiki/templates/` with `shape:`, `purpose:`, and (optionally) `budget: [min, max]` frontmatter. It becomes discoverable via `diffwiki templates list` automatically — no skill changes needed.

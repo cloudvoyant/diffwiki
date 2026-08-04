@@ -15,20 +15,27 @@ import { afterEach, describe, expect, it, vi, beforeEach } from 'vitest';
 // can delegate to the same commandExists mock the tests toggle.
 const { commandExistsMock } = vi.hoisted(() => ({ commandExistsMock: vi.fn() }));
 
-vi.mock('diffwiki-core/plugin', () => ({
-  runProcess: vi.fn(),
-  runProcessJson: vi.fn(),
-  commandExists: commandExistsMock,
-  // qmd.ts resolves its binary through resolveDependency; delegate to the same
-  // commandExists mock so `mockCommandExists.mockResolvedValue(true|false)`
-  // drives qmd presence, and report file === 'qmd' when present.
-  resolveDependency: vi.fn(async (dependency: { command: string }) =>
-    (await commandExistsMock(dependency.command))
-      ? { dependency, command: ['qmd'], source: 'path' }
-      : { dependency, command: null, source: 'missing' },
-  ),
-  definePlugin: vi.fn((def: unknown) => ({ definition: def, run: vi.fn() })),
-}));
+// Spread the real module so the pure content helpers (parseArticle,
+// stripFrontmatter) that stripped.ts/snippet.ts import stay real, while only the
+// process/resolution utilities are faked.
+vi.mock('diffwiki-core/plugin', async (importActual) => {
+  const actual = await importActual<typeof import('diffwiki-core/plugin')>();
+  return {
+    ...actual,
+    runProcess: vi.fn(),
+    runProcessJson: vi.fn(),
+    commandExists: commandExistsMock,
+    // qmd.ts resolves its binary through resolveDependency; delegate to the same
+    // commandExists mock so `mockCommandExists.mockResolvedValue(true|false)`
+    // drives qmd presence, and report file === 'qmd' when present.
+    resolveDependency: vi.fn(async (dependency: { command: string }) =>
+      (await commandExistsMock(dependency.command))
+        ? { dependency, command: ['qmd'], source: 'path' }
+        : { dependency, command: null, source: 'missing' },
+    ),
+    definePlugin: vi.fn((def: unknown) => ({ definition: def, run: vi.fn() })),
+  };
+});
 
 import { runProcess, runProcessJson, commandExists } from 'diffwiki-core/plugin';
 import {
@@ -37,9 +44,13 @@ import {
   parseQmdStatus,
   searchSubcommand,
   splitQmdPath,
+  rowsToHits,
+  bodyPreview,
+  enrichHits,
   type QmdRow,
   type StatMtimeFn,
 } from '../src/bin.js';
+import type { Hit } from '../src/types.js';
 import { qmdIndexPath, resetQmdResolution } from '../src/qmd.js';
 import type { FetchFn, SpawnFn } from '../src/daemon.js';
 
@@ -123,6 +134,42 @@ describe('splitQmdPath', () => {
   });
 });
 
+describe('rowsToHits — rawChunk + line carry-through', () => {
+  it('keeps the verbatim chunk as rawChunk and the absolute source line', () => {
+    const [hit] = rowsToHits([
+      {
+        file: 'qmd://docs/a.md',
+        title: 'A',
+        bestChunk: '@@ -13,4 @@ (12 before, 172 after)\n14: some **markdown** text',
+        score: 0.8,
+        line: 14,
+      },
+    ]);
+    expect(hit.rawChunk).toBe('@@ -13,4 @@ (12 before, 172 after)\n14: some **markdown** text');
+    expect(hit.line).toBe(14);
+    // snippet is the cleaned form — locator/gutter/emphasis stripped.
+    expect(hit.snippet).toBe('some markdown text');
+  });
+
+  it('leaves rawChunk/line undefined when qmd omits them', () => {
+    const [hit] = rowsToHits([{ file: 'qmd://docs/a.md', title: 'A' }]);
+    expect(hit.rawChunk).toBeUndefined();
+    expect(hit.line).toBeUndefined();
+  });
+
+  it('cleanedChunk is the full sanitized chunk while snippet is truncated for the row', () => {
+    const long = `prose ${'word '.repeat(120)}end`; // ~640 chars, no markdown
+    const [hit] = rowsToHits([{ file: 'qmd://docs/a.md', title: 'A', bestChunk: long }]);
+    // snippet is capped for the compact row (ends with an ellipsis)...
+    expect(hit.snippet!.length).toBeLessThanOrEqual(201);
+    expect(hit.snippet!.endsWith('…')).toBe(true);
+    // ...cleanedChunk keeps the whole thing, untruncated.
+    expect(hit.cleanedChunk!.length).toBeGreaterThan(300);
+    expect(hit.cleanedChunk!.endsWith('end')).toBe(true);
+    expect(hit.cleanedChunk).not.toContain('…');
+  });
+});
+
 describe('parseQmdStatus', () => {
   it('scrapes docs indexed and pending embeddings from human status text', () => {
     const text = '  Total:    110 files indexed\n  Vectors:  0 embedded\n  Pending:  110 need embedding\n';
@@ -176,6 +223,9 @@ describe('search handler', () => {
         relPath: 'guide/intro.md',
         title: 'Intro',
         snippet: 'the intro chunk',
+        rawChunk: 'the intro chunk',
+        cleanedChunk: 'the intro chunk',
+        line: undefined,
         score: 0.91,
         docid: 'doc-1',
       },
@@ -184,6 +234,9 @@ describe('search handler', () => {
         relPath: 'todo.md',
         title: 'Todo',
         snippet: 'a todo',
+        rawChunk: 'a todo',
+        cleanedChunk: 'a todo',
+        line: undefined,
         score: 0.42,
         docid: 'doc-2',
       },
@@ -248,20 +301,69 @@ describe('health handler', () => {
 });
 
 describe('setup handler', () => {
-  it('returns ready:false and a diagnostic log when qmd is missing', async () => {
+  it('attempts auto-install and returns ready:false when qmd stays missing', async () => {
     mockCommandExists.mockResolvedValue(false);
     const log = vi.fn();
-    const { handlers } = makePluginDefinition({ home: '/tmp/home', fetchFn: coldOnlyFetch, spawnFn: neverSpawn });
+    // Inject a fake installer that "can't" install qmd (mirrors ensureTool's
+    // could-not-auto-install outcome, message carries the manual hint).
+    let installAttempted = false;
+    const installFn: typeof import('diffwiki-core/plugin').ensureTool = async (spec, opts) => {
+      if (opts?.install) installAttempted = true;
+      return {
+        command: spec.command,
+        present: false,
+        installed: false,
+        message: `could not auto-install qmd — ${spec.manual}`,
+      };
+    };
+    const { handlers } = makePluginDefinition({
+      home: '/tmp/home',
+      fetchFn: coldOnlyFetch,
+      spawnFn: neverSpawn,
+      installFn,
+    });
     const result = await handlers.setup(
       { collections: [{ name: 'docs', path: '/abs/docs' }], embed: undefined, prefetchModels: undefined },
       log,
     );
 
+    expect(installAttempted).toBe(true);
     expect(result.ready).toBe(false);
     expect(result.steps).toHaveLength(1);
     expect(result.steps?.[0]).toMatchObject({ step: 'verify-qmd', ok: false });
-    expect(result.steps?.[0].message).toContain('qmd unresolved');
+    expect(result.steps?.[0].message).toContain('npm i -g @tobilu/qmd');
     expect(log).toHaveBeenCalledWith('error', expect.stringContaining('npm i -g @tobilu/qmd'));
+  });
+
+  it('proceeds when auto-install makes qmd resolvable', async () => {
+    // qmd starts missing; the installer "installs" it → subsequent qmdOnPath passes.
+    mockCommandExists.mockResolvedValue(false);
+    const installFn: typeof import('diffwiki-core/plugin').ensureTool = async (spec) => {
+      mockCommandExists.mockResolvedValue(true); // now resolvable
+      return {
+        command: spec.command,
+        present: true,
+        installed: true,
+        method: 'mise',
+        message: 'installed qmd via mise',
+      };
+    };
+    mockRunProcess.mockResolvedValue({ stdout: 'ok', stderr: '' });
+    const { handlers } = makePluginDefinition({
+      home: '/tmp/home',
+      fetchFn: coldOnlyFetch,
+      spawnFn: neverSpawn,
+      installFn,
+    });
+    const result = await handlers.setup(
+      { collections: [{ name: 'docs', path: '/abs/docs' }], embed: undefined, prefetchModels: undefined },
+      noopLog,
+    );
+
+    expect(result.ready).toBe(true);
+    const verify = result.steps?.find((s) => s.step === 'verify-qmd');
+    expect(verify?.ok).toBe(true);
+    expect(verify?.message).toContain('via mise');
   });
 
   it('adds collections and indexes when qmd is present, ignoring "already exists"', async () => {
@@ -571,5 +673,76 @@ describe('newestMdMtime helper', () => {
     expect(result).toBe(300);
 
     await rm(tmpBase, { recursive: true, force: true });
+  });
+});
+
+describe('bodyPreview + enrichHits (frontmatter-chunk fallback)', () => {
+  it('derives a body preview from a file, skipping frontmatter', async () => {
+    const { mkdtemp, writeFile, rm } = await import('node:fs/promises');
+    const { join } = await import('node:path');
+    const { tmpdir } = await import('node:os');
+    const dir = await mkdtemp(join(tmpdir(), 'qmd-preview-'));
+    const file = join(dir, 'doc.md');
+    await writeFile(
+      file,
+      '---\ntitle: "Typing Form Action Results"\ntags: [svelte]\n---\n\n# Typing Form Action Results\n\nWhen a SvelteKit form action returns data, it flows back as the form prop.',
+      'utf8',
+    );
+    const preview = await bodyPreview(file);
+    expect(preview).toContain('When a SvelteKit form action returns data');
+    expect(preview).not.toContain('tags:');
+    expect(preview).not.toContain('---');
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  it('returns undefined for a missing file', async () => {
+    expect(await bodyPreview('/no/such/file-xyz.md')).toBeUndefined();
+  });
+
+  it('fills only hits whose snippet is empty, leaving good snippets untouched', async () => {
+    const { mkdtemp, writeFile, rm } = await import('node:fs/promises');
+    const { join } = await import('node:path');
+    const { tmpdir } = await import('node:os');
+    const dir = await mkdtemp(join(tmpdir(), 'qmd-fill-'));
+    await writeFile(
+      join(dir, 'a.md'),
+      '---\ntitle: A\ntags: [x]\n---\n\nThe body of document A explains the concept clearly.',
+      'utf8',
+    );
+    const hits: Hit[] = [
+      { collection: 'kb', relPath: 'a.md', title: 'A', snippet: undefined }, // frontmatter-only chunk → fill
+      { collection: 'kb', relPath: 'b.md', title: 'B', snippet: 'existing good snippet' }, // keep
+      { collection: 'other', relPath: 'c.md', title: 'C', snippet: undefined }, // unknown collection → left empty
+    ];
+    await enrichHits(hits, [{ name: 'kb', path: dir }]);
+    expect(hits[0].snippet).toBe('The body of document A explains the concept clearly.');
+    expect(hits[0].snippetFromBody).toBe(true); // filled from body → flagged for the popover
+    expect(hits[1].snippet).toBe('existing good snippet');
+    expect(hits[1].snippetFromBody).toBeUndefined(); // untouched → not a fallback
+    expect(hits[2].snippet).toBeUndefined();
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  it('restores the real frontmatter title over qmd’s heading-derived title', async () => {
+    const { mkdtemp, writeFile, rm } = await import('node:fs/promises');
+    const { join } = await import('node:path');
+    const { tmpdir } = await import('node:os');
+    const dir = await mkdtemp(join(tmpdir(), 'qmd-title-'));
+    await writeFile(
+      join(dir, 'a.md'),
+      '---\ntitle: Add a Subcommand\ntags: [cli]\n---\n\n## Recipe\n\nChain .command().action().',
+      'utf8',
+    );
+    // b.md has no frontmatter title → qmd's title must be kept.
+    await writeFile(join(dir, 'b.md'), '## Heading only\n\nbody', 'utf8');
+    const hits: Hit[] = [
+      { collection: 'kb', relPath: 'a.md', title: 'Recipe', snippet: 'chain the command' },
+      { collection: 'kb', relPath: 'b.md', title: 'Heading only', snippet: 'body' },
+    ];
+    await enrichHits(hits, [{ name: 'kb', path: dir }]);
+    expect(hits[0].title).toBe('Add a Subcommand'); // frontmatter title wins over the "Recipe" heading
+    expect(hits[0].snippet).toBe('chain the command'); // good snippet untouched
+    expect(hits[1].title).toBe('Heading only'); // no frontmatter title → qmd's title kept
+    await rm(dir, { recursive: true, force: true });
   });
 });

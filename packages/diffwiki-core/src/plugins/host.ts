@@ -230,6 +230,10 @@ interface WireHit {
   score?: number;
   docid?: string;
   tags?: string[];
+  rawChunk?: string;
+  cleanedChunk?: string;
+  line?: number;
+  snippetFromBody?: boolean;
 }
 
 function toWireCollections(collections: CollectionEntry[]): WireCollection[] {
@@ -259,6 +263,10 @@ function mapHits(result: unknown, collections: CollectionEntry[]): QueryHit[] {
       snippet: typeof h.snippet === 'string' ? h.snippet : undefined,
       score: typeof h.score === 'number' ? h.score : undefined,
       docid: typeof h.docid === 'string' ? h.docid : undefined,
+      rawChunk: typeof h.rawChunk === 'string' ? h.rawChunk : undefined,
+      cleanedChunk: typeof h.cleanedChunk === 'string' ? h.cleanedChunk : undefined,
+      line: typeof h.line === 'number' ? h.line : undefined,
+      snippetFromBody: h.snippetFromBody === true ? true : undefined,
     });
   }
   return out;
@@ -308,6 +316,7 @@ export async function loadSearchProvider(name?: string): Promise<SearchProvider 
           collection: opts?.collection,
           type: opts?.type,
           limit: opts?.limit,
+          expansions: opts?.expansions,
         },
         { timeoutMs: SEARCH_TIMEOUT_MS, name: record.name },
       );

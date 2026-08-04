@@ -1,4 +1,6 @@
 import { spawn } from 'node:child_process';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { Command, Option } from 'commander';
 import {
   addExternalCollection,
@@ -20,7 +22,13 @@ import {
   registerPlugin,
   removeArticle,
   removePlugin,
+  repairPlugins,
   removeTags,
+  seedTemplates,
+  listTemplates,
+  readContextCollections,
+  setContextCollections,
+  resolveDefaultSearchMode,
   resolveCwdCollection,
   resolveEditorCommand,
   resolveEditTarget,
@@ -118,7 +126,11 @@ async function tagsAction(
 }
 
 async function indexAction(opts: { embed?: boolean }): Promise<void> {
-  const provider = await loadSearchProvider();
+  // Index the engine the user actually searches with (config.defaultSearch),
+  // not just the first enabled plugin — otherwise a no-index engine registered
+  // ahead of the real one (e.g. ripgrep before qmd) would swallow the reindex.
+  const { engine } = await resolveDefaultSearchMode();
+  const provider = await loadSearchProvider(engine);
   if (!provider) {
     const installable = (await listSearchModes()).filter((m) => m.plugin !== 'native');
     console.log(
@@ -132,17 +144,26 @@ async function indexAction(opts: { embed?: boolean }): Promise<void> {
   console.log(`Indexed ${indexed} document(s).`);
 }
 
-async function queryAction(term: string, opts: { engine?: string; collection?: string; type?: string }): Promise<void> {
+async function queryAction(
+  term: string,
+  opts: { engine?: string; collection?: string; type?: string; lex?: string[]; vec?: string[]; hyde?: string[] },
+): Promise<void> {
   const names = opts.collection
     ? opts.collection
         .split(',')
         .map((s) => s.trim())
         .filter(Boolean)
     : undefined;
+  const expansions = [
+    ...(opts.lex ?? []).map((query) => ({ type: 'lex' as const, query })),
+    ...(opts.vec ?? []).map((query) => ({ type: 'vec' as const, query })),
+    ...(opts.hyde ?? []).map((query) => ({ type: 'hyde' as const, query })),
+  ];
   const queryOpts: QueryOptions = {
     engine: opts.engine,
     collection: names && names.length === 1 ? names[0] : names,
     type: opts.type,
+    ...(expansions.length > 0 ? { expansions } : {}),
   };
   const outcome = await search(term, queryOpts);
   const hits = outcome.hits;
@@ -252,7 +273,21 @@ async function configGetAction(key: string): Promise<void> {
   console.log(value ?? '(unset)');
 }
 
-async function doctorAction(): Promise<void> {
+async function doctorAction(opts: { fix?: boolean }): Promise<void> {
+  if (opts.fix) {
+    // Re-provision each enabled plugin: this re-runs `setup`, which auto-installs
+    // missing system tools (rg/fzf via mise/brew; qmd via npm) before diagnosing.
+    console.log('Repairing plugins (installing missing tools)…');
+    const repairs = await repairPlugins();
+    for (const r of repairs) {
+      for (const step of r.setup.steps) {
+        console.log(
+          `${icon(step.ok ? 'ok' : 'warn')} ${r.name} · ${step.step}${step.message ? ` — ${step.message}` : ''}`,
+        );
+      }
+    }
+    console.log('');
+  }
   const diagnostics = await doctor();
   for (const d of diagnostics) {
     console.log(`${icon(d.level)} ${d.message}`);
@@ -260,6 +295,87 @@ async function doctorAction(): Promise<void> {
   if (diagnostics.some((d) => d.level === 'error')) {
     process.exitCode = 1;
   }
+}
+
+/** The authoring templates bundled with the CLI: `dist/bin.js` → `../templates`. */
+function bundledTemplatesDir(): string {
+  return path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'templates');
+}
+
+async function templatesInitAction(): Promise<void> {
+  const { seeded, skipped, dir } = await seedTemplates(bundledTemplatesDir());
+  console.log(`Templates → ${dir}`);
+  if (seeded.length > 0) console.log(`  seeded: ${seeded.join(', ')}`);
+  if (skipped.length > 0) console.log(`  kept existing (user overrides): ${skipped.join(', ')}`);
+  if (seeded.length === 0 && skipped.length === 0) console.log('  (no bundled templates found)');
+}
+
+async function templatesListAction(opts: { json?: boolean }): Promise<void> {
+  const infos = await listTemplates(bundledTemplatesDir());
+  if (infos.length === 0) {
+    console.log('No bundled templates found.');
+    return;
+  }
+  if (opts.json) {
+    console.log(JSON.stringify(infos, null, 2));
+    return;
+  }
+  // Human table: shape, purpose, budget — read from each template's frontmatter.
+  for (const t of infos) {
+    const budget = t.budget ? `  [${t.budget[0]}–${t.budget[1]} tok]` : '';
+    console.log(`${t.shape}\t${t.purpose}${budget}`);
+  }
+}
+
+// ── recall context (diffwiki.yaml → context.collections) ─────────────────────
+const parseNames = (csv: string): string[] =>
+  csv
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+/** Warn (soft) about context names that aren't registered collections. */
+async function warnUnknownCollections(names: string[]): Promise<void> {
+  const known = new Set((await listCollections()).map((c) => c.name));
+  const unknown = names.filter((n) => !known.has(n));
+  if (unknown.length > 0) {
+    console.error(`! not in your collections: ${unknown.join(', ')} (see: diffwiki collection list)`);
+  }
+}
+
+function reportContext(collections: string[], file: string): void {
+  console.log(`context.collections = [${collections.join(', ')}] → ${file}`);
+}
+
+async function contextShowAction(): Promise<void> {
+  const cols = await readContextCollections(process.cwd());
+  if (cols.length === 0) {
+    console.log('No recall context set. Set one: diffwiki context set <a,b,c>');
+    return;
+  }
+  for (const c of cols) console.log(c);
+}
+
+async function contextSetAction(names: string): Promise<void> {
+  const cols = parseNames(names);
+  const file = await setContextCollections(process.cwd(), cols);
+  await warnUnknownCollections(cols);
+  reportContext(cols, file);
+}
+
+async function contextAddAction(names: string): Promise<void> {
+  const merged = await readContextCollections(process.cwd());
+  for (const n of parseNames(names)) if (!merged.includes(n)) merged.push(n);
+  const file = await setContextCollections(process.cwd(), merged);
+  await warnUnknownCollections(merged);
+  reportContext(merged, file);
+}
+
+async function contextRemoveAction(names: string): Promise<void> {
+  const drop = new Set(parseNames(names));
+  const kept = (await readContextCollections(process.cwd())).filter((c) => !drop.has(c));
+  const file = await setContextCollections(process.cwd(), kept);
+  reportContext(kept, file);
 }
 
 async function lintAction(opts: { collections: string }): Promise<void> {
@@ -470,10 +586,20 @@ export function createProgram(): Command {
     .option('--engine <name>', 'search engine/plugin (default: config defaultSearch, else native)')
     .option('-c, --collection <names>', 'limit to a collection (comma-separated for a set)')
     .option('-t, --type <type>', 'search type (engine-defined, e.g. keyword|semantic|hybrid)')
-    .argument('[term]', 'search term', '')
+    // Pre-expanded query variants (repeatable). Lets an upstream LLM/agent do the
+    // query expansion and hand the engine typed sub-queries directly, e.g.
+    //   diffwiki search q "add a cli subcommand" \
+    //     --lex "commander subcommand" --vec "how to add a CLI verb" --hyde "..."
+    .option('--lex <query>', 'BM25 keyword variant (repeatable)', collect, [])
+    .option('--vec <query>', 'semantic variant — a natural-language question (repeatable)', collect, [])
+    .option('--hyde <query>', 'hypothetical-answer passage variant (repeatable)', collect, [])
+    .argument('[term]', 'search term (used as ranking intent when variants are given)', '')
     .action(
-      withErrors((term: string, opts: { engine?: string; collection?: string; type?: string }) =>
-        queryAction(term, opts),
+      withErrors(
+        (
+          term: string,
+          opts: { engine?: string; collection?: string; type?: string; lex: string[]; vec: string[]; hyde: string[] },
+        ) => queryAction(term, opts),
       ),
     );
 
@@ -558,6 +684,42 @@ export function createProgram(): Command {
     .action(withErrors((opts: { port: string }) => openAction(opts)));
 
   // ── config ────────────────────────────────────────────────────────────────
+  // ── context ───────────────────────────────────────────────────────────────
+  const context = program
+    .command('context')
+    .description('Manage recall/search context (diffwiki.yaml → context.collections)');
+  context
+    .command('show')
+    .description('Print the current recall-context collections')
+    .action(withErrors(contextShowAction));
+  context
+    .command('set')
+    .description('Replace the recall-context collections')
+    .argument('<names>', 'comma-separated collection names')
+    .action(withErrors((names: string) => contextSetAction(names)));
+  context
+    .command('add')
+    .description('Add collections to the recall context')
+    .argument('<names>', 'comma-separated collection names')
+    .action(withErrors((names: string) => contextAddAction(names)));
+  context
+    .command('remove')
+    .description('Remove collections from the recall context')
+    .argument('<names>', 'comma-separated collection names')
+    .action(withErrors((names: string) => contextRemoveAction(names)));
+
+  // ── templates ───────────────────────────────────────────────────────────────
+  const templates = program.command('templates').description('Manage authoring templates (~/.diffwiki/templates)');
+  templates
+    .command('init')
+    .description('Seed ~/.diffwiki/templates from the bundled templates (never overwrites your own)')
+    .action(withErrors(templatesInitAction));
+  templates
+    .command('list')
+    .description('List templates with their shape + purpose (read from each template’s frontmatter)')
+    .option('--json', 'output as JSON')
+    .action(withErrors((opts: { json?: boolean }) => templatesListAction(opts)));
+
   const config = program.command('config').description('Read and write diffwiki config');
 
   config
@@ -574,7 +736,11 @@ export function createProgram(): Command {
     .action(withErrors((key: string) => configGetAction(key)));
 
   // ── doctor (unchanged, top-level) ───────────────────────────────────────────
-  program.command('doctor').description('Diagnose configuration issues').action(withErrors(doctorAction));
+  program
+    .command('doctor')
+    .description('Diagnose configuration issues')
+    .option('--fix', 'attempt to repair issues (re-provision plugins, auto-installing missing tools)')
+    .action(withErrors((opts: { fix?: boolean }) => doctorAction(opts)));
 
   // ── lint ──────────────────────────────────────────────────────────────────
   program

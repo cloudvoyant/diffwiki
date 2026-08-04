@@ -15,20 +15,37 @@ export type { McpSearchArgs } from './types.js';
 
 /** One entry of the `searches` array in a qmd `query` tool call. */
 interface QmdSearchSpec {
-  type: 'lex' | 'vec';
+  type: 'lex' | 'vec' | 'hyde';
   query: string;
 }
 
-/** The `searches`/`rerank` pair a diffwiki `type` maps to. */
+/**
+ * The `searches`/`rerank` pair a diffwiki `type` maps to.
+ *
+ * Semantic and hybrid include a `hyde` sub-query (hypothetical-document
+ * expansion) to match qmd's cold `query`/`vsearch` pipeline. Providing explicit
+ * `searches` makes qmd skip its internal `expandQuery()` step, and without the
+ * hyde variant the reranker is fed a thin candidate set and floats loosely
+ * related chunks to the top (e.g. a "context, context, context" heading for a
+ * CLI query). Keyword stays pure BM25 (no expansion, no rerank), matching
+ * `qmd search`.
+ */
 export function searchesForType(type: string, query: string): { searches: QmdSearchSpec[]; rerank: boolean } {
   switch (type) {
     case 'semantic':
-      return { searches: [{ type: 'vec', query }], rerank: false };
+      return {
+        searches: [
+          { type: 'vec', query },
+          { type: 'hyde', query },
+        ],
+        rerank: false,
+      };
     case 'hybrid':
       return {
         searches: [
           { type: 'lex', query },
           { type: 'vec', query },
+          { type: 'hyde', query },
         ],
         rerank: true,
       };
@@ -50,6 +67,7 @@ interface McpResultRow {
   score?: unknown;
   snippet?: unknown;
   docid?: unknown;
+  line?: unknown;
 }
 
 /**
@@ -106,7 +124,12 @@ export async function mcpSearch(baseUrl: string, args: McpSearchArgs, fetchFn: F
   await initRes.text();
 
   // 2. tools/call name=query
-  const { searches, rerank } = searchesForType(args.type, args.term);
+  // When the caller supplied expanded variants (an upstream LLM did the query
+  // expansion), use those as the qmd `searches`; otherwise derive them from the
+  // bare term. `rerank` still follows the search type.
+  const derived = searchesForType(args.type, args.term);
+  const searches = args.expansions && args.expansions.length > 0 ? args.expansions : derived.searches;
+  const rerank = derived.rerank;
   const queryArgs: Record<string, unknown> = {
     searches,
     intent: args.term,
@@ -147,6 +170,7 @@ export async function mcpSearch(baseUrl: string, args: McpSearchArgs, fetchFn: F
       score: typeof row.score === 'number' ? row.score : undefined,
       bestChunk: typeof row.snippet === 'string' ? row.snippet : undefined,
       docid: typeof row.docid === 'string' ? row.docid : undefined,
+      line: typeof row.line === 'number' ? row.line : undefined,
     };
   });
 }

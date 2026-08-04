@@ -4,20 +4,26 @@
  * @module
  */
 
+import type { EnsureToolSpec, EnsureToolOptions, EnsureToolResult } from 'diffwiki-core/plugin';
+
+/** Injectable auto-installer (defaults to core's `ensureTool`). */
+export type EnsureToolFn = (spec: EnsureToolSpec, opts?: EnsureToolOptions) => Promise<EnsureToolResult>;
+
 // ---------------------------------------------------------------------------
-// ripgrep helper types (from ripgrep.ts)
+// Process helper types (from ripgrep.ts)
 // ---------------------------------------------------------------------------
 
-/** Injectable spawn function -- resolves raw stdout from `rg <args>`. Exit 1 -> empty string. Throws on exit 2+. */
+/** Injectable rg spawner — resolves raw stdout from `rg <args>`. Exit 1 (no matches) -> empty string; throws on exit 2+. */
 export type SpawnRgFn = (args: string[]) => Promise<string>;
 
-/** Injectable file-lines reader -- returns up to 20 lines for `cheapTitle`. */
+/** Injectable fzf spawner — pipes `input` to `fzf <args>` stdin, resolves stdout. Exit 1 (no matches) -> empty string; throws on exit 2+. */
+export type SpawnFzfFn = (args: string[], input: string) => Promise<string>;
+
+/** Injectable file-lines reader — returns up to 20 lines for `cheapTitle`. */
 export type ReadFileFn = (absPath: string) => Promise<string[]>;
 
 export interface RunRgOptions {
-  /** Use fixed-strings mode (`--fixed-strings -i`). When false, regex mode (default). */
-  fixedStrings: boolean;
-  /** Max matches returned per rg invocation. Default 20. */
+  /** Max candidate lines to emit per file. Default 20. */
   limit: number;
 }
 
@@ -30,17 +36,11 @@ export interface Collection {
   path: string;
 }
 
-/** A single parsed rg --json match event (the `data` sub-object). */
-export interface RgMatchData {
-  path: { text: string };
-  lines: { text: string };
-  line_number: number;
-}
-
-/** A top-level rg --json event line. */
-export interface RgEvent {
-  type: string;
-  data: RgMatchData;
+/** A ripgrep candidate line (`path:line:text`), parsed. */
+export interface RgLine {
+  path: string;
+  lineNumber: number;
+  text: string;
 }
 
 export interface Hit {
@@ -48,9 +48,18 @@ export interface Hit {
   relPath: string;
   title: string;
   snippet?: string;
+  /**
+   * A rank-derived relevance score in (0, 1], assigned only when fzf ranked the
+   * results (best hit = 1, descending). Omitted on the plain-ripgrep fallback,
+   * where result order is file-discovery order, not relevance.
+   */
+  score?: number;
 }
 
 export interface Deps {
   spawnFn?: SpawnRgFn;
+  fzfFn?: SpawnFzfFn;
   readFn?: ReadFileFn;
+  /** Auto-installer for missing system tools (rg/fzf). Defaults to core's `ensureTool`. */
+  installFn?: EnsureToolFn;
 }

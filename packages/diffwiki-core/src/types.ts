@@ -158,6 +158,12 @@ export interface ArticleContent {
 
 export type PluginKind = 'search';
 export const NATIVE_ENGINE = 'native';
+
+// Canonical definition lives in the plugin SDK (`plugins/types.ts`), re-exported
+// here so host-side code that imports from `diffwiki-core` gets the same type.
+import type { SearchExpansion } from './plugins/types';
+export type { SearchExpansion };
+
 export interface QueryOptions {
   engine?: string;
   /** Limit to a single collection name, or a set of names. Empty/undefined = all. */
@@ -166,6 +172,12 @@ export interface QueryOptions {
   limit?: number;
   /** Reveal system-audience content (default: config `showSystem`, else false). */
   showSystem?: boolean;
+  /**
+   * Pre-expanded query variants (from a smarter upstream LLM). When present, an
+   * engine that supports structured search should use these instead of expanding
+   * the bare term itself. The `term` is still passed as ranking intent.
+   */
+  expansions?: SearchExpansion[];
 }
 export interface QueryHit {
   collection: string;
@@ -175,6 +187,14 @@ export interface QueryHit {
   snippet?: string;
   score?: number;
   docid?: string;
+  /** Verbatim engine chunk (unsanitized) for the search UI's inspection popover. */
+  rawChunk?: string;
+  /** The chunk cleaned to plain text, untruncated (full form for the popover). */
+  cleanedChunk?: string;
+  /** Absolute source line the chunk starts at, when the engine reports it. */
+  line?: number;
+  /** True when `snippet` is a body-preview fallback rather than the cleaned chunk. */
+  snippetFromBody?: boolean;
 }
 export type DiagnosticLevel = 'ok' | 'warn' | 'error';
 export interface Diagnostic {

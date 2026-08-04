@@ -63,17 +63,15 @@ As a rule of thumb, a personal knowledge base lives under `~/.diffwiki` (global 
 
 ## Use it with your coding agents
 
-🚧 **Coming soon.**
-
 diffwiki is designed to be observable, git-tracked memory for your coding agents — they read from and write to the same wiki you do, so what an agent "knows" is a diffable, browsable, searchable set of markdown files rather than an opaque vector store.
 
-The planned interface is a `/dw` agent skill with three workflows:
+Install the `dw-*` agent skills via the agentskills CLI. Then:
 
-- **`/dw query`** — fast lookup for a specific fact or article.
-- **`/dw search`** — deep semantic/hybrid search across collections.
-- **`/dw learn`** — session- or user-specific consolidation, where the agent writes what it learned back into the wiki as memory.
+- **/dw-remember** — capture what the agent learned as a templated draft in the right collection.
+- **/dw-recall** — pull the most relevant entries into context as compact snippets.
+- **/dw-learn** — mine a session, past sessions, or a codebase into knowledge drafts.
 
-See [Coding Agents](/user-guide/coding-agents) for how this fits together.
+See [Coding Agents](/user-guide/coding-agents) and [Agent Skills](/user-guide/agent-skills) for how this fits together.
 
 ## Share
 

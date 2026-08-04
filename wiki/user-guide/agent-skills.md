@@ -8,7 +8,7 @@ diffwiki ships agent skills that let you and your agents author, recall, lint, l
 ## The skills
 
 - **/dw-init** — guided setup: an in-repo or global collection plus the `context.collections` set recall searches.
-- **/dw-remember** — capture one piece of knowledge as a tight, correctly-templated **draft**, routed to the project wiki or the knowledge base, with optional researched references.
+- **/dw-remember** — capture one piece of knowledge as a tight, correctly-templated **draft**, routed to the best-fit collection by subject, with optional researched references.
 - **/dw-recall** — pull the most relevant entries into context as compact snippets; agents call it to ground their work.
 - **/dw-lint** — check entries against the template rules and offer to tighten failures.
 - **/dw-learn** — learn knowledge from a source and mine it into drafts. Pick a mode: `session` (this conversation, the default), `history` (your past sessions in this project), or `repo` (a local or external codebase). Session and history capture into a hidden transcripts store first; repo reads the codebase directly.
@@ -17,6 +17,19 @@ diffwiki ships agent skills that let you and your agents author, recall, lint, l
 ## System content
 
 diffwiki keeps its own working data — like captured session transcripts — in `system`-audience collections that are hidden by default from search, recall, and the sidebar. Flip `diffwiki config set showSystem true` to reveal them in the UI.
+
+## Template shapes
+
+Each entry conforms to one of four shapes, discovered via `diffwiki templates list`:
+
+| Shape | Use when |
+|---|---|
+| `guide` | Explaining the reasoning behind a topic — the "why" behind several related patterns |
+| `recipe` | One contained pattern with a single canonical example |
+| `recipe-with-steps` | An ordered sequence: install X, configure Y, run Z |
+| `reference` | Lookup table: CLI flags, config keys, env vars, API endpoints |
+
+Shapes carry their own authoring rules in the template file. Add your own by dropping a `*-template.md` with `shape:`/`purpose:`/`budget:` frontmatter into `~/.diffwiki/templates/`.
 
 ## Why brevity
 

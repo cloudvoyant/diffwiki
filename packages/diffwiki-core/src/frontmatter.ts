@@ -81,6 +81,39 @@ function parseFallback(raw: string): ParsedArticle {
   return { title, tags: [], audience, status, body: body.replace(/^\n+/, '') };
 }
 
+/**
+ * A leading YAML frontmatter block: optional BOM/indent, an opening `---` fence,
+ * the YAML body, a closing `---`, and an optional trailing newline. The canonical
+ * shape {@link serializeArticle} writes.
+ */
+const FRONTMATTER_BLOCK_RE = /^\uFEFF?[ \t]*---\r?\n[\s\S]*?\r?\n---[ \t]*(?:\r?\n|$)/;
+
+/**
+ * Remove a leading frontmatter block, returning the body **verbatim** — unlike
+ * {@link parseArticle}, no leading-whitespace trimming — so a caller that needs
+ * the body's original line offsets (e.g. a search index that blanks frontmatter
+ * to keep source line numbers aligned) can reconstruct them from the removed
+ * span. Returns the input unchanged when there is no frontmatter.
+ */
+export function stripFrontmatter(raw: string): string {
+  return raw.replace(FRONTMATTER_BLOCK_RE, '');
+}
+
+/**
+ * Parse a document's YAML frontmatter into a raw key/value object (every key,
+ * not just the article axes), plus the body. Bundler-safe via the pinned `yaml`
+ * engine. Use this for metadata files (e.g. template frontmatter carrying
+ * `shape`/`purpose`) where {@link parseArticle}'s fixed fields don't fit.
+ */
+export function parseFrontmatter(raw: string): { data: Record<string, unknown>; body: string } {
+  try {
+    const { data, content } = matter(raw, MATTER_OPTS);
+    return { data: (data ?? {}) as Record<string, unknown>, body: content };
+  } catch {
+    return { data: {}, body: raw };
+  }
+}
+
 export function parseArticle(raw: string): ParsedArticle {
   try {
     const { data, content } = matter(raw, MATTER_OPTS);

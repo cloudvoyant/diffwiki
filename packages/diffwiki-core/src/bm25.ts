@@ -117,5 +117,18 @@ export function rankDocs<T extends { fields: RankableFields }>(term: string, doc
     if (total > 0) scored.push({ ...d, score: total });
   }
   scored.sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
+
+  // Normalize raw BM25 scores (unbounded) to (0, 1] by dividing by the top
+  // score, so native results show a 0-1 relevance badge consistent with the
+  // plugin engines. Division-by-max preserves relative magnitude (a dominant
+  // top hit stays near 1 while weak matches stay low), unlike min-max which
+  // would always stretch the worst hit to 0. The scale is per-result-set, not
+  // comparable across queries — the same caveat as every engine's score.
+  const max = scored[0]?.score ?? 0;
+  if (max > 0) {
+    for (const d of scored) {
+      if (typeof d.score === 'number') d.score = Number((d.score / max).toFixed(4));
+    }
+  }
   return scored;
 }

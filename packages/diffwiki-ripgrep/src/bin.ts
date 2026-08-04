@@ -2,13 +2,15 @@
  * diffwiki-ripgrep plugin binary.
  *
  * Implements the diffwiki plugin protocol via `definePlugin()` from the SDK.
- * Drives `rg` (ripgrep) for instant literal/regex search -- no index, no
- * models, no setup beyond verifying rg is on PATH.
+ * A single `fuzzy` search mode: `rg` (ripgrep) scans markdown for candidate
+ * lines matching any query token, then `fzf --filter` fuzzy-ranks them against
+ * the full query. No index, no models. Falls back to plain ripgrep order when
+ * fzf isn't installed.
  *
  * @module
  */
 
-import { definePlugin } from 'diffwiki-core/plugin';
+import { definePlugin, ensureTool } from 'diffwiki-core/plugin';
 import type {
   PluginDefinition,
   PluginLogFn,
@@ -23,13 +25,26 @@ import type {
   EventHandlerResult,
   HealthHandlerResult,
 } from 'diffwiki-core/plugin';
-import { cheapTitle, readFileLines, rgOnPath, runRg, spawnRg } from './ripgrep.js';
-import type { Collection, RgEvent, Hit, Deps } from './types.js';
+import {
+  cheapTitle,
+  fuzzyRank,
+  fzfOnPath,
+  parseRgLine,
+  readFileLines,
+  rgOnPath,
+  runRg,
+  spawnFzf,
+  spawnRg,
+} from './ripgrep.js';
+import type { Collection, Hit, Deps } from './types.js';
 
 // Re-export types so existing imports from this module continue to resolve.
-export type { Collection, RgMatchData, RgEvent, Hit, Deps } from './types.js';
+export type { Collection, RgLine, Hit, Deps } from './types.js';
 
-const VERSION = '0.3.0';
+const VERSION = '0.4.0';
+
+const RG_INSTALL = 'https://github.com/BurntSushi/ripgrep';
+const FZF_INSTALL = 'https://github.com/junegunn/fzf';
 
 function asCollections(raw: unknown): Collection[] {
   if (!Array.isArray(raw)) return [];
@@ -59,22 +74,7 @@ export function matchCollection(
   return null;
 }
 
-/** Parse rg --json stdout into an array of match events. */
-export function parseRgOutput(stdout: string): RgEvent[] {
-  return stdout
-    .split('\n')
-    .filter((line) => line.trim().length > 0)
-    .flatMap((line) => {
-      try {
-        const obj = JSON.parse(line) as RgEvent;
-        return obj.type === 'match' ? [obj] : [];
-      } catch {
-        return [];
-      }
-    });
-}
-
-/** Build the plugin definition with injected rg spawn and file-read functions. */
+/** Build the plugin definition with injected rg/fzf spawn and file-read functions. */
 export function makePluginDefinition(deps: Deps = {}): {
   definition: PluginDefinition;
   handlers: {
@@ -86,7 +86,12 @@ export function makePluginDefinition(deps: Deps = {}): {
   };
 } {
   const spawnFn = deps.spawnFn ?? spawnRg;
+  const fzfFn = deps.fzfFn ?? spawnFzf;
   const readFn = deps.readFn ?? readFileLines;
+  const installFn = deps.installFn ?? ensureTool;
+
+  const RG_SPEC = { command: 'rg', mise: 'ripgrep', brew: 'ripgrep', apt: 'ripgrep', manual: RG_INSTALL };
+  const FZF_SPEC = { command: 'fzf', mise: 'fzf', brew: 'fzf', apt: 'fzf', manual: FZF_INSTALL };
 
   const handlers = {
     async search(params: SearchParams): Promise<SearchHandlerResult> {
@@ -94,9 +99,7 @@ export function makePluginDefinition(deps: Deps = {}): {
       const collections = asCollections(params.collections);
       const collectionFilter =
         typeof params.collection === 'string' && params.collection.length > 0 ? params.collection : null;
-      const type = params.type ?? 'text';
       const limit = params.limit && params.limit > 0 ? params.limit : 20;
-      const fixedStrings = type !== 'regex';
 
       let roots: string[];
       let activeCollections: Collection[];
@@ -109,33 +112,61 @@ export function makePluginDefinition(deps: Deps = {}): {
         activeCollections = collections;
       }
 
-      if (roots.length === 0 || term.length === 0) {
+      if (roots.length === 0 || term.trim().length === 0) {
         return { hits: [] };
       }
 
-      const stdout = await runRg(spawnFn, term, roots, { fixedStrings, limit });
-      const events = parseRgOutput(stdout);
+      // 1. ripgrep for candidate lines (any token, high recall).
+      const candidates = await runRg(spawnFn, term, roots, { limit });
+      if (candidates.trim().length === 0) {
+        return { hits: [] };
+      }
 
+      // 2. fzf fuzzy-rank the candidates against the full query. Best-effort:
+      //    if fzf is missing (spawn throws) or finds no full match, keep rg's
+      //    order so a partial-recall result still surfaces.
+      let ranked = candidates;
+      let fuzzyRanked = false;
+      try {
+        const fzfOut = await fuzzyRank(fzfFn, candidates, term);
+        if (fzfOut.trim().length > 0) {
+          ranked = fzfOut;
+          fuzzyRanked = true;
+        }
+      } catch {
+        /* fzf unavailable — fall back to ripgrep order */
+      }
+
+      // 3. Map ranked lines → hits, one per file (first = best-ranked).
       const seen = new Set<string>();
       const hits: Hit[] = [];
-
-      for (const event of events) {
+      for (const line of ranked.split('\n')) {
         if (hits.length >= limit) break;
-        const filePath = event.data.path.text;
-        if (seen.has(filePath)) continue;
-        seen.add(filePath);
+        const parsed = parseRgLine(line);
+        if (!parsed) continue;
+        if (seen.has(parsed.path)) continue;
+        seen.add(parsed.path);
 
-        const matched = matchCollection(filePath, activeCollections);
+        const matched = matchCollection(parsed.path, activeCollections);
         if (!matched) continue;
 
-        const title = await cheapTitle(filePath, readFn);
-        const snippet = (event.data.lines.text || '').trim();
-
+        const title = await cheapTitle(parsed.path, readFn);
+        const snippet = parsed.text.trim();
         hits.push({
           collection: matched.collection,
           relPath: matched.relPath,
           title,
           snippet: snippet.length > 0 ? snippet : undefined,
+        });
+      }
+
+      // Assign a rank-derived score (best = 1, descending) so the UI shows a
+      // relevance badge like the other plugins — but only when fzf actually
+      // ranked; plain ripgrep order isn't relevance, so leave it score-less.
+      if (fuzzyRanked && hits.length > 0) {
+        const total = hits.length;
+        hits.forEach((hit, i) => {
+          hit.score = Number(((total - i) / total).toFixed(3));
         });
       }
 
@@ -147,24 +178,28 @@ export function makePluginDefinition(deps: Deps = {}): {
     },
 
     async setup(_params: SetupParams, log: PluginLogFn): Promise<SetupHandlerResult> {
-      const rgPresent = await rgOnPath(spawnFn);
-      if (!rgPresent) {
-        log('error', 'ripgrep (rg) not found — install it: https://github.com/BurntSushi/ripgrep');
-        return {
-          ready: false,
-          steps: [
-            {
-              step: 'verify-rg',
-              ok: false,
-              message: 'rg not on PATH — install ripgrep: https://github.com/BurntSushi/ripgrep',
-            },
-          ],
-        };
+      const steps: SetupHandlerResult['steps'] = [];
+
+      // rg is required — auto-install via a detected manager (mise/brew); a hard
+      // failure if it still can't be resolved.
+      const rg = await installFn(RG_SPEC, { install: true, log });
+      if (!rg.present) {
+        log('error', `ripgrep (rg) unavailable — ${rg.message}`);
+        steps.push({ step: 'verify-rg', ok: false, message: rg.message });
+        return { ready: false, steps };
       }
-      return {
-        ready: true,
-        steps: [{ step: 'verify-rg', ok: true }],
-      };
+      steps.push({ step: 'verify-rg', ok: true, message: rg.installed ? rg.message : undefined });
+
+      // fzf is recommended, not required: without it search degrades to plain
+      // ripgrep order, so setup still succeeds but flags a missing/uninstalled fzf.
+      const fzf = await installFn(FZF_SPEC, { install: true, log });
+      if (fzf.present) {
+        steps.push({ step: 'verify-fzf', ok: true, message: fzf.installed ? fzf.message : undefined });
+      } else {
+        log('warn', `fzf unavailable — fuzzy ranking disabled (plain ripgrep results). ${fzf.message}`);
+        steps.push({ step: 'verify-fzf', ok: false, message: fzf.message });
+      }
+      return { ready: true, steps };
     },
 
     async onEvent(): Promise<EventHandlerResult> {
@@ -173,6 +208,23 @@ export function makePluginDefinition(deps: Deps = {}): {
 
     async health(): Promise<HealthHandlerResult> {
       const rgPresent = await rgOnPath(spawnFn);
+      const fzfPresent = rgPresent ? await fzfOnPath(fzfFn) : false;
+
+      const diagnostics: HealthHandlerResult['diagnostics'] = [];
+      if (rgPresent) {
+        diagnostics.push({ level: 'ok', message: 'ripgrep ready' });
+        diagnostics.push(
+          fzfPresent
+            ? { level: 'ok', message: 'fzf ready — fuzzy ranking enabled' }
+            : {
+                level: 'warn',
+                message: `fzf not found — using plain ripgrep (no fuzzy ranking); install fzf: ${FZF_INSTALL}`,
+              },
+        );
+      } else {
+        diagnostics.push({ level: 'error', message: `ripgrep (rg) not found — install it: ${RG_INSTALL}` });
+      }
+
       return {
         ready: rgPresent,
         readiness: {
@@ -183,14 +235,7 @@ export function makePluginDefinition(deps: Deps = {}): {
           embeddingsPending: 0,
           firstSearchCost: 'instant',
         },
-        diagnostics: rgPresent
-          ? [{ level: 'ok', message: 'ripgrep ready' }]
-          : [
-              {
-                level: 'error',
-                message: 'ripgrep (rg) not found — install it: https://github.com/BurntSushi/ripgrep',
-              },
-            ],
+        diagnostics,
       };
     },
   };
@@ -200,7 +245,7 @@ export function makePluginDefinition(deps: Deps = {}): {
     kind: 'search' as const,
     version: VERSION,
     capabilities: {
-      searchTypes: ['text', 'regex'],
+      searchTypes: ['fuzzy'],
       collectionFilter: true,
       events: false,
     },

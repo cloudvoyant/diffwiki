@@ -62,17 +62,21 @@ describe('searchesForType', () => {
   it('keyword -> lex, no rerank', () => {
     expect(searchesForType('keyword', 'conan')).toEqual({ searches: [{ type: 'lex', query: 'conan' }], rerank: false });
   });
-  it('semantic -> vec, no rerank', () => {
+  it('semantic -> vec + hyde, no rerank', () => {
     expect(searchesForType('semantic', 'conan')).toEqual({
-      searches: [{ type: 'vec', query: 'conan' }],
+      searches: [
+        { type: 'vec', query: 'conan' },
+        { type: 'hyde', query: 'conan' },
+      ],
       rerank: false,
     });
   });
-  it('hybrid -> lex + vec, rerank', () => {
+  it('hybrid -> lex + vec + hyde, rerank', () => {
     expect(searchesForType('hybrid', 'conan')).toEqual({
       searches: [
         { type: 'lex', query: 'conan' },
         { type: 'vec', query: 'conan' },
+        { type: 'hyde', query: 'conan' },
       ],
       rerank: true,
     });
@@ -125,12 +129,41 @@ describe('mcpSearch', () => {
     expect(callParams.arguments.searches).toEqual([
       { type: 'lex', query: 'physics' },
       { type: 'vec', query: 'physics' },
+      { type: 'hyde', query: 'physics' },
     ]);
     expect(callParams.arguments.rerank).toBe(true);
     // qmd's `query` tool filters via `collections` (plural array); a singular
     // `collection` key is silently ignored and leaks other collections' hits.
     expect(callParams.arguments.collections).toEqual(['knowledge-base']);
     expect(callParams.arguments.collection).toBeUndefined();
+  });
+
+  it('uses caller-supplied expansions as the searches, keeping term as intent', async () => {
+    const { fetchFn, requests } = fakeMcpFetch(CANNED_ROWS);
+    await mcpSearch(
+      'http://127.0.0.1:8181',
+      {
+        term: 'add a cli subcommand',
+        type: 'hybrid',
+        limit: 5,
+        minScore: 0,
+        expansions: [
+          { type: 'lex', query: 'commander subcommand' },
+          { type: 'vec', query: 'how to add a CLI verb' },
+          { type: 'hyde', query: 'Chain .command().action() off the program.' },
+        ],
+      },
+      fetchFn,
+    );
+    const callParams = (requests[1].body as { params: { arguments: Record<string, unknown> } }).params;
+    // The provided variants become the qmd searches (not derived from the term)...
+    expect(callParams.arguments.searches).toEqual([
+      { type: 'lex', query: 'commander subcommand' },
+      { type: 'vec', query: 'how to add a CLI verb' },
+      { type: 'hyde', query: 'Chain .command().action() off the program.' },
+    ]);
+    // ...and the human term rides along as ranking intent.
+    expect(callParams.arguments.intent).toBe('add a cli subcommand');
   });
 
   it('parses structuredContent.results into QmdRows (snippet -> bestChunk)', async () => {

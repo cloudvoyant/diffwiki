@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+#MISE description="Vendor shared agents + references into every skill so each installs self-contained"
+set -euo pipefail
+
+source "${MISE_PROJECT_ROOT:-$PWD}/mise-tasks/utils"
+cd "${MISE_PROJECT_ROOT:-$PWD}"
+
+: <<'DOCUMENTATION'
+The Agent Skills open standard (agentskills.io) scopes every skill to its own
+directory: file references are relative and one level deep, and there is no
+cross-skill import. So shared behavior (the dw-* subagents) and the shared
+technical-writing guide cannot be siblings that skills point at — each skill
+must carry its own copy.
+
+Source of truth: skills/shared/{agents,references}. This task copies ALL of it
+into every skill directory: agents/ is replaced wholesale, and shared reference
+files are merged alongside each skill's own references. The vendored copies ARE
+committed, because `npx skills add <owner>/<repo>` installs straight from the
+repo — a build step does not run at install time.
+
+Edit skills/shared/, then run this task and commit. `skills:validate` (and CI)
+fail if any vendored copy drifts from its shared source.
+DOCUMENTATION
+
+SHARED="skills/shared"
+count=0
+
+while IFS= read -r skillmd; do
+  dir="$(dirname "$skillmd")"
+
+  if [ -d "$SHARED/agents" ]; then
+    rm -rf "$dir/agents"
+    cp -R "$SHARED/agents" "$dir/agents"
+  fi
+
+  if [ -d "$SHARED/references" ]; then
+    mkdir -p "$dir/references"
+    cp -R "$SHARED/references/." "$dir/references/"
+  fi
+
+  log_info "vendored shared/* -> $dir/"
+  count=$((count + 1))
+done < <(find skills -mindepth 2 -maxdepth 2 -name SKILL.md -not -path "*/shared/*")
+
+log_info "skills:build complete ($count skill(s))"

@@ -6,11 +6,10 @@ Shared back-half for every dw-learn mode. Input: normalized source notes — a s
 Extract distinct, durable knowledge; discard one-off chatter, TODOs, and anything trivially obvious.
 - A recurring problem → root cause → fix → **recipe** (add a Troubleshooting note).
 - A repeated multi-step setup or command sequence → **recipe-with-steps**.
-- A workflow or how-to → **guide**.
-- An architectural decision or structure → **system-design** / **component-design**.
+- A workflow, how-to, or architectural narrative → **guide**.
 
 ## 2. Route
-Use `dw-remember` routing: project-specific knowledge → the repo's collection; general/tool/language knowledge → `knowledge-base` or the matching language collection.
+Use `dw-remember` routing (`skills/dw-remember/references/routing.md`): route to the best-fit **existing** collection by subject — the repo's own collection for project-specific knowledge, the topic's collection (language/framework/tool/subject) for reusable knowledge — and propose a new collection when nothing fits. Do not assume a fixed structure.
 
 ## 3. Dedupe
 For each candidate, `dw-recall <keywords>`. If the wiki already covers it, mark UPDATE (or drop). Prefer UPDATE over a duplicate CREATE.

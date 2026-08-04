@@ -36,11 +36,9 @@ describe('lintArticle', () => {
     expect(findings.some((f) => f.rule === 'token-budget' && f.level === 'error')).toBe(true);
   });
 
-  it('enforces the tighter component-design budget vs system-design', () => {
+  it('applies the generic architecture fallback budget (1000–6000)', () => {
     const body = 'x'.repeat(16000) + ' [r](https://e.com)'; // ~4000 tokens
-    const component = lintArticle({ title: 'Widget', tags: ['component-design'], status: 'published', body });
-    expect(component.some((f) => f.rule === 'token-budget' && f.level === 'error')).toBe(true); // > 3000 cap
-    const system = lintArticle({ title: 'System', tags: ['system-design'], status: 'published', body });
-    expect(system.some((f) => f.rule === 'token-budget')).toBe(false); // within 2000–6000
+    const arch = lintArticle({ title: 'System', tags: ['architecture'], status: 'published', body });
+    expect(arch.some((f) => f.rule === 'token-budget')).toBe(false); // within 1000–6000
   });
 });
