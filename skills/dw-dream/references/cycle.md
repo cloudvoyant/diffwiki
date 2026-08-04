@@ -10,10 +10,10 @@ For each entry flagged for improvement:
 
 2a. **Load templates.** Run `diffwiki templates list` and read the template file for the entry's shape at `~/.diffwiki/templates/<shape>-template.md`. This gives the current authoring rules — do not rely on memory.
 
-2b. **STE + lint check.** Feed the entry body to `dw-reviewer` with both the lint findings (from Step 2) and the `references/technical-writing-guide.md` checklist. The reviewer checks template conformance AND Simple Technical English in one pass.
+2b. **STE + lint check.** Dispatch `dw-reviewer` with the entry body, the lint findings (from Step 2), and the `references/technical-writing-guide.md` checklist. The reviewer checks template conformance AND Simple Technical English in one pass.
 
 2c. **Correctness validation.** Before dispatching `dw-author`, check that the entry's code examples, CLI commands, and referenced files/APIs are still valid:
-   - Run any CLI command shown in the entry; if it errors, flag it.
+   - Run any CLI command shown in the entry that is read-only and safe; if it errors, flag it. Skip commands that modify state or could cause side effects — flag them for manual review instead.
    - Check any file paths referenced still exist.
    - Flag anything that looks stale or broken — note it in the proposal rather than silently rewriting.
 

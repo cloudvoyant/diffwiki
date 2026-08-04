@@ -9,7 +9,7 @@ Maintain the whole wiki in a bounded, reversible pass. Read `references/cycle.md
 
 ## Steps
 
-1. **Scope + budget.** Default to `-c all`; allow a single collection. Cap the pass. If `--dry-run` is passed, write all proposals to `~/.diffwiki/dream/<YYYYMMDD-HHMMSS>-proposal.md` instead of calling the CLI — print the path and stop after reporting.
+1. **Scope + budget.** Default to `-c all`; allow a single collection. Cap the pass (e.g. up to N improvements + N merges); report anything skipped. If `--dry-run` is passed, write all proposals to `~/.diffwiki/dream/<YYYYMMDD-HHMMSS>-proposal.md` instead of calling the CLI — print the path and stop after reporting.
 
 2. **Gather signal.** Optionally run `/dw-learn` (capture phase) first so recent work is in the transcripts collection, then:
    ```bash

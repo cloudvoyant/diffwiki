@@ -35,7 +35,7 @@ Orient the user to what diffwiki can do. Cover both the CLI and the installed ag
 
    For full flag reference: `diffwiki <command> --help`.
 
-3. **Available dw-* skills.** Run `diffwiki templates list` to show the current template shapes, then list the installed skills:
+3. **Available dw-* skills.** List the installed skills (use `diffwiki templates list` separately to see available authoring shapes):
 
    | Skill | Purpose | Trigger phrases |
    |---|---|---|
