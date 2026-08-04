@@ -41,4 +41,25 @@ describe('lintArticle', () => {
     const arch = lintArticle({ title: 'System', tags: ['architecture'], status: 'published', body });
     expect(arch.some((f) => f.rule === 'token-budget')).toBe(false); // within 1000–6000
   });
+
+  it('collection-index: passes with bullet links and no refs section', () => {
+    const findings = lintArticle({
+      title: 'My Collection',
+      tags: ['collection-index', 'typescript'],
+      status: 'published',
+      body: '## Topic\n\n- [Foo](./foo.md) — does foo.\n- [Bar](./bar.md) — does bar.\n',
+    });
+    expect(findings.filter((f) => f.level === 'error')).toHaveLength(0);
+    expect(findings.map((f) => f.rule)).not.toContain('no-references');
+  });
+
+  it('collection-index: errors when body exceeds 500-tok max', () => {
+    const findings = lintArticle({
+      title: 'Big Index',
+      tags: ['collection-index'],
+      status: 'published',
+      body: '- [x](./x.md) — desc.\n'.repeat(100),
+    });
+    expect(findings.some((f) => f.rule === 'token-budget')).toBe(true);
+  });
 });

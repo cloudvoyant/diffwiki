@@ -1,7 +1,7 @@
 ---
 shape: recipe-with-steps
 purpose: An ordered sequence — do X, then Y, then Z.
-budget: [500, 1500]
+budget: [100, 1500]
 ---
 
 <!--

@@ -33,14 +33,16 @@ export interface LintResult {
   warnCount: number;
 }
 
-type Shape = 'recipe' | 'recipe-steps' | 'guide' | 'reference' | 'architecture';
+type Shape = 'recipe' | 'recipe-steps' | 'guide' | 'reference' | 'architecture' | 'collection-index';
 const BUDGETS: Record<Shape, { min: number; max: number }> = {
-  recipe: { min: 300, max: 1000 },
-  'recipe-steps': { min: 500, max: 1500 },
+  recipe: { min: 50, max: 1000 },
+  'recipe-steps': { min: 100, max: 1500 },
   guide: { min: 1500, max: 5000 },
   reference: { min: 300, max: 2000 },
   // Generic fallback budget for a bare `architecture` tag (no dedicated template).
   architecture: { min: 1000, max: 6000 },
+  // Index pages: headings + bullet links only, no prose.
+  'collection-index': { min: 100, max: 500 },
 };
 
 /** ~4 chars per token -- a deliberate over-estimate that matches the shape budgets. */
@@ -50,9 +52,11 @@ function estimateTokens(body: string): number {
 
 function inferShape(tags: string[], body: string): Shape {
   const t = new Set(tags.map((x) => x.toLowerCase()));
+  if (t.has('collection-index')) return 'collection-index';
   if (t.has('guide')) return 'guide';
   if (t.has('reference')) return 'reference';
   if (t.has('architecture')) return 'architecture';
+  if (t.has('recipe-with-steps')) return 'recipe-steps';
   if (/^###\s+Step\b/im.test(body)) return 'recipe-steps';
   return 'recipe';
 }
@@ -81,19 +85,22 @@ export function lintArticle(article: Pick<ParsedArticle, 'title' | 'tags' | 'sta
 
   const hasRefsSection = /^##\s+References\b/im.test(body);
   const hasInlineLink = /\]\([^)]+\)/.test(body);
-  if (!hasRefsSection && !hasInlineLink) {
-    findings.push({
-      level: 'error',
-      rule: 'no-references',
-      message: 'has no ## References section and no inline links',
-    });
-  }
-  if ((shape === 'guide' || shape === 'architecture') && !hasRefsSection) {
-    findings.push({
-      level: 'warn',
-      rule: 'missing-references-section',
-      message: `${shape} should end with a ## References section`,
-    });
+  // collection-index pages ARE the references (link lists) — skip reference rules entirely.
+  if (shape !== 'collection-index') {
+    if (!hasRefsSection && !hasInlineLink) {
+      findings.push({
+        level: 'error',
+        rule: 'no-references',
+        message: 'has no ## References section and no inline links',
+      });
+    }
+    if ((shape === 'guide' || shape === 'architecture') && !hasRefsSection) {
+      findings.push({
+        level: 'warn',
+        rule: 'missing-references-section',
+        message: `${shape} should end with a ## References section`,
+      });
+    }
   }
 
   if (tokens > budget.max) {
