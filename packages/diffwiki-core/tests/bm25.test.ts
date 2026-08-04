@@ -44,6 +44,18 @@ describe('rankDocs (shared BM25 scorer)', () => {
     }
   });
 
+  it('normalizes scores to (0, 1] with the top hit at 1', () => {
+    const r = rankDocs('git', corpus);
+    expect(r.length).toBeGreaterThan(1);
+    expect(r[0].score).toBe(1); // top hit normalized to 1
+    for (const d of r) {
+      expect(d.score ?? 0).toBeGreaterThan(0);
+      expect(d.score ?? 0).toBeLessThanOrEqual(1);
+    }
+    // a weaker match ranks strictly below the top
+    expect(r[r.length - 1].score ?? 0).toBeLessThan(1);
+  });
+
   it('empty query returns every doc unranked (browse-all)', () => {
     const r = rankDocs('', corpus);
     expect(r).toHaveLength(3);

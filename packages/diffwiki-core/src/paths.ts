@@ -19,6 +19,11 @@ export function collectionsDir(): string {
   return path.join(resolveHome(), 'collections');
 }
 
+/** Where authoring templates live (user-overridable), seeded by `diffwiki templates init`. */
+export function templatesDir(): string {
+  return path.join(resolveHome(), 'templates');
+}
+
 export function collectionDir(name: string): string {
   return path.join(collectionsDir(), name);
 }

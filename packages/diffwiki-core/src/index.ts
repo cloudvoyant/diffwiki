@@ -14,6 +14,7 @@ export * from './errors';
 
 // Configuration and paths
 export * from './paths';
+export { seedTemplates, listTemplateShapes, listTemplates, type SeedResult, type TemplateInfo } from './templates';
 export * from './config';
 
 // Registry and collections
@@ -63,6 +64,7 @@ export {
   installPlugin,
   registerPlugin,
   removePlugin,
+  repairPlugins,
   listPlugins,
   ensurePluginRoot,
   emitPluginEvent,

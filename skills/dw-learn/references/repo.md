@@ -21,11 +21,12 @@ Learn durable knowledge from a code repository (this repo, another local path, o
 Capture, terse and factual: what the project is and its architecture; how to set it up and run it; key conventions and gotchas; notable patterns. This is raw material for mining — it is NOT a session transcript and is NOT written to the `transcripts` collection.
 
 ## 4. Route
+See `skills/dw-remember/references/routing.md` — route to the best-fit existing collection by subject; don't assume a fixed structure.
 - The user's OWN repo → its diffwiki collection.
-- An EXTERNAL repo → `knowledge-base`, or a collection named for the repo if the user wants a dedicated one (`diffwiki collection create <repo-name>`). Tag external entries with the repo name and `external`.
+- An EXTERNAL repo → the best-fit topic collection if one exists, else a collection named for the repo (`diffwiki collection create <repo-name>`). Tag external entries with the repo name and `external`.
 
 ## 5. Mine
-Run `references/mine.md` over the extracted notes: architecture → system/component-design; setup/run → recipe-with-steps; conventions/gotchas → guide or recipe. Dedupe via `dw-recall`, draft via `dw-remember`.
+Run `references/mine.md` over the extracted notes: architecture/how-to → guide; setup/run → recipe-with-steps; conventions/gotchas → guide or recipe. Dedupe via `dw-recall`, draft via `dw-remember`.
 
 ## Safety
 - Read-only on external repos; clone shallow; bound the size; clean up temp clones.

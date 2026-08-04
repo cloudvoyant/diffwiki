@@ -144,11 +144,19 @@ Opens a collection directory (`collection edit`, default: the current repo colle
 
 ### `diffwiki lint [-c current|all|<names>]`
 
-Lints articles against the five template shapes — checks frontmatter, token budgets, reference presence, lingering `draft` status, and `diffwiki-template` tag leaks. `-c` selects scope: `current` (the cwd's collection, default), `all`, or a comma-separated list. Skips `system` collections. Exits non-zero if any error-level finding exists. (The `dw-lint` agent skill wraps this.)
+Lints articles against the template shapes — checks frontmatter, token budgets, reference presence, lingering `draft` status, and `diffwiki-template` tag leaks. `-c` selects scope: `current` (the cwd's collection, default), `all`, or a comma-separated list. Skips `system` collections. Exits non-zero if any error-level finding exists. (The `dw-lint` agent skill wraps this.)
 
-### `diffwiki doctor`
+### `diffwiki context show | set <names> | add <names> | remove <names>`
 
-Diagnoses configuration: home/registry presence, collection paths, and default-collection validity. It also checks search-plugin readiness — whether `defaultSearch` names an installed engine, and each enabled plugin's `health` (tool installed, index built, models present, first-search cost). Exits non-zero if any error-level issue is found.
+Manages the recall/search context — `context.collections` in the repo's `diffwiki.yaml` (the collections `dw-recall` filters to by default). Edits the YAML in place, preserving your other keys and comments (creating the file if absent). Use this instead of hand-editing `diffwiki.yaml`; `<names>` is comma-separated.
+
+### `diffwiki templates init | list [--json]`
+
+Manages the authoring templates in `~/.diffwiki/templates` (used by the `dw-*` skills). `init` seeds them from the CLI's bundled copies (never overwriting your own). `list` prints each template's shape, purpose, and token budget — read from that template's frontmatter, so the set is self-describing and customizable (add a `*-template.md` with `shape:`/`purpose:`/`budget:` frontmatter and it shows up).
+
+### `diffwiki doctor [--fix]`
+
+Diagnoses configuration: home/registry presence, collection paths, and default-collection validity. It also checks search-plugin readiness — whether `defaultSearch` names an installed engine, and each enabled plugin's `health` (tool installed, index built, models present, first-search cost). Exits non-zero if any error-level issue is found. `--fix` re-provisions enabled plugins, auto-installing missing tools (e.g. `rg`/`fzf`).
 
 ## Configuration
 

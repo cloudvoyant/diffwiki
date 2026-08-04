@@ -13,6 +13,7 @@ export {
   installPlugin,
   registerPlugin,
   removePlugin,
+  repairPlugins,
   listPlugins,
   ensurePluginRoot,
   type InstallOutcome,

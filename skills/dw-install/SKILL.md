@@ -1,29 +1,20 @@
 ---
 name: dw-install
-description: Bootstrap diffwiki for the agent skills. Triggers on "dw install", "set up diffwiki", "install diffwiki", or when a dw-* skill reports diffwiki is missing. Installs the diffwiki CLI if absent, seeds ~/.diffwiki/templates, and offers to initialize a wiki.
+description: Install the diffwiki CLI. Triggers on "dw install", "set up diffwiki", "install diffwiki", or when a dw-* skill reports diffwiki is missing. Installs the diffwiki CLI if absent and offers to initialize a wiki.
 ---
 
 # dw-install
 
-Ensure the `diffwiki` CLI and the shared authoring assets are present. Run this when a `dw-*` skill can't find `diffwiki`.
+Ensure the `diffwiki` CLI is present. Run this when a `dw-*` skill can't find `diffwiki`. This skill's only job is the CLI — templates and wiki setup belong to `/dw-init`.
 
 ## Steps
 
 1. **Detect.** `diffwiki --version`. If it prints a version, skip to step 3.
 2. **Install the CLI.** `npm i -g diffwiki` (fallback: `pnpm add -g diffwiki`). Re-run `diffwiki --version`. If it still fails, tell the user to install Node ≥ 20 / npm and stop.
-3. **Seed templates.** For each file in this skill's `assets/templates/` and `assets/taxonomy.md`, copy it into `~/.diffwiki/templates/` ONLY if the destination does not already exist (user overrides win):
-   ```bash
-   mkdir -p ~/.diffwiki/templates
-   for f in "$SKILL_DIR"/assets/templates/*.md "$SKILL_DIR"/assets/taxonomy.md; do
-     dest=~/.diffwiki/templates/"$(basename "$f")"
-     [ -e "$dest" ] || cp "$f" "$dest"
-   done
-   ```
-   (`$SKILL_DIR` = this skill's directory.)
-4. **Health check.** `diffwiki doctor`; report any ✖.
-5. **Offer setup.** Suggest `/dw-init` to create a wiki, and confirm the other `dw-*` skills are ready.
+3. **Health check.** `diffwiki doctor`; report any ✖.
+4. **Offer setup.** Suggest `/dw-init` to create a wiki and seed the authoring templates (`~/.diffwiki/templates`, via `diffwiki templates init`).
 
 ## Rules
-- Never overwrite existing `~/.diffwiki/templates/*` — user templates win.
+
+- Install ONLY the global `diffwiki` package. Templates ship with the CLI and are seeded by `/dw-init` (or `diffwiki templates init`) — not here.
 - Idempotent; safe to re-run.
-- Install ONLY the global `diffwiki` package; touch nothing else.

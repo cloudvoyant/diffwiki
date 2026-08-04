@@ -4,7 +4,7 @@ Capture your tool's PAST sessions scoped to the current project, then mine them.
 
 1. **Ensure the store.** If `diffwiki collection list` lacks `transcripts`, create it hidden: `diffwiki collection create transcripts --hidden`.
 2. **Identify the project.** Repo name or cwd basename → `<project>`.
-3. **Locate your tool's transcripts** (mirrors `../../shared/transcript-hints.md`):
+3. **Locate your tool's transcripts:**
 
    | Tool | Store | project match |
    |---|---|---|

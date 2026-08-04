@@ -163,7 +163,17 @@ describe('search handler warm/cold routing', () => {
     });
     const result = await handlers.search({ term: 'foo', type: 'keyword', collections: [], limit: 20 }, noopLog);
     expect(result.hits).toEqual([
-      { collection: 'kb', relPath: 'a.md', title: 'Warm A', snippet: 'warm snippet', score: 0.9, docid: 'w1' },
+      {
+        collection: 'kb',
+        relPath: 'a.md',
+        title: 'Warm A',
+        snippet: 'warm snippet',
+        rawChunk: 'warm snippet',
+        cleanedChunk: 'warm snippet',
+        line: undefined,
+        score: 0.9,
+        docid: 'w1',
+      },
     ]);
     // no cold search/vsearch/query invocation
     const searchCalls = qmdMock.__getCalls().filter((c) => ['search', 'vsearch', 'query'].includes(c[1]));
@@ -179,7 +189,17 @@ describe('search handler warm/cold routing', () => {
     });
     const result = await handlers.search({ term: 'foo', type: 'keyword', collections: [], limit: 20 }, noopLog);
     expect(result.hits).toEqual([
-      { collection: 'kb', relPath: 'b.md', title: 'Cold B', snippet: 'cold snippet', score: 0.5, docid: 'c1' },
+      {
+        collection: 'kb',
+        relPath: 'b.md',
+        title: 'Cold B',
+        snippet: 'cold snippet',
+        rawChunk: 'cold snippet',
+        cleanedChunk: 'cold snippet',
+        line: undefined,
+        score: 0.5,
+        docid: 'c1',
+      },
     ]);
     const searchCalls = qmdMock.__getCalls().filter((c) => c[1] === 'search');
     expect(searchCalls).toHaveLength(1);

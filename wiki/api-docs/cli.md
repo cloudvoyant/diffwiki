@@ -234,17 +234,21 @@ diffwiki search index --embed
 Search articles via the resolved search engine, falling back to native BM25 when no engine is set or the engine fails. Prints one tab-separated line per hit: `score  collection  title  path  [snippet]`. Short alias: `diffwiki search q`.
 
 ```
-diffwiki search query [--engine <name>] [-c <name[,...]>] [-t <type>] [term]
+diffwiki search query [--engine <name>] [-c <name[,...]>] [-t <type>] [--lex <q>]… [--vec <q>]… [--hyde <q>]… [term]
 ```
 
 - `--engine <name>` — search engine/plugin. Default: config `defaultSearch`, else `native`.
 - `-c, --collection <names>` — limit to a collection, or a comma-separated set (`-c notes,knowledge-base`). `system`-audience collections/articles are excluded unless named here or `showSystem` is set.
 - `-t, --type <type>` — search type (engine-defined, e.g. `keyword|semantic|hybrid`).
-- `[term]` — search term. Default: `""` (empty term browses all articles unranked).
+- `--lex <q>` / `--vec <q>` / `--hyde <q>` — **pre-expanded query variants** (each repeatable). When supplied, an upstream LLM has done the query expansion and these typed sub-queries are handed straight to the engine (the positional `term` becomes ranking *intent*). `lex` = BM25 keywords, `vec` = a natural-language question, `hyde` = a hypothetical answer passage. Used by the `dw-recall` agent.
+- `[term]` — search term / ranking intent. Default: `""` (empty term browses all articles unranked).
 
 ```
 diffwiki search query --engine diffwiki-qmd -t semantic "vector databases"
 diffwiki search q "vector databases"
+# agent-driven expansion:
+diffwiki search q "add a cli subcommand" --lex "commander subcommand" \
+  --vec "how to add a CLI verb" --hyde "Chain .command().action() off the program factory."
 ```
 
 ## Plugins
@@ -424,11 +428,54 @@ diffwiki config get <key>
 diffwiki config get defaultCollection
 ```
 
+## Context
+
+Manage the recall/search context — `context.collections` in the repo's `diffwiki.yaml`, the collections `dw-recall` filters to by default. Edits the YAML in place, **preserving your other keys and comments** (and creating the file if absent). Prefer this over hand-editing `diffwiki.yaml`.
+
+### `context show`
+
+Print the current recall-context collections (one per line).
+
+```
+diffwiki context show
+```
+
+### `context set <names>` / `context add <names>` / `context remove <names>`
+
+Replace, add to, or remove from the context list. `<names>` is comma-separated. Names not in `diffwiki collection list` produce a soft warning.
+
+```
+diffwiki context set this-repo,knowledge-base
+diffwiki context add python
+diffwiki context remove old-collection
+```
+
+## Templates
+
+Manage the authoring templates in `~/.diffwiki/templates` (used by the `dw-*` skills). Templates ship bundled with the CLI; each carries its shape/purpose/budget in frontmatter, so the set is self-describing and user-customizable (drop a `*-template.md` with `shape:`/`purpose:`/`budget:` frontmatter to add one).
+
+### `templates init`
+
+Seed `~/.diffwiki/templates` from the CLI's bundled templates. **Never overwrites** an existing file — your own templates win. Idempotent.
+
+```
+diffwiki templates init
+```
+
+### `templates list`
+
+List available templates with their shape, purpose, and token budget (read from each template's frontmatter). This is the discovery API skills use instead of hard-coding shapes.
+
+```
+diffwiki templates list          # shape · purpose · [budget]
+diffwiki templates list --json   # [{ shape, purpose, budget, file }]
+```
+
 ## Diagnostics
 
 ### `lint`
 
-Lint articles against the five template shapes — frontmatter, token budgets, reference presence, lingering `draft` status, and `diffwiki-template` tag leaks. Skips `system` collections. Exits non-zero when any error-level finding exists.
+Lint articles against the template shapes — frontmatter, token budgets, reference presence, lingering `draft` status, and `diffwiki-template` tag leaks. Skips `system` collections. Exits non-zero when any error-level finding exists.
 
 ```
 diffwiki lint [-c current|all|<names>]
@@ -441,11 +488,12 @@ diffwiki lint [-c current|all|<names>]
 Diagnose configuration issues: home directory, registry, collection paths, default collection, and every registered plugin's readiness. Exits non-zero when any diagnostic is an error.
 
 ```
-diffwiki doctor
+diffwiki doctor [--fix]
 ```
 
-No options. Example:
+- `--fix` — attempt repairs: re-provision every enabled plugin (re-runs each plugin's setup), which auto-installs missing tools (e.g. `rg`/`fzf` via a detected package manager — mise, then Homebrew) before re-diagnosing.
 
 ```
 diffwiki doctor
+diffwiki doctor --fix
 ```

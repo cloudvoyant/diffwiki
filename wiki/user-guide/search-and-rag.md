@@ -19,7 +19,7 @@ The built-in engine is a zero-dependency, cross-platform full-text search implem
 
 Search engines are subprocess plugins that speak a small JSON-over-stdio protocol, so an engine can be written in any language and swapped in without touching the host. Two official plugins ship in the monorepo:
 
-- **`diffwiki-ripgrep`** — instant literal and regex keyword search via the `rg` binary. It needs no index and no models; its only setup is verifying `rg` is on PATH. Types: `text` and `regex`.
+- **`diffwiki-ripgrep`** — instant, index-free `fuzzy` search combining `rg` (ripgrep, for high-recall candidate lines) and `fzf` (for typo-tolerant, word-order-independent ranking). No index, no models. `rg` is required; `fzf` is recommended — without it, search still works but falls back to plain ripgrep ordering. Type: `fuzzy`.
 - **`diffwiki-qmd`** — keyword, semantic, and hybrid search backed by the `qmd` CLI, with a resident embedding-model daemon for low-latency semantic queries. Types: `keyword`, `semantic`, and `hybrid`.
 
 Install a plugin and make it the default engine:
@@ -30,17 +30,32 @@ diffwiki plugin install diffwiki-qmd
 diffwiki config set defaultSearch diffwiki-qmd:hybrid
 ```
 
-The value passed to `config set defaultSearch` is `<engine>[:<type>]`, where the engine name is the plugin name — for example `diffwiki-qmd:hybrid` or `diffwiki-ripgrep:regex`. `plugin install` provisions the plugin end-to-end and, unless you pass `--no-default`, sets it as the default engine. List what is installed and available with `diffwiki plugin list`.
+The value passed to `config set defaultSearch` is `<engine>[:<type>]`, where the engine name is the plugin name — for example `diffwiki-qmd:hybrid` or `diffwiki-ripgrep:fuzzy`. `plugin install` provisions the plugin end-to-end and, unless you pass `--no-default`, sets it as the default engine. List what is installed and available with `diffwiki plugin list`.
 
 ## Querying
 
 ```bash
 diffwiki search query "static export"                 # uses the resolved default engine
 diffwiki search query -c user-guide "search"          # limit to a single collection
-diffwiki search query --engine diffwiki-ripgrep -t regex "config-.*"   # pick engine + type
+diffwiki search query --engine diffwiki-ripgrep -t fuzzy "static export config"   # pick engine + type
 ```
 
-Each result line is `score  collection  title  path  [snippet]`. The score scale is engine-dependent, so use it to eyeball a cutoff within a single result set rather than to compare across engines.
+Each result line is `score  collection  title  path  [snippet]`. For qmd-backed engines the snippet is the best-matching chunk, sanitized to readable plain text — markdown structure (code fences, headings, emphasis, links) is stripped and the text is collapsed to a single line — so results stay legible in the terminal. The score scale is engine-dependent, so use it to eyeball a cutoff within a single result set rather than to compare across engines.
+
+### Query expansion (for agents)
+
+Semantic/hybrid search quality on short or vague queries depends heavily on *query expansion*. If you have a capable LLM in the loop (e.g. an agent running `dw-recall`), you can expand the query yourself and pass typed variants — far better than the engine's small built-in expander:
+
+```bash
+diffwiki search query "add a cli subcommand" \
+  --lex "commander subcommand add-command" \
+  --vec "how do I add a new CLI verb in a TypeScript Commander app" \
+  --hyde "Add a subcommand by chaining .command().action() off the program factory."
+```
+
+The positional term becomes the ranking *intent*; the repeatable `--lex` / `--vec` / `--hyde` flags are the actual sub-queries. Omit them for a plain search.
+
+> The browser search UI can't do this — it has no LLM — so short-query results in the published site are weaker than agent-driven recall. See below.
 
 ## Engine routing and automatic fallback
 
@@ -55,11 +70,15 @@ diffwiki search index            # rebuild the active plugin's index
 diffwiki search index --embed    # also build vector embeddings (may download models)
 ```
 
-The native engine has no index to build — it reads collections live — so `diffwiki search index` reports nothing to index when native search is active. Run `diffwiki doctor` to check plugin readiness (tool installed, models present, index built, embeddings pending).
+The native engine has no index to build — it reads collections live — so `diffwiki search index` reports nothing to index when native search is active. Run `diffwiki doctor` to check plugin readiness (tool installed, models present, index built, embeddings pending), or `diffwiki doctor --fix` to re-provision plugins and auto-install missing tools.
+
+Installing a plugin (`diffwiki plugin install …`) provisions its tools automatically where it can: `diffwiki-qmd` pulls the `qmd` binary in as an npm dependency (models download on first use or with `--embed`), and `diffwiki-ripgrep` auto-installs `rg` and `fzf` via a detected package manager (mise, then Homebrew; on Debian/Ubuntu it prints the `apt` command rather than running `sudo`).
 
 ## Search in the published site
 
 When you [publish](/user-guide/sharing), diffwiki ships the BM25 index as a static asset. The site's `/search` page runs the same BM25 ranking client-side, with no server — the scorer runs in the browser over the shipped index. That makes the published wiki's search identical to the local experience, and it works on any static host.
+
+> **Parity note.** Neither the published static site nor the live wiki UI has an LLM available, so they can't do the agent-style query expansion described above — they search the raw query. For plugin engines this means **short/terse queries rank better through agent recall (`dw-recall`) than through the web UI**. Normal, descriptive queries are unaffected. Full UI parity is tracked as future work (it needs a query-expansion step on the server side).
 
 ## Memory-agnostic: swap backends without losing content
 

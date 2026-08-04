@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+#MISE description="Validate agent skills: vendor drift, SKILL.md frontmatter, and self-containment"
+set -euo pipefail
+
+source "${MISE_PROJECT_ROOT:-$PWD}/mise-tasks/utils"
+cd "${MISE_PROJECT_ROOT:-$PWD}"
+
+: <<'DOCUMENTATION'
+Fails (exit 1) on any of:
+  1. A skill missing a shared file, or holding a copy that drifts from
+     skills/shared/ (run skills:build).
+  2. A SKILL.md whose `name` does not match its directory, or with no description.
+  3. A markdown reference that escapes the skill root (`](../...)`) — skills must
+     be self-contained to install one folder at a time via `npx skills`.
+If the optional `skills-ref` validator is on PATH, it runs it per skill too.
+CI runs this task, so CI fails when skills fail to validate.
+DOCUMENTATION
+
+SHARED="skills/shared"
+fail=0
+
+# Every file under skills/shared, path-relative to SHARED (agents/... references/...).
+shared_files() { (cd "$SHARED" && find agents references -type f 2>/dev/null); }
+
+while IFS= read -r skillmd; do
+  dir="$(dirname "$skillmd")"
+  base="$(basename "$dir")"
+
+  # 1. Vendor drift: every shared file must be present and identical in the skill.
+  while IFS= read -r rel; do
+    if ! diff "$SHARED/$rel" "$dir/$rel" >/dev/null 2>&1; then
+      log_error "$dir/$rel is missing or differs from $SHARED/$rel (run 'mise run skills:build' and commit)"
+      fail=1
+    fi
+  done < <(shared_files)
+
+  # 2. Frontmatter: name matches directory, description present.
+  name="$(awk -F': *' '/^name:/{gsub(/["'"'"' ]/,"",$2); print $2; exit}' "$skillmd")"
+  [ "$name" = "$base" ] || {
+    log_error "$skillmd: name '$name' does not match directory '$base'"
+    fail=1
+  }
+  grep -q '^description:' "$skillmd" || {
+    log_error "$skillmd: missing 'description' frontmatter"
+    fail=1
+  }
+done < <(find skills -mindepth 2 -maxdepth 2 -name SKILL.md -not -path "*/shared/*")
+
+# 3. Self-containment: no markdown reference may point outside the skill root.
+if grep -rEn '\]\(\s*\.\./' skills --include='*.md' | grep -v "/shared/"; then
+  log_error "markdown reference escapes the skill root — skills must be self-contained"
+  fail=1
+fi
+
+# 4. Optional external validator.
+if command -v skills-ref >/dev/null 2>&1; then
+  while IFS= read -r d; do
+    skills-ref validate "$d" || fail=1
+  done < <(find skills -mindepth 2 -maxdepth 2 -name SKILL.md -not -path "*/shared/*" -exec dirname {} \;)
+else
+  log_warn "skills-ref not on PATH; skipped external spec validation"
+fi
+
+[ "$fail" -eq 0 ] || {
+  log_error "skills:validate FAILED"
+  exit 1
+}
+log_info "skills:validate passed"

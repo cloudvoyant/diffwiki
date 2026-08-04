@@ -150,8 +150,7 @@ function Node({ node, inherit, depth }: { node: TreeNode; inherit: Inherit; dept
 }
 
 function BranchNode({ node, inherit, depth }: { node: TreeNode; inherit: Inherit; depth: number }) {
-  // Top-level collections start expanded so their articles are visible by default;
-  // nested folders stay collapsed. (Per-user sidebar state will be remembered later.)
+  // Top-level collection nodes start expanded; nested folders start collapsed.
   const [open, setOpen] = useState(depth === 0);
   const label = node.title ?? node.name;
   const { showLock, showDraft } = markers(node, inherit);

@@ -20,6 +20,8 @@ export interface SearchResponse {
    * instead, the captured engine error message. Undefined on success.
    */
   engineError?: string;
+  /** The engine that produced these hits (e.g. `diffwiki-qmd`, `native`). Shown in the inspection popover. */
+  engine?: string;
 }
 
 export interface SearchModesResponse {
@@ -56,7 +58,7 @@ export const runSearch = createServerFn({ method: 'GET' })
     const tookMs = Date.now() - started;
 
     const results = outcome.hits.map((hit) => hitToResult(hit, collections));
-    return { q: data.q, results, tookMs, engineError: outcome.error };
+    return { q: data.q, results, tookMs, engineError: outcome.error, engine: outcome.engine };
   });
 
 /**

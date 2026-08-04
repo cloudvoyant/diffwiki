@@ -32,9 +32,9 @@ The native engine is a zero-dependency, cross-platform full-text search implemen
 | `collection` | ×1.5 |
 | `body` | ×1.0 |
 
-IDF is computed per query term across the corpus; per-field term frequencies are summed with their weights into a single document score. Results are returned sorted by score descending. An empty term returns all articles unranked (browse-all behaviour). No shell commands or OS tools are involved, so it works cross-platform with no external dependencies.
+IDF is computed per query term across the corpus; per-field term frequencies are summed with their weights into a single raw document score. The raw scores are then **normalized to (0, 1] by dividing by the top score** (best hit = 1, others proportional), so native results show a 0-1 relevance badge consistent with the plugin engines. Division-by-max is used rather than min-max so a dominant top hit stays near 1 while weak matches stay low. Results are returned sorted by score descending. An empty term returns all articles unranked (browse-all behaviour). No shell commands or OS tools are involved, so it works cross-platform with no external dependencies.
 
-The native engine score is an unbounded weighted BM25 sum — there is no fixed scale; relative ordering within a result set is what matters.
+The normalized scale is **per-result-set, not comparable across queries** (a top hit is always 1) — the same caveat as every engine's score. This normalization lives in the shared `rankDocs` scorer, so the CLI and the static browser search stay identical.
 
 ## diffwiki-qmd Plugin
 
@@ -43,8 +43,18 @@ The native engine score is an unbounded weighted BM25 sum — there is no fixed 
 | diffwiki type | Cold CLI subcommand | Warm `searches` + `rerank` |
 |---|---|---|
 | `keyword` | `qmd search` | `[{type:'lex',query}]`, `rerank:false` |
-| `semantic` | `qmd vsearch` | `[{type:'vec',query}]`, `rerank:false` |
-| `hybrid` | `qmd query` | `[{type:'lex',query},{type:'vec',query}]`, `rerank:true` |
+| `semantic` | `qmd vsearch` | `[{type:'vec',query},{type:'hyde',query}]`, `rerank:false` |
+| `hybrid` | `qmd query` | `[{type:'lex',query},{type:'vec',query},{type:'hyde',query}]`, `rerank:true` |
+
+### Query Expansion and Parity
+
+qmd's best results come from **query expansion**: before searching, its cold CLI runs a small local generation model (`qmd-query-expansion-1.7B`) to rewrite a query into typed variants — `lex` (BM25 keywords), `vec` (a semantic question), and `hyde` (a hypothetical answer passage) — then fuses and reranks across all of them. This matters most for short or vague queries.
+
+The warm daemon's MCP `query` tool does **not** expose this expansion — it only accepts caller-supplied `searches` and skips qmd's `expandQuery()` step. To recover most of the quality, the plugin always appends a `hyde` variant (see the table above) so the warm path isn't reranking a thin candidate set.
+
+Callers can also **supply their own expansion**, which is strictly better than qmd's 1.7B model when an LLM is already in the loop. `QueryOptions.expansions` (CLI: repeatable `--lex` / `--vec` / `--hyde` on `diffwiki search query`) flows through the plugin protocol as `SearchParams.expansions`; when present, those variants become the qmd `searches` (warm) or a structured `qmd query` document (cold), and the bare term is passed only as ranking intent. The `dw-recall` skill uses this: the agent expands the query itself before searching.
+
+> **UI parity gap.** The browser search UI (and static exports) have no LLM, so they can't do agent-driven expansion — they send the raw query and rely on qmd's built-in `hyde` approximation. As a result, **short/terse queries rank noticeably better through agent recall (`dw-recall`) than through the web UI.** Closing this fully needs either an upstream qmd daemon expand endpoint or a resident expansion model in the wiki server; until then, the UI is "good for normal queries, weaker on terse ones."
 
 ### Index Storage and Staleness
 
@@ -62,22 +72,26 @@ If the daemon probe (`GET /health`) fails, or warm mode is disabled (`DIFFWIKI_Q
 
 qmd scores results on a 0–1 scale for vector searches; lexical scores are BM25-based and unbounded. Hybrid mode applies a reranker that normalises to 0–1.
 
+Each hit's `bestChunk` is the raw markdown source of the best-matching chunk. Before it is returned as the hit `snippet`, `rowsToHits` runs it through `sanitizeSnippet` (`packages/diffwiki-qmd/src/snippet.ts`), which strips markdown structure — code fences, heading markers, emphasis, links, blockquotes, table pipes, and embedded newlines — down to plain prose, collapses whitespace to a single line, and truncates to ~200 characters. Because this happens in the shared `rowsToHits` mapper, both the cold CLI path and the warm MCP path emit clean, readable snippets to every consumer (CLI, wiki UI).
+
 ### Event Handling
 
 `diffwiki-qmd` sets `capabilities.events: true` and implements the `event` op by running `qmd update --index diffwiki -c <collection>` on each mutation. This keeps the keyword index current without a full reindex. Events are best-effort; a dropped event triggers a lazy rebuild on the next search.
 
 ## diffwiki-ripgrep Plugin
 
-`diffwiki-ripgrep` provides instant literal and regex search via the `rg` (ripgrep) binary. It needs no index, no embedding models, and no setup beyond `rg` being available on PATH. Its `setup` op only verifies `rg --version`. `index` and `onEvent` are no-ops.
+`diffwiki-ripgrep` provides instant, index-free search by combining two CLI tools: `rg` (ripgrep) and `fzf`. It has a single search type, **`fuzzy`**. There is no index and no embedding model.
 
-| diffwiki type | rg flag |
-|---|---|
-| `text` (default) | `--fixed-strings` |
-| `regex` | _(no flag — rg's default)_ |
+The search runs in two stages:
 
-The plugin spawns `rg --json -g '*.md' -g '*.mdx'` across all collection roots, parses the JSON match stream, deduplicates by file path, and resolves each match to a `{collection, relPath}` by prefix-matching the absolute file path against the collection list (longest path first, to handle nested collections correctly). The first line of the file is used as a cheap title fallback.
+1. **ripgrep (recall).** The query is tokenized into words; the plugin runs `rg --line-number --no-heading --with-filename --smart-case --max-count <limit> -g '*.{md,mdx}' -e '<tok1|tok2|…>'` across the collection roots. The OR-alternation means a line matching *any* token is a candidate — high recall, word-order-independent (unlike the old fixed-strings mode).
+2. **fzf (ranking).** The `path:line:text` candidates are piped to `fzf --filter "<query>"`. fzf's extended-search mode ANDs each space-separated term (fuzzily, typo-tolerant) and orders results best-first.
 
-ripgrep results carry no score; the `score` field is omitted from hits. Results are returned in the order `rg` produces them (roughly: collection root order, then file discovery order within each root).
+Candidates are then parsed, deduplicated by file path (keeping the best-ranked line per file), and resolved to `{collection, relPath}` by longest-prefix matching the absolute path against the collection list. A cheap title (frontmatter `title:` → first heading → filename) is attached.
+
+**fzf is recommended, not required.** If fzf is not on PATH (or fails), the plugin falls back to ripgrep's order — search still works, just without fuzzy ranking. `setup` **auto-installs** `rg` and `fzf` via a detected package manager (see below), then verifies them: `rg` is required (hard failure if it still can't be resolved), `fzf` is a `verify-fzf` step that warns but does not block. `health`/`doctor` report `rg` and, when rg is present, an `ok`/`warn` line for `fzf`. `index` and `onEvent` are no-ops.
+
+When fzf ranks the results, each hit gets a rank-derived `score` in (0, 1] (best = 1, descending) so the UI shows a relevance badge consistent with the other engines. On the plain-ripgrep fallback (no fzf), result order is file-discovery order rather than relevance, so `score` is omitted.
 
 ## Search Mode Discovery
 
@@ -99,3 +113,9 @@ The `engineError` field is the only way the web UI learns that a fallback occurr
 ## Doctor Integration
 
 `diffwiki doctor` calls the `health` op on each enabled search plugin to report readiness. The `HealthHandlerResult` includes a `readiness` object with structured flags (`toolInstalled`, `modelsPresent`, `indexBuilt`, `docsIndexed`, `embeddingsPending`, `firstSearchCost`) and an array of human-readable `diagnostics` entries tagged `ok`, `warn`, or `error`. `diffwiki-qmd` also probes the warm daemon and includes its status in the diagnostics.
+
+`diffwiki doctor --fix` re-provisions each enabled plugin (`repairPlugins()` → the plugin's `setup` op), which auto-installs missing tools before re-diagnosing.
+
+### Tool auto-install (`ensureTool`)
+
+The plugin SDK exports `ensureTool(spec, { install })` — a best-effort installer for system dependencies. Given a tool's package ids per manager, it detects an available manager in order (**mise**, then **Homebrew**) and installs; `apt` is never auto-run (it needs `sudo`) and is surfaced as a guidance message instead. It's a no-op when the tool already exists, and returns `{ present, installed, method, message }` (a tool installed via mise may report `installed: true, present: false` until the shell is restarted so the shims are active). Both plugins call it from `setup`: `diffwiki-ripgrep` installs `rg` + `fzf`; `diffwiki-qmd` installs `qmd` (via mise's `npm:@tobilu/qmd` backend) when the npm-local binary is missing. The qmd binary normally rides in as the plugin's npm dependency, so this is a fallback for a manual registration or a broken install.

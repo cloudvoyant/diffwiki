@@ -14,10 +14,10 @@
  */
 
 import { existsSync, readdirSync } from 'node:fs';
-import { stat, readdir } from 'node:fs/promises';
+import { stat, readdir, writeFile, mkdir } from 'node:fs/promises';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
-import { definePlugin } from 'diffwiki-core/plugin';
+import { join, dirname } from 'node:path';
+import { definePlugin, ensureTool } from 'diffwiki-core/plugin';
 import type {
   PluginLogFn,
   SearchParams,
@@ -31,20 +31,36 @@ import type {
   EventHandlerResult,
   HealthHandlerResult,
 } from 'diffwiki-core/plugin';
+import { modelsDir, qmdEnv, qmdIndexPath, qmdOnPath, resetQmdResolution, resolveQmd, QMD_DEPENDENCY } from './qmd.js';
 import {
-  INDEX,
-  modelsDir,
-  qmdEnv,
-  qmdIndexPath,
-  qmdOnPath,
-  resolveQmd,
-  runQmd,
-  runQmdJson,
-  QMD_DEPENDENCY,
-} from './qmd.js';
+  collectionAdd,
+  collectionRemove,
+  contextAdd,
+  update as qmdUpdate,
+  statusRaw as qmdStatusRaw,
+  embed as qmdEmbed,
+  searchJson,
+  searchStructuredJson,
+} from './commands.js';
 import { ensureDaemon, mcpBaseUrl, probeHealth } from './daemon.js';
 import { mcpSearch } from './mcp.js';
-import type { Collection, QmdRow, Hit, StatMtimeFn, QmdStatusInfo, FetchFn, SpawnFn } from './types.js';
+import { rowsToHits, enrichHits } from './snippet.js';
+// Re-export the snippet/row helpers and search-subcommand mapping from their new
+// homes so existing importers (and tests) that reference them via this module
+// keep resolving.
+export { rowsToHits, enrichHits, splitQmdPath, bodyPreview } from './snippet.js';
+export { searchSubcommand } from './commands.js';
+import {
+  mirrorDir,
+  registeredMarker,
+  qmdUri,
+  contextText,
+  rebuildStrippedMirror,
+  syncStrippedContent,
+  pruneMirrorFile,
+  type ArticleMeta,
+} from './stripped.js';
+import type { Collection, Hit, StatMtimeFn, QmdStatusInfo, FetchFn, SpawnFn, SearchExpansion } from './types.js';
 
 // Re-export types so existing imports from this module continue to resolve.
 export type { Collection, QmdRow, Hit, StatMtimeFn, QmdStatusInfo } from './types.js';
@@ -114,49 +130,6 @@ export function parseQmdStatus(text: string): QmdStatusInfo {
   };
 }
 
-/** Derive collection + relPath from a qmd row's `file` (strip `qmd://`) or `displayPath`. */
-export function splitQmdPath(row: QmdRow): { collection: string; relPath: string } {
-  let raw = '';
-  if (typeof row.file === 'string' && row.file.length > 0) {
-    raw = row.file.replace(/^qmd:\/\//, '');
-  } else if (typeof row.displayPath === 'string') {
-    raw = row.displayPath;
-  }
-  raw = raw.replace(/[?#].*$/, '');
-  raw = raw.replace(/^\/+/, '');
-  const slash = raw.indexOf('/');
-  if (slash === -1) return { collection: raw, relPath: '' };
-  return { collection: raw.slice(0, slash), relPath: raw.slice(slash + 1) };
-}
-
-/** Map a diffwiki search type to the qmd subcommand. */
-export function searchSubcommand(type: string | undefined): string {
-  switch (type) {
-    case 'semantic':
-      return 'vsearch';
-    case 'hybrid':
-      return 'query';
-    case 'keyword':
-    default:
-      return 'search';
-  }
-}
-
-/** Map an array of qmd rows to diffwiki hits. Shared by the warm and cold paths. */
-export function rowsToHits(rows: QmdRow[]): Hit[] {
-  return (Array.isArray(rows) ? rows : []).map((row) => {
-    const { collection, relPath } = splitQmdPath(row);
-    return {
-      collection,
-      relPath,
-      title: typeof row.title === 'string' ? row.title : relPath,
-      snippet: row.bestChunk || undefined,
-      score: typeof row.score === 'number' ? row.score : undefined,
-      docid: typeof row.docid === 'string' ? row.docid : undefined,
-    };
-  });
-}
-
 function isAlreadyExists(err: unknown): boolean {
   const msg = err instanceof Error ? err.message : String(err);
   return /already exists/i.test(msg);
@@ -172,15 +145,86 @@ function asCollections(raw: unknown): Collection[] {
     .map((c) => ({ name: (c as Collection).name, path: (c as Collection).path }));
 }
 
-async function addCollections(env: NodeJS.ProcessEnv, collections: Collection[], log: PluginLogFn): Promise<void> {
+/**
+ * Ensure each collection's qmd registration points at its stripped mirror, not
+ * the source tree. qmd's `collection add` won't re-point an existing name, so the
+ * one-time migration drops the old (source-pointed) registration and re-adds the
+ * mirror; a marker file makes it idempotent thereafter.
+ */
+async function ensureMirrorRegistered(
+  env: NodeJS.ProcessEnv,
+  home: string,
+  collections: Collection[],
+  log: PluginLogFn,
+): Promise<void> {
   for (const c of collections) {
+    const mirror = mirrorDir(home, c.name);
+    const marker = registeredMarker(home, c.name);
+    const migrated = existsSync(marker);
+    if (!migrated) {
+      // First activation: drop the old source-pointed registration (if any), re-add the mirror.
+      try {
+        await collectionRemove(c.name, { env });
+      } catch (err) {
+        // Tolerate "not found" / "does not exist" — the collection was never
+        // registered, so there is nothing to remove. Any other failure (e.g.
+        // permissions, corrupt index) is re-thrown so it surfaces rather than
+        // being silently swallowed before the collectionAdd call.
+        const msg = err instanceof Error ? err.message : String(err);
+        if (!/not found|does not exist|no such/i.test(msg)) throw err;
+      }
+    }
     try {
-      await runQmd(['collection', 'add', c.path, '--name', c.name, '--index', INDEX], { env });
-      log('info', `added collection ${c.name} (${c.path})`);
+      await collectionAdd(mirror, c.name, { env });
     } catch (err) {
       if (!isAlreadyExists(err)) throw err;
-      log('info', `collection ${c.name} already present`);
     }
+    if (!migrated) {
+      await mkdir(dirname(marker), { recursive: true });
+      await writeFile(marker, 'registered\n', 'utf8');
+      log('info', `re-pointed collection ${c.name} at stripped mirror (${mirror})`);
+    }
+  }
+}
+
+/** Attach `Title: … . Tags: …` context to each file (best-effort, per file). */
+async function addContextEntries(
+  env: NodeJS.ProcessEnv,
+  name: string,
+  entries: Array<{ relPath: string; meta: ArticleMeta }>,
+  log: PluginLogFn,
+): Promise<void> {
+  for (const { relPath, meta } of entries) {
+    const text = contextText(meta);
+    if (!text) continue;
+    try {
+      await contextAdd(qmdUri(name, relPath), text, { env });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      log('warn', `context add failed for ${name}/${relPath}: ${message}`);
+    }
+  }
+}
+
+/**
+ * Full stripped reindex for a deliberate setup/index: rebuild each collection's
+ * frontmatter-stripped mirror, re-point qmd at it, run `qmd update`, then attach
+ * title/tags context. Caller handles embedding.
+ */
+async function fullStrippedReindex(
+  env: NodeJS.ProcessEnv,
+  home: string,
+  collections: Collection[],
+  log: PluginLogFn,
+): Promise<void> {
+  const metaByCollection = new Map<string, Array<{ relPath: string; meta: ArticleMeta }>>();
+  for (const c of collections) {
+    metaByCollection.set(c.name, await rebuildStrippedMirror(c.path, mirrorDir(home, c.name)));
+  }
+  await ensureMirrorRegistered(env, home, collections, log);
+  await qmdUpdate({ env });
+  for (const c of collections) {
+    await addContextEntries(env, c.name, metaByCollection.get(c.name) ?? [], log);
   }
 }
 
@@ -198,6 +242,8 @@ export function makePluginDefinition(
     fetchFn?: FetchFn;
     /** Injected spawn for the warm daemon. Defaults to child_process.spawn. */
     spawnFn?: SpawnFn;
+    /** Injected auto-installer for the qmd binary. Defaults to core's `ensureTool`. */
+    installFn?: typeof ensureTool;
   } = {},
 ): {
   definition: ReturnType<typeof definePlugin>['definition'];
@@ -213,6 +259,7 @@ export function makePluginDefinition(
   const statMtime = deps.statMtime ?? realStatMtime;
   const fetchFn = deps.fetchFn ?? (globalThis.fetch as unknown as FetchFn);
   const spawnFn = deps.spawnFn;
+  const installFn = deps.installFn ?? ensureTool;
 
   /**
    * Best-effort staleness check: run `qmd update` (and `embed` for semantic/hybrid)
@@ -237,15 +284,21 @@ export function makePluginDefinition(
         return;
       }
 
-      log('info', 'index stale — running qmd update');
-      await runQmd(['update', '--index', INDEX], { env });
+      log('info', 'index stale — syncing stripped mirror and running qmd update');
+      // Refresh the frontmatter-stripped mirror qmd indexes (only files whose
+      // source is newer) before re-indexing, so edits don't reintroduce
+      // frontmatter chunks. No-op for collections not yet migrated to a mirror.
+      for (const c of collections) {
+        await syncStrippedContent(c.path, mirrorDir(home, c.name), statMtime);
+      }
+      await qmdUpdate({ env });
 
       if (searchType === 'semantic' || searchType === 'hybrid') {
         try {
-          const { embeddingsPending } = parseQmdStatus(await runQmd(['status', '--index', INDEX], { env }));
+          const { embeddingsPending } = parseQmdStatus(await qmdStatusRaw({ env }));
           if (embeddingsPending > 0) {
             log('info', `${embeddingsPending} doc(s) need embedding — running qmd embed`);
-            await runQmd(['embed', '--index', INDEX], { env });
+            await qmdEmbed({ env });
           }
         } catch {
           // status/embed failure is non-fatal
@@ -263,15 +316,14 @@ export function makePluginDefinition(
     type: string,
     limit: number,
     collection: string | undefined,
+    expansions: SearchExpansion[] | undefined,
   ): Promise<Hit[]> {
-    const sub = searchSubcommand(type);
-    const args = [sub, '--index', INDEX, '--format', 'json', '-n', String(limit)];
-    if (collection && collection.length > 0) {
-      args.push('-c', collection);
-    }
-    // `--` terminates flag parsing so a term starting with `-` isn't read as a qmd flag.
-    args.push('--', term);
-    const rows = await runQmdJson<QmdRow[]>(args, { env });
+    // Pre-expanded variants (an upstream LLM did the expansion) go through the
+    // structured `qmd query` document; otherwise use the per-type subcommand.
+    const rows =
+      expansions && expansions.length > 0
+        ? await searchStructuredJson(expansions, { limit, collection, intent: term }, { env })
+        : await searchJson(type, { term, limit, collection }, { env });
     return rowsToHits(Array.isArray(rows) ? rows : []);
   }
 
@@ -283,6 +335,7 @@ export function makePluginDefinition(
     limit: number,
     collection: string | undefined,
     log: PluginLogFn,
+    expansions: SearchExpansion[] | undefined,
   ): Promise<Hit[] | null> {
     try {
       const qmdCommand = (await resolveQmd()) ?? undefined;
@@ -291,7 +344,7 @@ export function makePluginDefinition(
         log('warn', 'qmd warm daemon unavailable — falling back to cold search');
         return null;
       }
-      const rows = await mcpSearch(baseUrl, { term, type, collection, limit, minScore: 0 }, fetchFn);
+      const rows = await mcpSearch(baseUrl, { term, type, collection, limit, minScore: 0, expansions }, fetchFn);
       return rowsToHits(rows);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -309,27 +362,33 @@ export function makePluginDefinition(
       const collection = params.collection && params.collection.length > 0 ? params.collection : undefined;
 
       const collections = asCollections(params.collections);
+      const expansions =
+        Array.isArray(params.expansions) && params.expansions.length > 0 ? params.expansions : undefined;
       await ensureFresh(collections, type, log);
 
+      let hits: Hit[] | null = null;
       if (warmEnabled(env)) {
-        const warmHits = await warmSearch(env, term, type, limit, collection, log);
-        if (warmHits !== null) {
-          return { hits: warmHits };
-        }
+        hits = await warmSearch(env, term, type, limit, collection, log, expansions);
+      }
+      if (hits === null) {
+        hits = await coldSearch(env, term, type, limit, collection, expansions);
       }
 
-      const hits = await coldSearch(env, term, type, limit, collection);
+      // Enrich hits from source: restore the real frontmatter title (qmd only
+      // sees the frontmatter-stripped mirror, so its title is the body heading),
+      // and fall back to a body preview for hits whose chunk sanitized to
+      // nothing (the match was the metadata block).
+      await enrichHits(hits, collections);
       return { hits };
     },
 
     async index(params: IndexParams, log: PluginLogFn): Promise<IndexHandlerResult> {
       const env = qmdEnv(home);
       const collections = asCollections(params.collections);
-      await addCollections(env, collections, log);
-      await runQmd(['update', '--index', INDEX], { env });
+      await fullStrippedReindex(env, home, collections, log);
       if (params.embed === true) {
         log('info', 'embedding index');
-        await runQmd(['embed', '--index', INDEX], { env });
+        await qmdEmbed({ env });
       }
       return { indexed: collections.length };
     },
@@ -337,24 +396,35 @@ export function makePluginDefinition(
     async setup(params: SetupParams, log: PluginLogFn): Promise<SetupHandlerResult> {
       const env = qmdEnv(home);
       const steps: Array<{ step: string; ok: boolean; message?: string }> = [];
-      const installed = await qmdOnPath();
+      let installed = await qmdOnPath();
       if (!installed) {
-        log('error', `qmd not found (npm-local or PATH) — ${QMD_DEPENDENCY.hint}`);
-        steps.push({ step: 'verify-qmd', ok: false, message: `qmd unresolved — ${QMD_DEPENDENCY.hint}` });
-        return { ready: false, steps };
+        // Best-effort auto-install (mise's npm backend), then re-resolve. The
+        // qmd binary normally rides in as the plugin's npm dependency; this
+        // covers a manually-registered plugin or a broken npm install.
+        const outcome = await installFn(
+          { command: 'qmd', mise: 'npm:@tobilu/qmd', manual: QMD_DEPENDENCY.hint ?? 'npm i -g @tobilu/qmd' },
+          { install: true, log },
+        );
+        resetQmdResolution();
+        installed = await qmdOnPath();
+        if (!installed) {
+          log('error', `qmd not found (npm-local or PATH) — ${outcome.message}`);
+          steps.push({ step: 'verify-qmd', ok: false, message: outcome.message });
+          return { ready: false, steps };
+        }
+        steps.push({ step: 'verify-qmd', ok: true, message: outcome.installed ? outcome.message : undefined });
+      } else {
+        steps.push({ step: 'verify-qmd', ok: true });
       }
-      steps.push({ step: 'verify-qmd', ok: true });
 
       const collections = asCollections(params.collections);
-      await addCollections(env, collections, log);
-      steps.push({
-        step: 'add-collections',
-        ok: true,
-        message: `${collections.length} collection(s)`,
-      });
-
       try {
-        await runQmd(['update', '--index', INDEX], { env });
+        await fullStrippedReindex(env, home, collections, log);
+        steps.push({
+          step: 'add-collections',
+          ok: true,
+          message: `${collections.length} collection(s), frontmatter-stripped`,
+        });
         steps.push({ step: 'index', ok: true });
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
@@ -364,7 +434,7 @@ export function makePluginDefinition(
       if (params.embed === true || params.prefetchModels === true) {
         log('info', 'embedding index (may download models on first run)');
         try {
-          await runQmd(['embed', '--index', INDEX], { env });
+          await qmdEmbed({ env });
           steps.push({ step: 'embed', ok: true });
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
@@ -380,7 +450,17 @@ export function makePluginDefinition(
       const collection = params.collection;
       if (collection && typeof collection.name === 'string' && typeof collection.path === 'string') {
         try {
-          await runQmd(['update', '--index', INDEX, '-c', collection.name], { env });
+          const mirror = mirrorDir(home, collection.name);
+          if (params.event === 'article-removed' && params.relPath) {
+            // Delete the mirror file so the removed article is pruned from
+            // qmd's index on the next update, not kept until a full rebuild.
+            await pruneMirrorFile(mirror, params.relPath);
+          } else {
+            // Refresh the stripped mirror for this collection before re-indexing
+            // it, so the edited file's frontmatter stays out of the index.
+            await syncStrippedContent(collection.path, mirror, statMtime);
+          }
+          await qmdUpdate({ env }, collection.name);
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
           log('warn', `event update failed for ${collection.name}: ${message}`);
@@ -424,7 +504,7 @@ export function makePluginDefinition(
       let docsIndexed = 0;
       let embeddingsPending = 0;
       try {
-        ({ docsIndexed, embeddingsPending } = parseQmdStatus(await runQmd(['status', '--index', INDEX], { env })));
+        ({ docsIndexed, embeddingsPending } = parseQmdStatus(await qmdStatusRaw({ env })));
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         diagnostics.push({ level: 'warn', message: `qmd status unavailable: ${message}` });

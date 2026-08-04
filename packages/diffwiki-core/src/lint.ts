@@ -1,7 +1,8 @@
 /**
- * Article linter -- checks wiki entries against the five template shapes
- * (recipe, recipe-with-steps, guide, system/component design). Pure rules in
- * `lintArticle`; `lintCollections` walks registry collections and aggregates.
+ * Article linter -- checks wiki entries against the template shapes (recipe,
+ * recipe-with-steps, guide, reference; plus a generic `architecture` fallback
+ * budget). Pure rules in `lintArticle`; `lintCollections` walks registry
+ * collections and aggregates.
  *
  * @module
  */
@@ -32,18 +33,17 @@ export interface LintResult {
   warnCount: number;
 }
 
-type Shape = 'recipe' | 'recipe-steps' | 'guide' | 'system-design' | 'component-design' | 'architecture';
+type Shape = 'recipe' | 'recipe-steps' | 'guide' | 'reference' | 'architecture';
 const BUDGETS: Record<Shape, { min: number; max: number }> = {
   recipe: { min: 300, max: 1000 },
   'recipe-steps': { min: 500, max: 1500 },
   guide: { min: 1500, max: 5000 },
-  'system-design': { min: 2000, max: 6000 },
-  'component-design': { min: 1000, max: 3000 },
-  // Fallback for a bare `architecture` tag when system vs component isn't declared.
+  reference: { min: 300, max: 2000 },
+  // Generic fallback budget for a bare `architecture` tag (no dedicated template).
   architecture: { min: 1000, max: 6000 },
 };
 
-/** ~4 chars per token -- a deliberate over-estimate that matches the taxonomy budgets. */
+/** ~4 chars per token -- a deliberate over-estimate that matches the shape budgets. */
 function estimateTokens(body: string): number {
   return Math.ceil(body.trim().length / 4);
 }
@@ -51,8 +51,7 @@ function estimateTokens(body: string): number {
 function inferShape(tags: string[], body: string): Shape {
   const t = new Set(tags.map((x) => x.toLowerCase()));
   if (t.has('guide')) return 'guide';
-  if (t.has('component-design') || t.has('component')) return 'component-design';
-  if (t.has('system-design') || t.has('system')) return 'system-design';
+  if (t.has('reference')) return 'reference';
   if (t.has('architecture')) return 'architecture';
   if (/^###\s+Step\b/im.test(body)) return 'recipe-steps';
   return 'recipe';

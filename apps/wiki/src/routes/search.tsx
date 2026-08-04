@@ -4,6 +4,7 @@ import { Check, ChevronDown, X } from 'lucide-react';
 import { loadSearch, loadCollections, loadSearchModes } from '../lib/data-source';
 import { PageLayout } from '../components/page-layout';
 import { SearchBox } from '../components/search-box';
+import { InspectChunk } from '../components/inspect-chunk';
 import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
 import {
@@ -241,11 +242,11 @@ function SearchComponent() {
             ) : (
               <ul data-testid="search-results" className="flex flex-col divide-y divide-border">
                 {search.results.map((r: SearchResultItem) => (
-                  <li key={`${r.coll}/${r.slug}`} className="py-3" data-collection={r.coll}>
+                  <li key={`${r.coll}/${r.slug}`} className="relative py-3" data-collection={r.coll}>
                     <Link
                       to="/$coll/$"
                       params={{ coll: r.coll, _splat: r.slug }}
-                      className={cn('group block focus:outline-none')}
+                      className={cn('group block pr-8 focus:outline-none')}
                     >
                       <span className="flex items-baseline gap-2">
                         <span className="text-base font-medium text-foreground group-hover:underline">{r.title}</span>
@@ -265,6 +266,11 @@ function SearchComponent() {
                         <span className="mt-1 block text-sm text-muted-foreground line-clamp-2">{r.snippet}</span>
                       )}
                     </Link>
+                    {r.rawChunk && (
+                      <div className="absolute right-0 top-3">
+                        <InspectChunk result={r} engineLabel={currentMode?.label ?? search.engine ?? 'search'} />
+                      </div>
+                    )}
                   </li>
                 ))}
               </ul>

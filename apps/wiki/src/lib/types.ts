@@ -121,6 +121,14 @@ export interface SearchResultItem {
   slug: string;
   title: string;
   snippet?: string;
+  /** Verbatim engine chunk (locator + raw markdown) for the inspection popover. */
+  rawChunk?: string;
+  /** The chunk cleaned to plain text, untruncated (full form for the popover). */
+  cleanedChunk?: string;
+  /** Absolute source line the chunk starts at, when the engine reports it. */
+  line?: number;
+  /** True when `snippet` is a body-preview fallback (qmd's chunk was metadata-only). */
+  snippetFromBody?: boolean;
   /**
    * Relevance score from the search engine, when it provides one (plugins do;
    * native BM25 does too). Scale is engine/mode-dependent — keyword, semantic,

@@ -29,6 +29,12 @@ import type {
 
 export type * from './types';
 
+// Frontmatter parsing is a core content concern. Expose the canonical parser and
+// a line-preserving stripper so plugins that index article bodies (e.g.
+// diffwiki-qmd) reuse them instead of re-implementing frontmatter detection —
+// keeping the frontmatter format knowledge in one place.
+export { parseArticle, stripFrontmatter, type ParsedArticle } from '../frontmatter';
+
 const execFileAsync = promisify(execFile);
 
 // ---------------------------------------------------------------------------
@@ -141,6 +147,121 @@ export async function resolveDependency(dep: PluginDependency, fromUrl: string):
     return { dependency: dep, command: [dep.command], source: 'path' };
   }
   return { dependency: dep, command: null, source: 'missing' };
+}
+
+// ---------------------------------------------------------------------------
+// ensureTool — best-effort auto-install of a system dependency
+// ---------------------------------------------------------------------------
+
+/** Per-package-manager identifiers for a tool ensureTool can install. */
+export interface ToolInstallers {
+  /** mise tool id (installed with `mise use -g`), e.g. `'fzf'` or `'npm:@tobilu/qmd'`. */
+  mise?: string;
+  /** Homebrew formula (installed with `brew install`), e.g. `'fzf'`. */
+  brew?: string;
+  /** apt package name. NOT auto-run (needs sudo) — surfaced as guidance only. */
+  apt?: string;
+}
+
+/** A tool to ensure is on PATH, with the package ids + a manual fallback hint. */
+export interface EnsureToolSpec extends ToolInstallers {
+  /** Executable checked on PATH, e.g. `'fzf'`. */
+  command: string;
+  /** Manual instruction (URL or command) shown when auto-install can't proceed. */
+  manual: string;
+}
+
+/** The outcome of an {@link ensureTool} call. */
+export interface EnsureToolResult {
+  command: string;
+  /** True if the tool is on PATH after ensureTool ran. */
+  present: boolean;
+  /** True if ensureTool installed it during this call. */
+  installed: boolean;
+  /** The manager used, when an install was attempted and succeeded. */
+  method?: 'mise' | 'brew';
+  /** A human-facing message describing the outcome. */
+  message: string;
+}
+
+/** Injectable seams for {@link ensureTool} (defaults hit the real system). */
+export interface EnsureToolOptions {
+  /** Attempt installation when the tool is missing (default: false — check only). */
+  install?: boolean;
+  /** Diagnostic sink. */
+  log?: (level: 'info' | 'warn' | 'error', message: string) => void;
+  /** Existence probe (injected in tests). Defaults to {@link commandExists}. */
+  exists?: (command: string) => Promise<boolean>;
+  /** Command runner (injected in tests). Defaults to {@link runProcess}. */
+  run?: (file: string, args: readonly string[]) => Promise<unknown>;
+}
+
+/**
+ * Ensure a system tool is on PATH, optionally installing it via a detected
+ * package manager. Detection order: **mise**, then **Homebrew**. `apt` is
+ * intentionally never auto-run (it needs `sudo`, which would hang or prompt) —
+ * it is included in the guidance message instead. Safe to call when the tool
+ * already exists (returns immediately) and never throws.
+ *
+ * Note: a tool installed via mise may not be on PATH in the current process
+ * until mise's shims are active; that case is reported as `installed:true,
+ * present:false` with a message telling the user to restart their shell.
+ */
+export async function ensureTool(spec: EnsureToolSpec, opts?: EnsureToolOptions): Promise<EnsureToolResult> {
+  const exists = opts?.exists ?? commandExists;
+  const run = opts?.run ?? ((file, args) => runProcess(file, args));
+  const log = opts?.log;
+
+  if (await exists(spec.command)) {
+    return { command: spec.command, present: true, installed: false, message: `${spec.command} present` };
+  }
+  if (!opts?.install) {
+    return {
+      command: spec.command,
+      present: false,
+      installed: false,
+      message: `${spec.command} not found — ${spec.manual}`,
+    };
+  }
+
+  // Managers that don't require sudo, tried in order.
+  const attempts: Array<{ method: 'mise' | 'brew'; bin: string; args: string[] }> = [];
+  if (spec.mise && (await exists('mise')))
+    attempts.push({ method: 'mise', bin: 'mise', args: ['use', '-g', spec.mise] });
+  if (spec.brew && (await exists('brew'))) attempts.push({ method: 'brew', bin: 'brew', args: ['install', spec.brew] });
+
+  for (const a of attempts) {
+    try {
+      log?.('info', `installing ${spec.command} via ${a.method}…`);
+      await run(a.bin, a.args);
+      if (await exists(spec.command)) {
+        return {
+          command: spec.command,
+          present: true,
+          installed: true,
+          method: a.method,
+          message: `installed ${spec.command} via ${a.method}`,
+        };
+      }
+      return {
+        command: spec.command,
+        present: false,
+        installed: true,
+        method: a.method,
+        message: `installed ${spec.command} via ${a.method}, but it isn't on PATH yet — restart your shell (or activate ${a.method}) and retry`,
+      };
+    } catch (err) {
+      log?.('warn', `${a.method} could not install ${spec.command}: ${(err as Error).message}`);
+    }
+  }
+
+  const aptHint = spec.apt ? ` (Debian/Ubuntu: sudo apt-get install -y ${spec.apt})` : '';
+  return {
+    command: spec.command,
+    present: false,
+    installed: false,
+    message: `could not auto-install ${spec.command} — ${spec.manual}${aptHint}`,
+  };
 }
 
 // ---------------------------------------------------------------------------

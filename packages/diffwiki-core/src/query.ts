@@ -232,6 +232,7 @@ export async function search(term: string, opts?: QueryOptions): Promise<SearchO
   // Explicitly naming collections is an override; otherwise hide system content.
   const hideSystem = !showSystem && wanted.length === 0;
   const searchable = hideSystem ? collections.filter((c) => c.audience !== 'system') : collections;
+  const systemCollections = new Set(collections.filter((c) => c.audience === 'system').map((c) => c.name));
   const filterHits = (hits: QueryHit[]): QueryHit[] =>
     wanted.length > 0 ? hits.filter((h) => wanted.includes(h.collection)) : hits;
   const engine = opts?.engine ?? (await resolveDefaultEngine());
@@ -250,7 +251,11 @@ export async function search(term: string, opts?: QueryOptions): Promise<SearchO
   try {
     const providerOpts: QueryOptions = { ...opts, collection: wanted.length === 1 ? wanted[0] : undefined };
     const raw = filterHits(await provider.handleSearch(term, searchable, providerOpts));
-    const hits = hideSystem ? await dropSystemHits(raw) : raw;
+    // A plugin searches its whole index and may ignore `searchable`, so drop hits
+    // from system-audience collections by name first (authoritative, no file
+    // read). Then drop system-audience articles that live inside normal
+    // collections. Skipped entirely when the caller opted into system content.
+    const hits = hideSystem ? await dropSystemHits(raw.filter((h) => !systemCollections.has(h.collection))) : raw;
     return { hits, engine, fellBackToNative: false };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

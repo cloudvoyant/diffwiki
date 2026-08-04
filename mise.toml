@@ -16,10 +16,8 @@ pnpm       = "10"
 bats       = "latest"
 shellcheck = "latest"
 shfmt      = "latest"
-# Search-plugin tools so the e2e suites can assume ripgrep + qmd exist rather
-# than gate on them. Missing-tool paths are covered by dedicated tests (the
-# diffwiki-qmd adapter unit tests and the plugin-install not-ready e2e).
 ripgrep           = "latest"
+fzf               = "latest"
 "npm:@tobilu/qmd" = "2.5.3"
 
 [task_config]

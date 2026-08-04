@@ -20,6 +20,8 @@ export interface QmdRow {
   bestChunk?: string;
   score?: number;
   docid?: string;
+  /** Absolute source line the best chunk starts at (qmd's `line` field). */
+  line?: number;
 }
 
 export interface Hit {
@@ -29,6 +31,26 @@ export interface Hit {
   snippet?: string;
   score?: number;
   docid?: string;
+  /**
+   * The verbatim chunk qmd returned (its diff-style locator + raw markdown),
+   * before sanitization. Carried for the search UI's chunk-inspection popover;
+   * `snippet` is the cleaned form shown inline.
+   */
+  rawChunk?: string;
+  /**
+   * The chunk sanitized to plain text WITHOUT the compact-row truncation — the
+   * full cleaned form, for the inspection popover. `snippet` is the same cleaning
+   * capped to a short length for inline display.
+   */
+  cleanedChunk?: string;
+  /** Absolute source line the chunk starts at, for "open at line" / inspection. */
+  line?: number;
+  /**
+   * True when `snippet` is a body-preview fallback (qmd's matched chunk was
+   * frontmatter/metadata and sanitized to nothing) rather than the cleaned
+   * chunk itself. Lets the UI label the snippet honestly.
+   */
+  snippetFromBody?: boolean;
 }
 
 /** Returns the mtime (epoch ms) for a given path, or 0 if the file does not exist. */
@@ -97,6 +119,12 @@ export interface EnsureDaemonOptions {
 // MCP types (from mcp.ts)
 // ---------------------------------------------------------------------------
 
+/** A caller-supplied, pre-expanded query variant (from an upstream LLM/agent). */
+export interface SearchExpansion {
+  type: 'lex' | 'vec' | 'hyde';
+  query: string;
+}
+
 /** Arguments for a warm MCP search. */
 export interface McpSearchArgs {
   /** The user's search term / query string. */
@@ -109,4 +137,9 @@ export interface McpSearchArgs {
   limit: number;
   /** Minimum score filter (0 disables). */
   minScore?: number;
+  /**
+   * Pre-expanded query variants. When present these become the qmd `searches`
+   * (the agent did the expansion), and `term` is passed only as ranking intent.
+   */
+  expansions?: SearchExpansion[];
 }

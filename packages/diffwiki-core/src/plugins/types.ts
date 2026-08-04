@@ -42,6 +42,14 @@ export interface SearchHandlerHit {
   score?: number;
   docid?: string;
   tags?: string[];
+  /** Verbatim engine chunk (unsanitized), surfaced in the search UI's inspection popover. */
+  rawChunk?: string;
+  /** The chunk cleaned to plain text, untruncated (full form for the popover). */
+  cleanedChunk?: string;
+  /** Absolute source line the chunk starts at, when the engine reports it. */
+  line?: number;
+  /** True when `snippet` is a body-preview fallback rather than the cleaned chunk. */
+  snippetFromBody?: boolean;
 }
 
 /** Result shape returned by the search handler. */
@@ -73,12 +81,21 @@ export interface EventHandlerResult {
 }
 
 /** Parameters passed to the search handler. */
+/** A caller-supplied, pre-expanded query variant passed through to the engine. */
+export interface SearchExpansion {
+  type: 'lex' | 'vec' | 'hyde';
+  query: string;
+}
+
 export interface SearchParams {
   term: string;
   collections: WireCollection[];
   collection?: string;
   type?: string;
   limit?: number;
+  /** Pre-expanded query variants from an upstream LLM; engines that support
+   *  structured search use these instead of expanding `term` themselves. */
+  expansions?: SearchExpansion[];
 }
 
 /** Parameters passed to the index handler. */

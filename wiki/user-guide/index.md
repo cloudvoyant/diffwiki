@@ -23,7 +23,7 @@ The CLI is there to organize, search, publish, and (for coding agents) write int
 - [Theming](/user-guide/theming) — reading is personal: pick a theme and light/dark mode like you would in your editor.
 - [Continuous learning](/user-guide/continuous-learning) — how you contribute by editing markdown, the frontmatter and knowledge graph that give a wiki structure, and how it self-improves as you and your agents capture what you learn.
 - [Search & RAG](/user-guide/search-and-rag) — the native BM25 engine, optional keyword and semantic plugins, client-side search in the published site, and why the same search surface makes agent retrieval observable.
-- [Using with Coding Agents](/user-guide/coding-agents) — how agents write into your wiki and read it back through search, and the planned `/dw` skill for query, deep search, and learning.
+- [Using with Coding Agents](/user-guide/coding-agents) — how agents write into your wiki and read it back through search, and the `dw-*` agent skills for authoring, recall, and learning.
 - [Sharing & Publishing](/user-guide/sharing) — the `diffwiki.yaml` project config, local preview, and shipping a static site to GitHub Pages.
 
 ## Where to go next
