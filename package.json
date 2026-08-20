@@ -29,7 +29,6 @@
     "eslint": "^9.0.0",
     "eslint-plugin-react-hooks": "^5.0.0",
     "globals": "^15.0.0",
-    "node-gyp": "^11.0.0",
     "prettier": "^3.0.0",
     "semantic-release": "^24.0.0",
     "tsup": "^8.3.0",
@@ -41,6 +40,9 @@
     "onlyBuiltDependencies": [
       "esbuild",
       "better-sqlite3"
-    ]
+    ],
+    "overrides": {
+      "better-sqlite3": "12.10.0"
+    }
   }
 }
