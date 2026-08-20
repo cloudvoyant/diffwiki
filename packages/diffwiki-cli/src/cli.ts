@@ -401,11 +401,20 @@ async function upAction(opts: { port: string }): Promise<void> {
   }
   const state = await startUi(Number(opts.port));
   const ok = await waitForServer(state.url);
-  console.log(
-    ok
-      ? `UI started at ${state.url} (pid ${state.pid})`
-      : `Launched (pid ${state.pid}) but ${state.url} did not respond yet — check \`diffwiki ui status\``,
-  );
+  if (ok && isAlive(state.pid)) {
+    console.log(`UI started at ${state.url} (pid ${state.pid})`);
+    return;
+  }
+  if (ok) {
+    // Something responded on the port but it is not the app we just spawned —
+    // a stale or foreign process already owns it, so our app died on bind.
+    await stopUi();
+    console.error(`Port ${state.port} is already in use by another process — the diffwiki app could not bind.`);
+    console.error(`Stop that process, or start the UI on a free port: \`diffwiki ui up --port <port>\`.`);
+    process.exitCode = 1;
+    return;
+  }
+  console.log(`Launched (pid ${state.pid}) but ${state.url} did not respond yet — check \`diffwiki ui status\``);
 }
 
 async function downAction(): Promise<void> {
