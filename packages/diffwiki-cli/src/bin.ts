@@ -1,3 +1,4 @@
+import { ensureHome } from 'diffwiki-core';
 import { createProgram } from './cli';
 import { configureCliLogging } from './logging';
 
@@ -6,5 +7,10 @@ import { configureCliLogging } from './logging';
 // requested via -v/--log/DIFFWIKI_LOG. The stderr sink never writes to stdout.
 configureCliLogging(process.argv);
 
+// A first-ever invocation (e.g. `npx diffwiki collection add`) must leave a fully
+// initialized ~/.diffwiki behind (dirs + registry.json + config.json), so initialize
+// the home before any command runs. Idempotent — never clobbers user data.
+await ensureHome();
+
 // Commander reads and slices process.argv itself, and handles --help/--version.
-createProgram().parseAsync(process.argv);
+await createProgram().parseAsync(process.argv);

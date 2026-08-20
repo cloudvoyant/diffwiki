@@ -670,7 +670,7 @@ export function createProgram(): Command {
   const ui = program.command('ui').description('Run the local diffwiki app server');
 
   ui.command('up')
-    .description('Start the diffwiki UI (latest published diffwiki-app)')
+    .description('Start the diffwiki UI (runs the matching published diffwiki-app)')
     .option('-p, --port <port>', 'port to serve on', '4321')
     .action(withErrors((opts: { port: string }) => upAction(opts)));
 

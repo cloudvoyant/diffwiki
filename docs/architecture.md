@@ -34,7 +34,11 @@ state logic synchronously testable.
   imports). The CLI's `tsconfig`/`vitest` map `diffwiki-core` to core's source, so typecheck
   and tests never depend on core being built first.
 - **Testing**: core has vitest unit tests against a temp `DIFFWIKI_HOME`; the CLI has
-  programmatic e2e tests (`createProgram().parseAsync`) plus a build-and-spawn smoke test.
+  programmatic e2e tests (`createProgram().parseAsync`), a build-and-spawn smoke test, and
+  npx-parity e2e tests that spawn the packaged `dist/bin.js` as a subprocess (the exact
+  shape of an `npx diffwiki …` invocation) and drive the real `npx` spawn of the pinned
+  `diffwiki-app` (gated on the pinned version being published). `bin.ts` calls
+  `ensureHome()` at startup so a first invocation initializes `~/.diffwiki` fully.
 - **Release**: the root package is private; both packages are publishable and share one
   version. semantic-release computes the version at the root and `@semantic-release/exec`
   stamps and builds both packages before publish.

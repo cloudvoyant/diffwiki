@@ -1,10 +1,9 @@
-import { existsSync } from 'node:fs';
 import fs from 'node:fs/promises';
 import net from 'node:net';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
 import { seedProjectHome } from 'diffwiki-core';
+import { resolveAppLaunch } from './app';
 import { openBrowser, waitForServer } from './ui-server';
 
 export interface PreviewOptions {
@@ -33,25 +32,6 @@ export async function findFreePort(start: number, host = '127.0.0.1'): Promise<n
 }
 
 /**
- * Resolve how to launch the UI. `DIFFWIKI_APP_CMD` overrides (used by tests);
- * else the local workspace server (`apps/wiki/bin/wiki-server.mjs`) when present;
- * else the published `diffwiki-app@latest` via npx. Mirrors exporter.ts.
- */
-function launchCommand(): { cmd: string; prefix: string[] } {
-  const override = process.env.DIFFWIKI_APP_CMD;
-  if (override) {
-    const [cmd, ...prefix] = override.split(' ');
-    return { cmd, prefix };
-  }
-  const candidates = [
-    path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../apps/wiki/bin/wiki-server.mjs'),
-    path.resolve(process.cwd(), 'apps/wiki/bin/wiki-server.mjs'),
-  ];
-  const local = candidates.find((p) => existsSync(p));
-  return local ? { cmd: 'node', prefix: [local] } : { cmd: 'npx', prefix: ['-y', 'diffwiki-app@latest'] };
-}
-
-/**
  * Preview the site described by the repo's diffwiki.yaml. Foreground command:
  * runs until the UI process exits (Ctrl-C). Cleans up the temp home on exit.
  */
@@ -59,7 +39,7 @@ export async function runPreview(opts: PreviewOptions): Promise<void> {
   const root = path.resolve(opts.cwd);
   const { home, entries } = await seedProjectHome(root); // throws if no diffwiki.yaml / no collections
 
-  const { cmd, prefix } = launchCommand();
+  const { cmd, args } = resolveAppLaunch();
   // Bind a FREE port — never blindly reuse the requested one. If it is busy (e.g. a
   // running `diffwiki up`), reusing it would point the browser at that other server.
   const port = await findFreePort(opts.port);
@@ -68,7 +48,7 @@ export async function runPreview(opts: PreviewOptions): Promise<void> {
   if (port !== opts.port) console.log(`Port ${opts.port} is in use — using ${port} instead.`);
   console.log(`Starting UI at ${url} …  (Ctrl-C to stop)`);
 
-  const child = spawn(cmd, [...prefix, '--port', String(port)], {
+  const child = spawn(cmd, [...args, '--port', String(port)], {
     env: {
       ...process.env,
       DIFFWIKI_HOME: home,

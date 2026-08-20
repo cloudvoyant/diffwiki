@@ -14,6 +14,7 @@ export * from './errors';
 
 // Configuration and paths
 export * from './paths';
+export { ensureHome } from './home';
 export { seedTemplates, listTemplateShapes, listTemplates, type SeedResult, type TemplateInfo } from './templates';
 export * from './config';
 

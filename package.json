@@ -40,6 +40,9 @@
     "onlyBuiltDependencies": [
       "esbuild",
       "better-sqlite3"
-    ]
+    ],
+    "overrides": {
+      "better-sqlite3": "12.10.0"
+    }
   }
 }
