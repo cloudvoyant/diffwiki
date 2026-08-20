@@ -219,8 +219,9 @@ visible heading as you scroll.
 ### Running the UI from the Published Package
 
 The `diffwiki` CLI can run the published `diffwiki-app` package locally so you can view
-your wiki in the browser without setting up the development environment. The commands fetch
-the latest published version automatically via `npx -y diffwiki-app@latest`.
+your wiki in the browser without setting up the development environment. The commands run
+the `diffwiki-app` release that shipped with your CLI version — pinned, never a floating
+`@latest` — fetched on demand via `npx -y diffwiki-app@<version>`.
 
 ```bash
 # Start the UI on the default port (4321)
@@ -243,8 +244,9 @@ diffwiki ui down
 
 The running state (PID, port, URL, start time) is stored in `~/.diffwiki/ui.json`.
 
-> **Note:** `diffwiki ui up` and `diffwiki ui open` require the `diffwiki-app` package to be
-> published on npm. During local development, use `mise run dev` instead.
+> **Note:** `diffwiki ui up` and `diffwiki ui open` require the `diffwiki-app` release
+> matching your CLI version to be published on npm. During local development, use
+> `mise run dev` instead.
 
 ### Building for Production Preview
 

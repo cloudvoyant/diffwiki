@@ -351,7 +351,7 @@ Run the local diffwiki app server. See [sharing](/user-guide/sharing).
 
 ### `ui up`
 
-Start the diffwiki UI (latest published `diffwiki-app`). No-op if already running.
+Start the diffwiki UI (runs the `diffwiki-app` release matching your CLI version — pinned, never `@latest`). No-op if already running.
 
 ```
 diffwiki ui up [-p <port>]

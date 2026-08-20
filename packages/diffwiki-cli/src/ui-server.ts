@@ -4,6 +4,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import http from 'node:http';
 import { resolveHome } from 'diffwiki-core';
+import { resolveAppLaunch } from './app';
 
 export interface UiState {
   pid: number;
@@ -81,12 +82,13 @@ export function waitForServer(url: string, timeoutMs = 30000): Promise<boolean> 
 }
 
 /**
- * Spawn the UI from the published package (`npx -y diffwiki-app@latest`) in a
- * detached process group so `down` can stop it and its children. Returns state.
- * npx@latest fetches the newest published version (auto-latest).
+ * Spawn the UI via `resolveAppLaunch()` in a detached process group so `down`
+ * can stop it and its children. The published fallback runs the app PINNED to
+ * the CLI's own version (`npx -y diffwiki-app@<version>`) — never `@latest`.
  */
 export async function startUi(port = DEFAULT_PORT): Promise<UiState> {
-  const child = spawn('npx', ['-y', 'diffwiki-app@latest', '--port', String(port)], {
+  const { cmd, args } = resolveAppLaunch();
+  const child = spawn(cmd, [...args, '--port', String(port)], {
     env: { ...process.env, PORT: String(port), HOST: '127.0.0.1' },
     detached: true,
     stdio: 'ignore',

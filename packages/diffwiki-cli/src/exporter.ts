@@ -1,8 +1,7 @@
 import { spawn } from 'node:child_process';
-import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { listCollections, resolveCollectionSelection, InvalidExportSelectionError } from 'diffwiki-core';
+import { resolveAppLaunch } from './app';
 
 export interface ExportOptions {
   out: string;
@@ -22,25 +21,14 @@ const splitGlobs = (v?: string): string[] =>
     .filter(Boolean);
 
 /**
- * Locate the wiki app's export harness in a workspace/monorepo checkout, so
- * `diffwiki export` uses the LOCAL built packages instead of the published app.
- * Checked relative to this CLI (packages/diffwiki-cli/dist) and to the cwd.
- */
-function localAppExporter(): string | undefined {
-  const candidates = [
-    path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../apps/wiki/bin/export.mjs'),
-    path.resolve(process.cwd(), 'apps/wiki/bin/export.mjs'),
-  ];
-  return candidates.find((p) => fs.existsSync(p));
-}
-
-/**
  * Drive the static export by invoking the wiki app's `export` harness. Mirrors the
  * `startUi` approach: the CLI does not bundle the app. Resolution order:
  *   1. `DIFFWIKI_APP_CMD` (explicit override), else
- *   2. the local workspace app (`apps/wiki/bin/export.mjs`) when present — this is
+ *   2. `DIFFWIKI_APP_SPEC` (explicit npx spec — forces the npx path), else
+ *   3. the local workspace app (`apps/wiki/bin/export.mjs`) when present — this is
  *      what makes `diffwiki export` use local built packages in a checkout, else
- *   3. the published `diffwiki-app@latest` (via npx) for an installed CLI.
+ *   4. the published `diffwiki-app@<cli-version>` (via npx, pinned — never `@latest`)
+ *      for an installed CLI.
  *
  * `--filter`/`--exclude` collection selection is validated UPFRONT (before the app
  * is spawned or anything is generated): an unmatched glob or an empty result aborts.
@@ -59,22 +47,20 @@ export async function runExport(opts: ExportOptions): Promise<void> {
     if (errors.length > 0) throw new InvalidExportSelectionError(errors);
   }
 
-  const local = localAppExporter();
-  const override = process.env.DIFFWIKI_APP_CMD ?? (local ? `node ${local}` : undefined);
-  const [cmd, ...prefix] = override ? override.split(' ') : ['npx', '-y', 'diffwiki-app@latest'];
+  const { cmd, args, source, spec } = resolveAppLaunch({ localBin: 'export.mjs' });
   // `export` is a no-op positional for the local harness (it reads flags by name)
   // and the subcommand the published `diffwiki-app` bin dispatches on.
-  const args = [...prefix, 'export', '--out', out, '--base', opts.base];
-  if (opts.filter) args.push('--filter', opts.filter);
-  if (opts.exclude) args.push('--exclude', opts.exclude);
+  const appArgs = [...args, 'export', '--out', out, '--base', opts.base];
+  if (opts.filter) appArgs.push('--filter', opts.filter);
+  if (opts.exclude) appArgs.push('--exclude', opts.exclude);
   if (opts.project) {
-    args.push('--project');
-    if (typeof opts.project === 'string') args.push(opts.project);
+    appArgs.push('--project');
+    if (typeof opts.project === 'string') appArgs.push(opts.project);
   }
 
-  if (override) console.log(`Exporting via ${override}`);
+  if (source === 'override') console.log(`Exporting via ${spec}`);
   await new Promise<void>((resolve, reject) => {
-    const child = spawn(cmd, args, { stdio: 'inherit', env: process.env });
+    const child = spawn(cmd, appArgs, { stdio: 'inherit', env: process.env });
     child.on('error', reject);
     child.on('close', (code) => (code === 0 ? resolve() : reject(new Error(`export failed (exit ${code})`))));
   });
