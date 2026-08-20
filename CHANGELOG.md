@@ -1,3 +1,10 @@
+## [0.17.1](https://github.com/cloudvoyant/diffwiki/compare/v0.17.0...v0.17.1) (2026-08-20)
+
+
+### Bug Fixes
+
+* **cli:** pin diffwiki-app and init home for first npx run ([1482847](https://github.com/cloudvoyant/diffwiki/commit/1482847bd6cc58c9c9901f1d3643db26baee44a4))
+
 # [0.17.0](https://github.com/cloudvoyant/diffwiki/compare/v0.16.0...v0.17.0) (2026-08-04)
 
 
