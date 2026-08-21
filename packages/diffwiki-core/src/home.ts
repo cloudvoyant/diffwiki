@@ -12,14 +12,10 @@ async function seedIfAbsent(file: string, contents: () => string): Promise<void>
 }
 
 /**
- * Initialize the global diffwiki home (`~/.diffwiki`, or `DIFFWIKI_HOME`).
- * Creates the directory tree (`collections/`, `plugins/`, `templates/`) and
- * seeds empty-but-valid `registry.json` and `config.json` when absent.
- * Idempotent — never overwrites existing files or user data.
- *
- * The CLI calls this at startup so the FIRST command a user runs — e.g.
- * `npx diffwiki collection add` — leaves a fully initialized home behind, not
- * just the one file that command happened to write.
+ * Initialize the global diffwiki home (`~/.diffwiki` or `DIFFWIKI_HOME`).
+ * Creates the directory tree and seeds empty-but-valid registry/config when
+ * absent. Idempotent — the CLI calls this at startup so the first command
+ * leaves a fully initialized home behind.
  */
 export async function ensureHome(): Promise<void> {
   await fs.mkdir(resolveHome(), { recursive: true });

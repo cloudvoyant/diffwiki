@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process';
+import { spawn, type ChildProcess } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Command, Option } from 'commander';
@@ -44,7 +44,7 @@ import {
 } from 'diffwiki-core';
 import { version } from './version';
 import { collect, splitTags, withErrors } from './runtime';
-import { openBrowser, readState, isAlive, startUi, stopUi, waitForServer } from './ui-server';
+import { openBrowser, readState, isAlive, startUi, stopUi, waitForServer, childExited } from './ui-server';
 import { runExport } from './exporter';
 import { runPreview } from './preview';
 
@@ -393,19 +393,47 @@ async function lintAction(opts: { collections: string }): Promise<void> {
   if (result.errorCount > 0) process.exitCode = 1;
 }
 
+/** A human-readable description of why a spawned child exited. */
+function exitReason(child: ChildProcess): string {
+  if (child.exitCode !== null) return `exit ${child.exitCode}`;
+  if (child.signalCode !== null) return `signal ${child.signalCode}`;
+  return 'unexpectedly';
+}
+
 async function upAction(opts: { port: string }): Promise<void> {
   const existing = await readState();
   if (existing && isAlive(existing.pid)) {
     console.log(`UI already running at ${existing.url} (pid ${existing.pid})`);
     return;
   }
-  const state = await startUi(Number(opts.port));
+  const { state, child } = await startUi(Number(opts.port));
   const ok = await waitForServer(state.url);
-  console.log(
-    ok
-      ? `UI started at ${state.url} (pid ${state.pid})`
-      : `Launched (pid ${state.pid}) but ${state.url} did not respond yet — check \`diffwiki ui status\``,
-  );
+  const exited = await childExited(child, ok ? 2000 : 0);
+  if (exited) {
+    await stopUi();
+    if (ok) {
+      const held = await waitForServer(state.url, 1500);
+      if (held) {
+        console.error(`Port ${state.port} is already in use by another process — the diffwiki app could not bind.`);
+        console.error(`Stop that process, or start the UI on a free port: \`diffwiki ui up --port <port>\`.`);
+      } else {
+        console.error(
+          `The diffwiki app started serving on ${state.url} but exited again (${exitReason(child)}) — check \`diffwiki ui status\`.`,
+        );
+      }
+    } else {
+      console.error(
+        `The diffwiki app exited (${exitReason(child)}) before it could serve ${state.url} — check \`diffwiki ui status\`.`,
+      );
+    }
+    process.exitCode = 1;
+    return;
+  }
+  if (ok) {
+    console.log(`UI started at ${state.url} (pid ${state.pid})`);
+    return;
+  }
+  console.log(`Launched (pid ${state.pid}) but ${state.url} did not respond yet — check \`diffwiki ui status\``);
 }
 
 async function downAction(): Promise<void> {
@@ -425,7 +453,8 @@ async function statusAction(): Promise<void> {
 async function openAction(opts: { port: string }): Promise<void> {
   let state = await readState();
   if (!state || !isAlive(state.pid)) {
-    state = await startUi(Number(opts.port));
+    const started = await startUi(Number(opts.port));
+    state = started.state;
     await waitForServer(state.url);
   }
   const coll = await resolveCwdCollection(process.cwd());

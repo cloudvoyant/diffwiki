@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process';
+import { spawn, type ChildProcess } from 'node:child_process';
 import { platform } from 'node:os';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -11,6 +11,12 @@ export interface UiState {
   port: number;
   url: string;
   startedAt: string;
+}
+
+/** A running UI: the persisted state plus the actual spawned child. */
+export interface StartedUi {
+  state: UiState;
+  child: ChildProcess;
 }
 
 const DEFAULT_PORT = 4321;
@@ -82,11 +88,33 @@ export function waitForServer(url: string, timeoutMs = 30000): Promise<boolean> 
 }
 
 /**
+ * Resolve `true` once the child has exited. With `timeoutMs > 0`, resolve
+ * `false` instead if it is still running after the timeout. Keying liveness off
+ * the child's own exit state avoids the zombie TOCTOU of `process.kill(pid, 0)`,
+ * which keeps reporting an unreaped (dead) child as alive.
+ */
+export function childExited(child: ChildProcess, timeoutMs = 0): Promise<boolean> {
+  if (timeoutMs === 0) return Promise.resolve(child.exitCode !== null || child.signalCode !== null);
+  return new Promise((resolve) => {
+    const onExit = (): void => {
+      clearTimeout(timer);
+      resolve(true);
+    };
+    const timer = setTimeout(() => {
+      child.off('exit', onExit);
+      resolve(false);
+    }, timeoutMs);
+    child.once('exit', onExit);
+    if (child.exitCode !== null || child.signalCode !== null) onExit();
+  });
+}
+
+/**
  * Spawn the UI via `resolveAppLaunch()` in a detached process group so `down`
  * can stop it and its children. The published fallback runs the app PINNED to
  * the CLI's own version (`npx -y diffwiki-app@<version>`) — never `@latest`.
  */
-export async function startUi(port = DEFAULT_PORT): Promise<UiState> {
+export async function startUi(port = DEFAULT_PORT): Promise<StartedUi> {
   const { cmd, args } = resolveAppLaunch();
   const child = spawn(cmd, [...args, '--port', String(port)], {
     env: { ...process.env, PORT: String(port), HOST: '127.0.0.1' },
@@ -108,7 +136,7 @@ export async function startUi(port = DEFAULT_PORT): Promise<UiState> {
     startedAt: new Date().toISOString(),
   };
   await writeState(state);
-  return state;
+  return { state, child };
 }
 
 /** Stop the running UI (kills the detached process group where supported). */

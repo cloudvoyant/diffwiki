@@ -1,6 +1,7 @@
 import { execFile, execFileSync, spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import fs from 'node:fs/promises';
+import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -217,4 +218,36 @@ describe.skipIf(!built)('npx serve parity (packaged bin → real npx → pinned 
     },
     180_000,
   );
+});
+
+describe.skipIf(!built)('ui up port conflict (packaged bin)', () => {
+  it('fails with a non-zero exit when another process owns the port and clears ui.json', async () => {
+    const home = await freshHome();
+    await fs.mkdir(home, { recursive: true });
+    uiHomes.push(home);
+    const port = await findFreePort(4591);
+    const app = fileURLToPath(new URL('./fixtures/fake-app.mjs', import.meta.url));
+
+    // A dummy HTTP server occupies the port — a stand-in for a foreign/stale
+    // process that already owns it and answers the readiness probe.
+    const dummy = http.createServer((req, res) => {
+      res.writeHead(200);
+      res.end('occupied');
+    });
+    await new Promise<void>((resolve) => dummy.listen(port, '127.0.0.1', resolve));
+
+    try {
+      const up = await runCli(home, home, ['ui', 'up', '--port', String(port)], {
+        DIFFWIKI_APP_CMD: `node ${app}`,
+      });
+      expect(up.ok, up.err).toBe(false);
+      expect(up.err).toContain('already in use');
+
+      const statePath = path.join(home, 'ui.json');
+      expect(existsSync(statePath), 'ui.json cleared after failed ui up').toBe(false);
+    } finally {
+      dummy.closeAllConnections?.();
+      await new Promise<void>((resolve) => dummy.close(() => resolve()));
+    }
+  }, 60_000);
 });
