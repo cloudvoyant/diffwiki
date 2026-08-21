@@ -1,3 +1,10 @@
+## [0.17.2](https://github.com/cloudvoyant/diffwiki/compare/v0.17.1...v0.17.2) (2026-08-21)
+
+
+### Bug Fixes
+
+* **cli:** detect port-in-use on ui up ([2678f11](https://github.com/cloudvoyant/diffwiki/commit/2678f11cad689c548205fe16759d7175e1e86c55))
+
 ## [0.17.1](https://github.com/cloudvoyant/diffwiki/compare/v0.17.0...v0.17.1) (2026-08-20)
 
 

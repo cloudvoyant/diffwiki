@@ -1,6 +1,6 @@
 {
   "name": "diffwiki",
-  "version": "0.17.1",
+  "version": "0.17.2",
   "description": "diffwiki command-line interface",
   "license": "MIT",
   "type": "module",
