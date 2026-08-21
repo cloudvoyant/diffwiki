@@ -408,20 +408,10 @@ async function upAction(opts: { port: string }): Promise<void> {
   }
   const { state, child } = await startUi(Number(opts.port));
   const ok = await waitForServer(state.url);
-  // When something responds on the port, give the child a short window to prove
-  // it is not about to die on bind: if a foreign process owns the port, the app
-  // we spawned exits with EADDRINUSE moments after that foreign response. Keying
-  // this off the child's exit state (not pid liveness) avoids the zombie TOCTOU
-  // where `process.kill(pid, 0)` keeps reporting an unreaped, dead child alive.
   const exited = await childExited(child, ok ? 2000 : 0);
   if (exited) {
-    // startUi's close handler usually clears ui.json here already; stopUi is a
-    // deterministic no-op fallback that also awaits the state clear.
     await stopUi();
     if (ok) {
-      // The port responded but not from the app we spawned. If it still responds,
-      // another process owns it and our app could not bind; if it no longer
-      // responds, our app served briefly and then crashed.
       const held = await waitForServer(state.url, 1500);
       if (held) {
         console.error(`Port ${state.port} is already in use by another process — the diffwiki app could not bind.`);
