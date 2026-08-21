@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process';
+import { spawn, type ChildProcess } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Command, Option } from 'commander';
@@ -44,7 +44,7 @@ import {
 } from 'diffwiki-core';
 import { version } from './version';
 import { collect, splitTags, withErrors } from './runtime';
-import { openBrowser, readState, isAlive, startUi, stopUi, waitForServer } from './ui-server';
+import { openBrowser, readState, isAlive, startUi, stopUi, waitForServer, childExited } from './ui-server';
 import { runExport } from './exporter';
 import { runPreview } from './preview';
 
@@ -393,25 +393,54 @@ async function lintAction(opts: { collections: string }): Promise<void> {
   if (result.errorCount > 0) process.exitCode = 1;
 }
 
+/** A human-readable description of why a spawned child exited. */
+function exitReason(child: ChildProcess): string {
+  if (child.exitCode !== null) return `exit ${child.exitCode}`;
+  if (child.signalCode !== null) return `signal ${child.signalCode}`;
+  return 'unexpectedly';
+}
+
 async function upAction(opts: { port: string }): Promise<void> {
   const existing = await readState();
   if (existing && isAlive(existing.pid)) {
     console.log(`UI already running at ${existing.url} (pid ${existing.pid})`);
     return;
   }
-  const state = await startUi(Number(opts.port));
+  const { state, child } = await startUi(Number(opts.port));
   const ok = await waitForServer(state.url);
-  if (ok && isAlive(state.pid)) {
-    console.log(`UI started at ${state.url} (pid ${state.pid})`);
+  // When something responds on the port, give the child a short window to prove
+  // it is not about to die on bind: if a foreign process owns the port, the app
+  // we spawned exits with EADDRINUSE moments after that foreign response. Keying
+  // this off the child's exit state (not pid liveness) avoids the zombie TOCTOU
+  // where `process.kill(pid, 0)` keeps reporting an unreaped, dead child alive.
+  const exited = await childExited(child, ok ? 2000 : 0);
+  if (exited) {
+    // startUi's close handler usually clears ui.json here already; stopUi is a
+    // deterministic no-op fallback that also awaits the state clear.
+    await stopUi();
+    if (ok) {
+      // The port responded but not from the app we spawned. If it still responds,
+      // another process owns it and our app could not bind; if it no longer
+      // responds, our app served briefly and then crashed.
+      const held = await waitForServer(state.url, 1500);
+      if (held) {
+        console.error(`Port ${state.port} is already in use by another process — the diffwiki app could not bind.`);
+        console.error(`Stop that process, or start the UI on a free port: \`diffwiki ui up --port <port>\`.`);
+      } else {
+        console.error(
+          `The diffwiki app started serving on ${state.url} but exited again (${exitReason(child)}) — check \`diffwiki ui status\`.`,
+        );
+      }
+    } else {
+      console.error(
+        `The diffwiki app exited (${exitReason(child)}) before it could serve ${state.url} — check \`diffwiki ui status\`.`,
+      );
+    }
+    process.exitCode = 1;
     return;
   }
   if (ok) {
-    // Something responded on the port but it is not the app we just spawned —
-    // a stale or foreign process already owns it, so our app died on bind.
-    await stopUi();
-    console.error(`Port ${state.port} is already in use by another process — the diffwiki app could not bind.`);
-    console.error(`Stop that process, or start the UI on a free port: \`diffwiki ui up --port <port>\`.`);
-    process.exitCode = 1;
+    console.log(`UI started at ${state.url} (pid ${state.pid})`);
     return;
   }
   console.log(`Launched (pid ${state.pid}) but ${state.url} did not respond yet — check \`diffwiki ui status\``);
@@ -434,7 +463,8 @@ async function statusAction(): Promise<void> {
 async function openAction(opts: { port: string }): Promise<void> {
   let state = await readState();
   if (!state || !isAlive(state.pid)) {
-    state = await startUi(Number(opts.port));
+    const started = await startUi(Number(opts.port));
+    state = started.state;
     await waitForServer(state.url);
   }
   const coll = await resolveCwdCollection(process.cwd());
