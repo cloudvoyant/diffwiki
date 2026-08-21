@@ -9,6 +9,8 @@ tags:
 
 Welcome to diffwiki — your local, git-friendly knowledge base.
 
+Start by [setting up](/notes/guide/setup) your first collection.
+
 ```ts
 import { listCollections } from 'diffwiki-core';
 

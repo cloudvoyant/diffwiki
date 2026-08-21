@@ -60,7 +60,7 @@ function CollectionDocPage() {
       )}
 
       {/* Server-rendered HTML mounted directly — no client eval. */}
-      <ArticleBody html={page.html} />
+      <ArticleBody key={`${page.coll}/${page.slug}`} html={page.html} />
     </PageLayout>
   );
 }

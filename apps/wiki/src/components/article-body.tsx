@@ -62,10 +62,32 @@ export function ArticleBody({ html }: { html: string }) {
     const observer = new MutationObserver(() => paint());
     observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
 
+    // A navigation can re-commit the article's raw HTML with no matching effect
+    // pass (TanStack Router lands loader data in two commits; the final innerHTML
+    // reset destroys the previously enhanced DOM). Watch for raw `pre.shiki` /
+    // `pre.mermaid` insertions — the signal that fresh server HTML was set — and
+    // re-run the idempotent enhancement against it. Added nodes are matched
+    // recursively (a fence can land nested, e.g. `blockquote > pre.shiki`), and
+    // anything already inside a `.code-wrap` is skipped — enhancement wraps pres
+    // in `.code-wrap` / `div[data-mermaid-src]`, so the observer never re-triggers
+    // on its own DOM moves.
+    const isFreshFence = (node: Node): boolean =>
+      node instanceof HTMLElement &&
+      !node.closest('.code-wrap') &&
+      (node.matches('pre.shiki, pre.mermaid') || node.querySelector('pre.shiki, pre.mermaid') !== null);
+    const contentObserver = new MutationObserver((mutations) => {
+      if (mutations.some((mutation) => [...mutation.addedNodes].some(isFreshFence))) {
+        addCopyButtons(root);
+        paint();
+      }
+    });
+    contentObserver.observe(root, { childList: true, subtree: true });
+
     return () => {
       cancelled = true;
       root.removeEventListener('click', onClick, true);
       observer.disconnect();
+      contentObserver.disconnect();
     };
   }, [html, router]);
 
