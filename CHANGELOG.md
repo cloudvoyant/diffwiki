@@ -1,3 +1,10 @@
+## [0.17.3](https://github.com/cloudvoyant/diffwiki/compare/v0.17.2...v0.17.3) (2026-08-21)
+
+
+### Bug Fixes
+
+* **wiki:** re-render mermaid and copy buttons on route change ([7d3e09d](https://github.com/cloudvoyant/diffwiki/commit/7d3e09d347d943fdda907e429d3431ad7ff4ee8f))
+
 ## [0.17.2](https://github.com/cloudvoyant/diffwiki/compare/v0.17.1...v0.17.2) (2026-08-21)
 
 
