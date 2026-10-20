@@ -1,6 +1,7 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { readFile } from 'node:fs/promises';
 import { Command, Option } from 'commander';
 import {
   addExternalCollection,
@@ -8,6 +9,13 @@ import {
   collectionGitStatus,
   createArticle,
   createCollection,
+  createMetaRecord,
+  initMeta,
+  reindexMeta,
+  findCollection,
+  parseFrontmatter,
+  CollectionNotFoundError,
+  DiffwikiError,
   doctor,
   getConfigValue,
   initRepoWiki,
@@ -32,15 +40,17 @@ import {
   resolveCwdCollection,
   resolveEditorCommand,
   resolveEditTarget,
-  setArticleMeta,
   setConfigValue,
   setTags,
-  updateArticleBody,
+  updateArticle,
   type Article,
   type Audience,
   type DiagnosticLevel,
   type PublishStatus,
   type QueryOptions,
+  type MetaKind,
+  type MetaResult,
+  type TemplateCategory,
 } from 'diffwiki-core';
 import { version } from './version';
 import { collect, splitTags, withErrors } from './runtime';
@@ -77,6 +87,7 @@ async function createCollectionAction(name: string, opts: { hidden?: boolean }):
 }
 
 interface ArticleMetaOpts {
+  title?: string;
   body?: string;
   tag: string[];
   audience?: Audience;
@@ -97,18 +108,19 @@ async function createArticleAction(target: string, opts: ArticleMetaOpts): Promi
 async function updateArticleAction(target: string, opts: ArticleMetaOpts): Promise<void> {
   const tagList = splitTags(opts.tag);
   const hasMeta = opts.audience !== undefined || opts.status !== undefined;
-  if (opts.body === undefined && tagList.length === 0 && !hasMeta) {
-    console.error('Nothing to update — pass -b/--body, -t/--tag, --audience, and/or --status.');
+  if (opts.title === undefined && opts.body === undefined && tagList.length === 0 && !hasMeta) {
+    console.error('Nothing to update — pass --title, -b/--body, -t/--tag, --audience, and/or --status.');
     process.exitCode = 1;
     return;
   }
-  // Compose the existing core writers; each preserves the axes it doesn't touch,
-  // so any combination (or a single one) yields the correct final file.
-  let article: Article | undefined;
-  if (opts.body !== undefined) article = await updateArticleBody(target, opts.body);
-  if (tagList.length > 0) article = await setTags(target, tagList);
-  if (hasMeta) article = await setArticleMeta(target, { audience: opts.audience, status: opts.status });
-  console.log(`Updated ${article!.path}`);
+  const article = await updateArticle(target, {
+    title: opts.title,
+    body: opts.body,
+    ...(tagList.length ? { tags: tagList } : {}),
+    audience: opts.audience,
+    status: opts.status,
+  });
+  console.log(`Updated ${article.path}`);
 }
 
 async function removeArticleAction(target: string): Promise<void> {
@@ -310,10 +322,10 @@ async function templatesInitAction(): Promise<void> {
   if (seeded.length === 0 && skipped.length === 0) console.log('  (no bundled templates found)');
 }
 
-async function templatesListAction(opts: { json?: boolean }): Promise<void> {
-  const infos = await listTemplates(bundledTemplatesDir());
+async function templatesListAction(opts: { json?: boolean; category?: TemplateCategory | 'all' }): Promise<void> {
+  const infos = await listTemplates(bundledTemplatesDir(), opts.category);
   if (infos.length === 0) {
-    console.log('No bundled templates found.');
+    console.log('No templates found.');
     return;
   }
   if (opts.json) {
@@ -324,6 +336,41 @@ async function templatesListAction(opts: { json?: boolean }): Promise<void> {
   for (const t of infos) {
     const budget = t.budget ? `  [${t.budget[0]}–${t.budget[1]} tok]` : '';
     console.log(`${t.shape}\t${t.purpose}${budget}`);
+  }
+}
+
+function reportMeta(result: MetaResult, opts: { json?: boolean }): void {
+  if (opts.json) console.log(JSON.stringify(result, null, 2));
+  else {
+    console.log(`Metadata: ${result.created.length} mirrors created, ${result.kept.length} kept.`);
+    for (const file of result.index_paths) console.log(file);
+  }
+  for (const warning of result.warnings) console.error(`! ${warning}`);
+  for (const error of result.errors) console.error(`✖ ${error}`);
+  if (result.errors.length) process.exitCode = 1;
+}
+
+async function metaInitAction(name: string | undefined, opts: { json?: boolean }): Promise<void> {
+  const entries = name ? [await findCollection(name)] : await listCollections();
+  if (entries.some((entry) => !entry)) throw new CollectionNotFoundError(name!);
+  reportMeta(await initMeta(entries.filter((entry) => entry !== undefined)), opts);
+}
+
+async function metaNewAction(target: string, opts: { template: MetaKind; json?: boolean }): Promise<void> {
+  const colon = target.indexOf(':');
+  const name = colon < 0 ? target : target.slice(0, colon);
+  const articlePath = colon < 0 ? undefined : target.slice(colon + 1);
+  const entry = await findCollection(name);
+  if (!entry) throw new CollectionNotFoundError(name);
+  const template = (await listTemplates(bundledTemplatesDir(), 'meta')).find((item) => item.shape === opts.template);
+  if (!template) throw new DiffwikiError(`Metadata template ${opts.template} not found. Run: diffwiki templates init`);
+  try {
+    const { body } = parseFrontmatter(await readFile(template.path, 'utf8'));
+    const record = await createMetaRecord(entry, articlePath, opts.template, body.replace(/<!--[\s\S]*?-->/g, ''));
+    console.log(opts.json ? JSON.stringify(record, null, 2) : record.path);
+  } catch (err) {
+    if (err instanceof DiffwikiError) throw err;
+    throw new DiffwikiError(`Cannot capture ${target}: ${String(err)}`);
   }
 }
 
@@ -565,8 +612,9 @@ export function createProgram(): Command {
 
   article
     .command('update')
-    .description("Update an article's body, tags, audience, and/or status")
+    .description("Update an article's display title, body, tags, audience, and/or status")
     .argument('<target>', '"collection:slug"')
+    .option('--title <title>', 'set the display title without renaming the file')
     .option('-b, --body <markdown>', 'replace the article body')
     .option('-t, --tag <tag>', 'replace all tags (repeatable, comma-separated)', collect, [])
     .addOption(new Option('--audience <audience>', 'set visibility').choices(['public', 'private', 'system']))
@@ -738,6 +786,35 @@ export function createProgram(): Command {
     .action(withErrors((names: string) => contextRemoveAction(names)));
 
   // ── templates ───────────────────────────────────────────────────────────────
+  const meta = program.command('meta').description('Capture raw sources beside collection and article paths');
+  meta
+    .command('init')
+    .description('Create missing source manifests for existing articles')
+    .argument('[collection]', 'limit to one registered collection')
+    .option('--json', 'output paths and diagnostics as JSON')
+    .action(withErrors(metaInitAction));
+  meta
+    .command('new')
+    .description('Create a source-record template for a collection or exact article filename')
+    .argument('<target>', 'collection or collection:relative-file.md')
+    .addOption(
+      new Option('--template <kind>', 'source template')
+        .choices(['history', 'external-source-extract', 'dream-learning'])
+        .makeOptionMandatory(),
+    )
+    .option('--json', 'output the record and index paths as JSON')
+    .action(withErrors(metaNewAction));
+  meta
+    .command('reindex')
+    .description('Refresh generated source listings from current metadata files')
+    .argument('[collection]', 'limit to one metadata collection')
+    .option('--json', 'output paths and diagnostics as JSON')
+    .action(
+      withErrors(async (name: string | undefined, opts: { json?: boolean }) =>
+        reportMeta(await reindexMeta(name), opts),
+      ),
+    );
+
   const templates = program.command('templates').description('Manage authoring templates (~/.diffwiki/templates)');
   templates
     .command('init')
@@ -746,8 +823,11 @@ export function createProgram(): Command {
   templates
     .command('list')
     .description('List templates with their shape + purpose (read from each template’s frontmatter)')
+    .addOption(
+      new Option('--category <category>', 'template category').choices(['article', 'meta', 'all']).default('article'),
+    )
     .option('--json', 'output as JSON')
-    .action(withErrors((opts: { json?: boolean }) => templatesListAction(opts)));
+    .action(withErrors((opts: { json?: boolean; category?: TemplateCategory | 'all' }) => templatesListAction(opts)));
 
   const config = program.command('config').description('Read and write diffwiki config');
 

@@ -6,14 +6,16 @@ The available shapes, their purpose, and their token budget come from the CLI �
 
 ```bash
 diffwiki templates list          # shape · purpose · [budget]
-diffwiki templates list --json   # machine-readable: [{shape, purpose, budget, file}]
+diffwiki templates list --json   # [{shape, purpose, budget, file, path, category}]
 ```
 
 Pick the shape whose **purpose** best matches the knowledge, and stay within its **budget** (`diffwiki lint` enforces it). If `templates list` is empty, run `diffwiki templates init` (or `/dw-init`).
 
 ## Resolve the template file
 
-Templates live at `~/.diffwiki/templates/<shape>-template.md` (a user copy overrides the bundled default). Pass the chosen file's path to `dw-author`. Each template's HTML comment section contains the authoring rules — `dw-author` reads these before writing.
+Use the effective `path` from `diffwiki templates list --json`. A file under `~/.diffwiki/templates` overrides the bundled default. Pass that path to `dw-author`; it reads any template guidance before writing. `DIFFWIKI_HOME` changes the template root.
+
+The default list contains article templates. Source templates use `diffwiki templates list --category meta --json` and the separate workflow in `source-capture.md`. They are not article shapes and have no article token budget.
 
 ## Customizing / adding a shape
 

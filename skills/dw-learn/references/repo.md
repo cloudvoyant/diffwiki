@@ -17,8 +17,8 @@ Learn durable knowledge from a code repository (this repo, another local path, o
 - `git log --oneline -30` for recent themes.
 - Respect `.gitignore`. Never read or echo secrets (`.env`, key files) — redact anything sensitive.
 
-## 3. Extract notes
-Capture, terse and factual: what the project is and its architecture; how to set it up and run it; key conventions and gotchas; notable patterns. This is raw material for mining — it is NOT a session transcript and is NOT written to the `transcripts` collection.
+## 3. Capture source snippets
+Follow `source-capture.md`. Save the actual relevant code/document excerpts with repository, file, line range, commit, and any local changes before mining. Retain enough context to interpret the snippet. A short inventory can guide routing, but cannot substitute for the source or establish a cause, preference, or general rule. Keep this packet until the drafted articles' metadata captures it. It is not a session transcript.
 
 ## 4. Route
 See `skills/dw-remember/references/routing.md` — route to the best-fit existing collection by subject; don't assume a fixed structure.

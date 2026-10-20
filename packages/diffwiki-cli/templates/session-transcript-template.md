@@ -2,25 +2,25 @@
 shape: session-transcript
 purpose: dw-learn capture into the hidden transcripts collection (not linted).
 ---
-<!-- SESSION TRANSCRIPT. The agent fills this by introspecting its own session.
+<!-- SESSION TRANSCRIPT. Capture original inputs and outputs available in the session.
 Goes into the hidden `transcripts` collection with `--audience system`; NOT linted
-as a knowledge entry. Terse and factual — raw material for dw-learn, not a doc.
+as a knowledge entry. Do not invent dialogue, causes, preferences, or lessons.
 Title (passed to the CLI) is "<project>/<date>-<short-id>"; tags are
 [transcript, <tool>, <project>]. Do not write frontmatter — the CLI owns it. -->
 
 **Tool:** <claude-code|codex|opencode|goose|pi> · **Project:** <repo-or-path> · **Date:** <YYYY-MM-DD> · **Session:** <id-if-known>
 
-## Worked on
-- <goal — what was attempted and the outcome>
+## Raw user requests
+- <exact quotation, original time, session/message location>
 
-## Issues & learnings
-- <problem — root cause — how it was resolved (or that it's unresolved)>
+## Raw session outputs
+- <speaker/role, exact output, source message location; label assistant text generated/unverified>
 
-## Decisions & patterns
-- <architectural decision or reusable pattern observed — and why>
+## Commands and results
+- <command, exact relevant stdout/stderr, exit status, original event time>
 
-## Key tool actions
-- <notable commands, files created/changed, workflows — the reproducible bits>
+## Source snippets
+- <original code/document excerpt, repository, file/lines, commit/version, local changes>
 
-## Open threads
-- <unfinished work, follow-ups, questions for next time>
+## Source locations and gaps
+- <source record or attachment links; omitted/redacted/unavailable material>

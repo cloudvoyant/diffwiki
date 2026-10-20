@@ -2,7 +2,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { parseArticle, serializeArticle } from '../src/frontmatter';
+import { parseArticle, serializeArticle, patchArticle, parseFrontmatter } from '../src/frontmatter';
 import { slugifyPath } from '../src/slugify';
 import { readContextCollections } from '../src/project';
 import { setConfigValue, showSystemEnabled } from '../src/config';
@@ -27,6 +27,35 @@ describe('slugifyPath', () => {
   it('preserves subdir separators, slugs each segment', () => {
     expect(slugifyPath('My Project/Session 1')).toBe('my-project/session-1');
     expect(slugifyPath('  ')).toBe('untitled');
+  });
+});
+
+describe('preserving article edits', () => {
+  const raw =
+    '---\r\n# Keep this comment\r\ntitle: index # title note\r\ntags: [react]\r\ncustom: { owner: human }\r\nstatus: draft\r\n---\r\n\r\n  Body bytes  \r\n';
+
+  it('changes only the scalar title, retaining comments, fields, CRLF, and body bytes', () => {
+    expect(patchArticle(raw, { title: 'React' })).toBe(raw.replace('title: index', 'title: React'));
+  });
+
+  it('retains unknown fields/comments through combined edits and preserves untouched bodies', () => {
+    const next = patchArticle(raw, { title: 'React: Patterns', tags: ['react', 'guide'], status: 'deprecated' });
+    expect(parseArticle(next)).toMatchObject({
+      title: 'React: Patterns',
+      tags: ['react', 'guide'],
+      status: 'deprecated',
+    });
+    expect(parseFrontmatter(next).data.custom).toEqual({ owner: 'human' });
+    expect(next).toContain('# Keep this comment');
+    expect(next.endsWith('\r\n\r\n  Body bytes  \r\n')).toBe(true);
+    const replaced = patchArticle(raw, { title: 'New' }, 'replacement\n');
+    expect(parseFrontmatter(replaced).data.custom).toEqual({ owner: 'human' });
+    expect(replaced.endsWith('replacement\n')).toBe(true);
+  });
+
+  it('does not rebuild frontmatter during body-only edits or add null headers to plain files', () => {
+    expect(patchArticle(raw, {}, 'new')).toBe(raw.slice(0, raw.indexOf('\r\n\r\n  Body') + 2) + 'new');
+    expect(patchArticle('plain text', {}, 'new')).toBe('new');
   });
 });
 

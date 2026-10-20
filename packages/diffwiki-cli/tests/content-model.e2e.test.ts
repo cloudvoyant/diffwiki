@@ -19,6 +19,38 @@ afterEach(async () => {
 });
 
 describe('deprecated/system/nested/hidden', () => {
+  it('updates a title in place and retains custom metadata through combined updates', async () => {
+    await run(['collection', 'create', 'kb']);
+    const created = await run(['article', 'create', 'kb:Index', '--status', 'draft', '-b', 'original body']);
+    const file = created.out.trim();
+    const raw = (await fs.readFile(file, 'utf8')).replace(
+      'title: Index',
+      'title: index\n# Preserve metadata\ncustom: human',
+    );
+    await fs.writeFile(file, raw);
+    const title = await run(['article', 'update', 'kb:index.md', '--title', 'Knowledge Base']);
+    expect(title.ok).toBe(true);
+    expect(title.out).toContain(file);
+    expect(await fs.readFile(file, 'utf8')).toBe(raw.replace('title: index', 'title: Knowledge Base'));
+    const combined = await run([
+      'article',
+      'update',
+      'kb:index.md',
+      '--title',
+      'Updated: KB',
+      '-b',
+      'new body',
+      '--status',
+      'deprecated',
+    ]);
+    expect(combined.ok).toBe(true);
+    const next = await fs.readFile(file, 'utf8');
+    expect(next).toContain('custom: human');
+    expect(next).toContain('# Preserve metadata');
+    expect(next).toContain('status: deprecated');
+    expect(next).toContain('new body');
+    expect((await run(['article', 'update', 'kb:index.md', '--title', '   '])).ok).toBe(false);
+  });
   it('writes status: deprecated', async () => {
     await run(['collection', 'create', 'kb']);
     const res = await run(['article', 'create', 'kb:Old Thing', '--status', 'deprecated', '-b', 'body']);

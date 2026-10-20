@@ -18,7 +18,7 @@ Authoring rules:
   - No prose paragraphs, no examples, no code blocks
   - Keep descriptions to a single clause — enough to distinguish siblings
   - Do not copy over html comments or the template specific yaml frontmatter above this section. Write a diffwiki article yaml frontmatter as shown below this comment.
-  - Use concise descriptive titles in article frontmatter
+  - Use concise descriptive titles in article frontmatter. An index.md filename must not become the display title "index" or a path ending in /index.
   - Tag the collection topic and add collection-index tag
   - Default to public audience and published status for index files
 -->

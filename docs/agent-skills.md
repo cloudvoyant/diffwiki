@@ -1,6 +1,6 @@
 # Agent skills
 
-The agent skills are a layer on top of the diffwiki CLI. The CLI does the work — authoring, recall, linting, search — and the skills package that behavior so agentic environments (Claude Code and other agents) can drive it from inside a session. Skills mutate the wiki only through CLI commands; nothing bypasses it.
+The agent skills are a layer on top of the diffwiki CLI. The CLI writes articles and allocates source records. Skills fill the source-record Markdown directly so original quotations and code stay intact.
 
 diffwiki ships `dw-*` skills for authoring, recalling, linting, learning, and maintaining the wiki. Install them via the agentskills CLI; if you install them before diffwiki, run `/dw-install` to bootstrap the CLI.
 
@@ -34,6 +34,16 @@ context:
 - **dw-learn** — learn knowledge from a source, then mine it into deduped drafts. Three modes: `session` (this conversation, the default), `history` (past project sessions), and `repo` (a local or external codebase). `session`/`history` capture into the hidden `transcripts` collection; `repo` reads a codebase directly (no transcript). Bare `/dw-learn` runs `session`.
 - **dw-dream** — periodic improve/dedupe/prune using the transcripts collection; safe-by-default (drafts + deprecations only).
 - **dw-help** — explain the diffwiki CLI and available dw-* skills; orient new users.
+
+## Raw sources
+
+`dw-remember` retains original inputs before drafting and stores relevant evidence beside the article's metadata manifest. `dw-learn` passes exact user requests, role-labeled outputs, and source snippets through mining. A summary alone cannot replace those inputs. `dw-dream` reads original evidence before maintenance and writes a small `dream-learning` record for each actual change. Its dry runs write proposals only.
+
+Use `diffwiki meta init` once for existing articles, then `meta new <collection[:exact-file.md]> --template <kind> --json` to allocate records. The kinds are `history`, `external-source-extract`, and `dream-learning`. Fill the returned file and run `meta reindex`. Metadata lives in `${DIFFWIKI_HOME:-~/.diffwiki}/meta`; each article has a manifest at its exact relative path, while raw records live under `<collection>/.meta/records`. Back up this tree separately from repository wiki files.
+
+Users can edit or delete metadata records directly and reindex. Skills preserve existing captures; they do not implement pruning or review states. Captures keep source times/locations, unknown fields, redaction markers, and code whitespace. Generated assistant claims cannot establish facts or user preferences. An old custom transcript template can remain, but the skill must still retain the original evidence packet.
+
+`templates list --category meta --json` returns the effective source-template paths. User templates override bundled defaults. Article shapes remain in the default list.
 
 ## Agents
 

@@ -24,6 +24,11 @@ export function templatesDir(): string {
   return path.join(resolveHome(), 'templates');
 }
 
+/** Raw source records and per-article source manifests. */
+export function metaDir(): string {
+  return path.join(resolveHome(), 'meta');
+}
+
 export function collectionDir(name: string): string {
   return path.join(collectionsDir(), name);
 }

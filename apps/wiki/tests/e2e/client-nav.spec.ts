@@ -16,6 +16,17 @@ test.describe('client-side navigation (same-route, different-params)', () => {
     await expect(page.getByRole('heading', { level: 1, name: /setting up/i }).first()).toBeVisible();
 
     // Sidebar link back to the article that holds the diagram (client-side).
+    // All collection folders start collapsed, even on an article route.
+    const menu = page.locator('[data-slot="sidebar-menu"]');
+    await expect(menu.getByRole('link', { name: /introduction to diffwiki/i })).not.toBeVisible();
+    const expandCollection = menu.getByRole('button', { name: 'Expand', exact: true }).first();
+    await expect(expandCollection).toHaveAttribute('aria-expanded', 'false');
+    await expandCollection.click();
+    // Opening the collection does not automatically open its nested folders.
+    await expect(menu.getByRole('button', { name: 'Expand', exact: true }).first()).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
     // Scope to the sidebar nav menu — `[data-slot="sidebar"]` matches several
     // shadcn sidebar elements; the menu `<ul>` is a single stable region.
     await page

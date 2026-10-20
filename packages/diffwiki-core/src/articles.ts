@@ -3,7 +3,8 @@ import path from 'node:path';
 import { readConfig } from './config';
 import { findCollection } from './collections';
 import { slugifyPath } from './slugify';
-import { parseArticle, serializeArticle } from './frontmatter';
+import { parseArticle, serializeArticle, patchArticle } from './frontmatter';
+import { mirrorSavedArticle, validateMetaArticlePath } from './meta';
 import { ArticleNotFoundError, CollectionNotFoundError, InvalidTargetError, NoDefaultCollectionError } from './errors';
 import type { Article, Audience, PluginEvent, PublishStatus } from './types';
 
@@ -86,6 +87,7 @@ export async function createArticle(opts: {
     'utf8',
   );
   void fireHook('article-created', name, path.relative(dir, filePath));
+  await mirrorSavedArticle({ name, path: dir }, filePath);
   return { title, tags: opts.tags, path: filePath, collection: name };
 }
 
@@ -94,7 +96,7 @@ async function loadArticle(
 ): Promise<{ filePath: string; dir: string; raw: string; collection: string }> {
   const { collection, file } = parsePathTarget(target);
   const { dir } = await resolveCollectionDir(collection);
-  const filePath = path.join(dir, ensureMdPath(file));
+  const filePath = path.join(dir, validateMetaArticlePath(ensureMdPath(file)));
   try {
     return { filePath, dir, raw: await fs.readFile(filePath, 'utf8'), collection };
   } catch (err) {
@@ -103,41 +105,40 @@ async function loadArticle(
   }
 }
 
-export async function updateArticleBody(target: string, body: string): Promise<Article> {
+export interface ArticleUpdates {
+  title?: string;
+  body?: string;
+  tags?: string[];
+  audience?: Audience;
+  status?: PublishStatus;
+}
+
+/** Compose requested edits once so title/body/meta combinations retain unrelated fields. */
+export async function updateArticle(target: string, updates: ArticleUpdates): Promise<Article> {
   const { filePath, dir, raw, collection } = await loadArticle(target);
-  const parsed = parseArticle(raw);
-  await fs.writeFile(
-    filePath,
-    serializeArticle({
-      title: parsed.title,
-      tags: parsed.tags,
-      audience: parsed.audience,
-      status: parsed.status,
-      body,
-    }),
-    'utf8',
-  );
+  if (updates.title !== undefined && !updates.title.trim())
+    throw new InvalidTargetError(updates.title, 'title cannot be empty');
+  const fields: Record<string, unknown> = {};
+  if (updates.title !== undefined) fields.title = updates.title;
+  if (updates.tags !== undefined) fields.tags = Array.from(new Set(updates.tags));
+  if (updates.audience !== undefined) fields.audience = updates.audience === 'public' ? undefined : updates.audience;
+  if (updates.status !== undefined) fields.status = updates.status === 'published' ? undefined : updates.status;
+  const next = patchArticle(raw, fields, updates.body);
+  await fs.writeFile(filePath, next, 'utf8');
+  const parsed = parseArticle(next);
   void fireHook('article-updated', collection, path.relative(dir, filePath));
+  await mirrorSavedArticle({ name: collection, path: dir }, filePath);
   return { title: parsed.title, tags: parsed.tags, path: filePath, collection };
 }
 
+export function updateArticleBody(target: string, body: string): Promise<Article> {
+  return updateArticle(target, { body });
+}
+
 async function mutateTags(target: string, fn: (tags: string[]) => string[]): Promise<Article> {
-  const { filePath, dir, raw, collection } = await loadArticle(target);
+  const { raw } = await loadArticle(target);
   const parsed = parseArticle(raw);
-  const tags = fn(parsed.tags);
-  await fs.writeFile(
-    filePath,
-    serializeArticle({
-      title: parsed.title,
-      tags,
-      audience: parsed.audience,
-      status: parsed.status,
-      body: parsed.body,
-    }),
-    'utf8',
-  );
-  void fireHook('article-updated', collection, path.relative(dir, filePath));
-  return { title: parsed.title, tags, path: filePath, collection };
+  return updateArticle(target, { tags: fn(parsed.tags) });
 }
 
 export function addTags(target: string, tags: string[]): Promise<Article> {
@@ -155,24 +156,14 @@ export function setTags(target: string, tags: string[]): Promise<Article> {
 
 /**
  * Set an article's audience and/or status. Unspecified axes are left as-is; the
- * serializer drops frontmatter for default values (public/published), so setting
+ * writer drops frontmatter for default values (public/published), so setting
  * an axis back to its default cleans it out of the file.
  */
 export async function setArticleMeta(
   target: string,
   meta: { audience?: Audience; status?: PublishStatus },
 ): Promise<Article> {
-  const { filePath, dir, raw, collection } = await loadArticle(target);
-  const parsed = parseArticle(raw);
-  const audience = meta.audience ?? parsed.audience;
-  const status = meta.status ?? parsed.status;
-  await fs.writeFile(
-    filePath,
-    serializeArticle({ title: parsed.title, tags: parsed.tags, audience, status, body: parsed.body }),
-    'utf8',
-  );
-  void fireHook('article-updated', collection, path.relative(dir, filePath));
-  return { title: parsed.title, tags: parsed.tags, path: filePath, collection };
+  return updateArticle(target, meta);
 }
 
 export async function removeArticle(target: string): Promise<string> {
