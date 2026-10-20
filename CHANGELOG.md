@@ -1,3 +1,10 @@
+# [0.18.0](https://github.com/cloudvoyant/diffwiki/compare/v0.17.3...v0.18.0) (2026-10-20)
+
+
+### Features
+
+* preserve raw sources alongside wiki articles ([61eec3d](https://github.com/cloudvoyant/diffwiki/commit/61eec3d970f4539a39a24b9bdd683d513e4a1872))
+
 ## [0.17.3](https://github.com/cloudvoyant/diffwiki/compare/v0.17.2...v0.17.3) (2026-08-21)
 
 

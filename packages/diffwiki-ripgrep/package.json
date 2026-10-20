@@ -1,6 +1,6 @@
 {
   "name": "diffwiki-ripgrep",
-  "version": "0.17.3",
+  "version": "0.18.0",
   "description": "diffwiki search plugin driving ripgrep (rg) — instant literal/regex search, no index",
   "license": "MIT",
   "type": "module",

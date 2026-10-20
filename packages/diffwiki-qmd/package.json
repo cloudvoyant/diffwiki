@@ -1,6 +1,6 @@
 {
   "name": "diffwiki-qmd",
-  "version": "0.17.3",
+  "version": "0.18.0",
   "description": "diffwiki search plugin driving the qmd CLI (keyword/semantic/hybrid)",
   "license": "MIT",
   "type": "module",
