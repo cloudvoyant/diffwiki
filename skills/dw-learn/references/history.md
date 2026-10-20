@@ -15,7 +15,7 @@ Capture your tool's PAST sessions scoped to the current project, then mine them.
    | OpenCode | `~/.local/share/opencode/storage/session/<hash>/` | hash of the git project root |
 
    If your tool isn't listed, web-search "<tool> session transcript file location" and use that.
-4. **Filter + normalize.** Keep only sessions whose working directory is (under) this project. For each, extract the five `session-transcript` sections (Worked on / Issues & learnings / Decisions & patterns / Key tool actions / Open threads). Skip sessions already captured (a matching `transcripts/<project>/…` entry exists). Redact secrets. Do not capture other projects' sessions.
+4. **Filter + capture.** Keep only sessions whose working directory is (under) this project. Follow `source-capture.md`: retain exact user messages, role-labeled session outputs, commands/results, and source snippets with session/message/file locators. Preserve order and redaction markers. Do not turn dialogue into inferred lessons or causes. Skip sessions already captured. If an old transcript contains only summaries, return to the original session when available; otherwise state the evidence gap. Do not capture other projects' sessions.
 5. **Write each transcript:**
    ```bash
    diffwiki article create "transcripts:<project>/<YYYY-MM-DD>-<shortid>" \

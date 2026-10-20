@@ -251,6 +251,21 @@ function doctor(): Promise<Diagnostic[]>
 ```
 Inspect the home directory, registry, collection paths, config, and every registered plugin, returning human-readable `Diagnostic[]` at `ok`/`warn`/`error` levels. Backs the [`diffwiki doctor`](/api-docs/cli) command.
 
+## Source metadata
+
+```ts
+metaDir(): string
+ensureCollectionMeta(entry): Promise<string>
+ensureArticleMeta(entry, articlePath): Promise<string>
+initMeta(entries): Promise<MetaResult>
+createMetaRecord(entry, articlePath, kind, body): Promise<MetaRecordResult>
+reindexMeta(collection?): Promise<MetaResult>
+```
+
+Metadata storage accepts collection entries with `name` and `path`; it does not resolve the registry itself. `articlePath` is an exact relative filename, including its extension. Omit it for collection-scoped records. Kinds are `history`, `external-source-extract`, and `dream-learning`. `body` contains the template instance content, without template discovery frontmatter.
+
+`MetaResult` reports created/kept manifests, index paths, warnings, and errors. `MetaRecordResult` gives the new record ID/path, resolved target, optional mirror path, and index paths. Reindex only changes generated manifest/index sections. Raw records remain ordinary editable files outside article collections.
+
 ## Also exported
 
 The barrel additionally re-exports the core `types`, `errors`, path helpers (`resolveHome`, `registryPath`, `configPath`, `collectionsDir`, …), config access (`readConfig`, `writeConfig`, `setConfigValue`, `getConfigValue`), frontmatter helpers (`parseArticle`, `serializeArticle`), `slugify`, git helpers (`gitToplevel`, `repoId`, `upstreamStatus`, `fileTimestamps`, …), the plugin-management surface (`loadSearchProvider`, `listSearchModes`, `installPlugin`, `registerPlugin`, `removePlugin`, `listPlugins`, `listAvailablePlugins`, …), and LogTape logger accessors (`getLogger`, `resolveLogLevel`). Core never configures logging — apps do.

@@ -58,6 +58,24 @@ describe('listTemplateShapes', () => {
 });
 
 describe('listTemplates', () => {
+  it('filters metadata shapes and resolves user templates over bundled defaults', async () => {
+    await fs.writeFile(path.join(src, 'history-template.md'), '---\nshape: history\ncategory: meta\n---\nRaw');
+    expect(await listTemplateShapes(src)).toEqual(['guide', 'recipe']);
+    await fs.mkdir(templatesDir(), { recursive: true });
+    const file = path.join(templatesDir(), 'history-template.md');
+    await fs.writeFile(file, '---\nshape: history\ncategory: meta\npurpose: My history\n---\nCustom');
+    expect(await listTemplates(src, 'meta')).toEqual([
+      {
+        shape: 'history',
+        category: 'meta',
+        purpose: 'My history',
+        budget: undefined,
+        file: 'history-template.md',
+        path: file,
+      },
+    ]);
+    expect(await listTemplates(src, 'all')).toHaveLength(3);
+  });
   it('reads shape/purpose/budget from each template frontmatter', async () => {
     await fs.writeFile(
       path.join(src, 'guide-template.md'),

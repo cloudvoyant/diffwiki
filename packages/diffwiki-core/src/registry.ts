@@ -1,5 +1,7 @@
 import fs from 'node:fs/promises';
 import { registryPath, resolveHome } from './paths';
+import { ensureCollectionMeta } from './meta';
+import { DiffwikiError } from './errors';
 import type { CollectionEntry, Registry } from './types';
 
 function isMissing(err: unknown): boolean {
@@ -31,6 +33,13 @@ export async function registerCollection(entry: CollectionEntry): Promise<void> 
     registry.collections.push(entry);
   }
   await writeRegistry(registry);
+  try {
+    await ensureCollectionMeta(entry);
+  } catch (err) {
+    throw new DiffwikiError(
+      `Collection ${entry.name} registered, but metadata setup failed: ${String(err)}. Repair with: diffwiki meta init ${entry.name}`,
+    );
+  }
 }
 
 export async function unregisterCollection(name: string): Promise<void> {

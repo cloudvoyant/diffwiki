@@ -14,11 +14,15 @@ function NotFound() {
 }
 
 function RouteError({ error }: ErrorComponentProps) {
+  const message =
+    error && typeof error === 'object' && 'message' in error && typeof error.message === 'string'
+      ? error.message
+      : undefined;
   return (
     <div className="flex min-h-[40vh] flex-col items-center justify-center gap-2 px-6 text-center">
       <p className="text-lg font-semibold text-foreground">Couldn’t load this page</p>
       <p className="max-w-md text-sm text-muted-foreground">
-        {error?.message || 'Something went wrong while loading the content.'}
+        {message || 'Something went wrong while loading the content.'}
       </p>
     </div>
   );

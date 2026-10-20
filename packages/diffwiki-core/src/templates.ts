@@ -51,12 +51,10 @@ export async function seedTemplates(srcDir: string): Promise<SeedResult> {
 
 /** The template shape names bundled at `srcDir`, e.g. `['guide', 'recipe', …]`. */
 export async function listTemplateShapes(srcDir: string): Promise<string[]> {
-  const files = await fs.readdir(srcDir);
-  return files
-    .filter((f) => f.endsWith('-template.md'))
-    .map((f) => f.replace(/-template\.md$/, ''))
-    .sort();
+  return (await listTemplates(srcDir)).map((info) => info.shape).sort();
 }
+
+export type TemplateCategory = 'article' | 'meta';
 
 /** A template's self-describing metadata, read from its frontmatter. */
 export interface TemplateInfo {
@@ -68,6 +66,9 @@ export interface TemplateInfo {
   budget?: [number, number];
   /** The template file name. */
   file: string;
+  /** Effective user override or bundled file. */
+  path: string;
+  category: TemplateCategory;
 }
 
 /**
@@ -77,13 +78,27 @@ export interface TemplateInfo {
  * hard-coding shape names, so dropping in a template with frontmatter
  * makes it discoverable. Falls back to the filename stem when `shape:` is absent.
  */
-export async function listTemplates(srcDir: string): Promise<TemplateInfo[]> {
-  const files = (await fs.readdir(srcDir)).filter((f) => f.endsWith('-template.md')).sort();
+export async function listTemplates(
+  srcDir: string,
+  category: TemplateCategory | 'all' = 'article',
+): Promise<TemplateInfo[]> {
+  const files = new Map<string, string>();
+  for (const dir of [srcDir, templatesDir()]) {
+    let names: string[];
+    try {
+      names = await fs.readdir(dir);
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') continue;
+      throw err;
+    }
+    for (const name of names.filter((name) => name.endsWith('-template.md')).sort())
+      files.set(name, path.resolve(dir, name));
+  }
   const out: TemplateInfo[] = [];
-  for (const file of files) {
+  for (const [file, filePath] of [...files].sort(([a], [b]) => a.localeCompare(b))) {
     let data: Record<string, unknown> = {};
     try {
-      ({ data } = parseFrontmatter(await fs.readFile(path.join(srcDir, file), 'utf8')));
+      ({ data } = parseFrontmatter(await fs.readFile(filePath, 'utf8')));
     } catch {
       /* unreadable — fall back to filename-derived shape */
     }
@@ -93,7 +108,9 @@ export async function listTemplates(srcDir: string): Promise<TemplateInfo[]> {
       Array.isArray(data.budget) && data.budget.length === 2
         ? ([Number(data.budget[0]), Number(data.budget[1])] as [number, number])
         : undefined;
-    out.push({ shape, purpose, budget, file });
+    const templateCategory = data.category === 'meta' ? 'meta' : 'article';
+    if (category === 'all' || category === templateCategory)
+      out.push({ shape, purpose, budget, file, path: filePath, category: templateCategory });
   }
   return out;
 }

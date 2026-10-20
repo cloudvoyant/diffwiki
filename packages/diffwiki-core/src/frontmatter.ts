@@ -1,5 +1,6 @@
 import matter from 'gray-matter';
-import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
+import { parse as parseYaml, stringify as stringifyYaml, parseDocument, isScalar } from 'yaml';
+import { DiffwikiError } from './errors';
 import type { Audience, PublishStatus } from './types';
 
 export interface ParsedArticle {
@@ -27,7 +28,8 @@ export interface SerializableArticle {
  */
 const YAML_ENGINE = {
   parse: (input: string): Record<string, unknown> => {
-    const data = parseYaml(input) as unknown;
+    // gray-matter can leave the closing CR of a CRLF fence in the YAML input.
+    const data = parseYaml(input.replace(/\r\n?/g, '\n')) as unknown;
     // A bare scalar (e.g. `--- true ---`) parses to a non-object; treat as empty.
     return data && typeof data === 'object' ? (data as Record<string, unknown>) : {};
   },
@@ -97,6 +99,50 @@ const FRONTMATTER_BLOCK_RE = /^\uFEFF?[ \t]*---\r?\n[\s\S]*?\r?\n---[ \t]*(?:\r?
  */
 export function stripFrontmatter(raw: string): string {
   return raw.replace(FRONTMATTER_BLOCK_RE, '');
+}
+
+/** Edit requested fields while preserving unknown YAML keys, comments, and the untouched body. */
+export function patchArticle(raw: string, fields: Record<string, unknown>, body?: string): string {
+  const fence = /^(\uFEFF?[ \t]*---[ \t]*\r?\n)([\s\S]*?)(\r?\n---[ \t]*(?:\r?\n|$))/.exec(raw);
+  if (Object.keys(fields).length === 0) return fence ? fence[0] + (body ?? raw.slice(fence[0].length)) : (body ?? raw);
+  const originalYaml = fence?.[2] ?? '';
+  const doc = parseDocument(originalYaml);
+  if (doc.errors.length)
+    throw new DiffwikiError('Cannot update article with invalid YAML frontmatter. Fix its header first.');
+  // A title-only edit can preserve the rest of the header byte-for-byte too.
+  const titleNode = doc.get('title', true);
+  if (
+    fence &&
+    body === undefined &&
+    Object.keys(fields).length === 1 &&
+    typeof fields.title === 'string' &&
+    !/[\r\n]/.test(fields.title) &&
+    isScalar(titleNode) &&
+    titleNode.range
+  ) {
+    const [start, end] = titleNode.range;
+    if (!/[\r\n]/.test(originalYaml.slice(start, end))) {
+      const scalar = stringifyYaml(fields.title, { lineWidth: 0 }).trimEnd();
+      return (
+        fence[1] +
+        originalYaml.slice(0, start) +
+        scalar +
+        originalYaml.slice(end) +
+        fence[3] +
+        raw.slice(fence[0].length)
+      );
+    }
+  }
+  for (const [key, value] of Object.entries(fields)) {
+    if (value === undefined) doc.delete(key);
+    else doc.set(key, value);
+  }
+  const newline = fence?.[1].endsWith('\r\n') ? '\r\n' : '\n';
+  const yaml = doc.toString({ lineWidth: 0 }).replace(/\n$/, '').replace(/\r?\n/g, newline);
+  const content = body ?? (fence ? raw.slice(fence[0].length) : raw);
+  const close = fence?.[3] ?? `${newline}---${newline}`;
+  // A header closed at EOF needs a newline before a newly supplied body.
+  return (fence?.[1] ?? `---${newline}`) + yaml + close + (body && !close.endsWith('\n') ? newline : '') + content;
 }
 
 /**

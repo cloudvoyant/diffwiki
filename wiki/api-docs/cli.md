@@ -143,13 +143,14 @@ diffwiki article create "handbook:Onboarding" -b "# Onboarding" -t hr,process --
 
 ### `article update "<collection:slug>"`
 
-Update an article's body, tags, audience, and/or status. Each axis is optional and left untouched when its flag is omitted; pass at least one. `-t/--tag` **replaces** the whole tag set. Setting `--audience public` / `--status published` clears the frontmatter back to the default.
+Update an article's display title, body, tags, audience, and/or status. Omitted fields stay unchanged; pass at least one. `--title` changes the display title without renaming the file. Unrelated YAML fields/comments and an untouched body are preserved. `-t/--tag` **replaces** the whole tag set. Setting `--audience public` / `--status published` clears that field back to the default.
 
 ```
-diffwiki article update "<collection:slug>" [-b <markdown>] [-t <tag>...] [--audience <public|private|system>] [--status <draft|published|deprecated>]
+diffwiki article update "<collection:slug>" [--title <title>] [-b <markdown>] [-t <tag>...] [--audience <public|private|system>] [--status <draft|published|deprecated>]
 ```
 
 - `<target>` (required) — positional `"collection:slug"` (nested paths supported, e.g. `collection:guide/setup`).
+- `--title <title>` — set a nonempty display title without changing the filename.
 - `-b, --body <markdown>` — replace the article body.
 - `-t, --tag <tag>` — replace all tags; repeatable and comma-separated.
 - `--audience <public|private|system>` — set visibility.
@@ -468,8 +469,29 @@ List available templates with their shape, purpose, and token budget (read from 
 
 ```
 diffwiki templates list          # shape · purpose · [budget]
-diffwiki templates list --json   # [{ shape, purpose, budget, file }]
+diffwiki templates list --json   # [{ shape, purpose, budget, file, path, category }]
+diffwiki templates list --category meta --json
 ```
+
+The default category is `article`. Use `--category meta` or `all` for source templates. User copies override bundled defaults; `path` is the effective file to read.
+
+## Raw source metadata
+
+```sh
+diffwiki meta init [collection] [--json]
+diffwiki meta new typescript:guide/setup.mdx --template history --json
+diffwiki meta new typescript --template external-source-extract --json
+diffwiki meta new typescript:guide/setup.mdx --template dream-learning --json
+diffwiki meta reindex [collection] [--json]
+```
+
+`meta init` creates missing manifests for actual article files, including index/README pages and repo collections. With no collection, it scans registered collections. Article create/update also creates its own empty mirror; it does not invent source evidence.
+
+`meta new` needs an existing collection and, for page scope, an exact existing `.md`/`.mdx` filename. It returns `{ id, path, target, mirror_path?, index_paths }`. Fill the returned Markdown directly with actual quotations, code, or retrieved excerpts. The CLI sets kind, collection, optional article path, and UTC capture time; it does not fetch URLs.
+
+The default store is `~/.diffwiki/meta` (or `$DIFFWIKI_HOME/meta`). Article manifests mirror `<collection>/<relative-file>`. Records and optional attachments live in `<collection>/.meta/`; its `META.md` groups source links. The root `meta/META.md` links collections. Metadata is not published with articles; back it up separately.
+
+After editing or deleting a record manually, run `meta reindex`. It refreshes generated listings and preserves raw records and notes outside the listing markers. It reports malformed records and broken scope links. It does not restore deleted records or manage pruning. If metadata fails after an article saves, use the reported saved path and repair command rather than creating another article.
 
 ## Diagnostics
 

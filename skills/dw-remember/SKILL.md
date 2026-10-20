@@ -5,7 +5,7 @@ description: Create or update diffwiki knowledge. Triggers on "dw remember", "re
 
 # dw-remember
 
-Turn one piece of knowledge into one tight, template-conformant diffwiki draft. Mutate ONLY through the `diffwiki` CLI — it owns frontmatter and slugging.
+Turn one piece of knowledge into one tight, template-conformant diffwiki draft. Write articles through the CLI. Fill source-record Markdown directly after CLI allocation; see `references/source-capture.md`.
 
 ## Inputs
 - The knowledge to capture (from the user or a calling agent).
@@ -18,7 +18,7 @@ Turn one piece of knowledge into one tight, template-conformant diffwiki draft. 
 
 2. **Route** (see `references/routing.md`). List the collections that exist (`diffwiki collection list` + the repo `diffwiki.yaml`) and pick the **best-fit by subject** — the repo's own collection for project-specific knowledge, or the collection dedicated to the topic (language/framework/tool/subject) for reusable knowledge. Do NOT assume a fixed structure. If nothing fits well, propose creating a new collection. Show the chosen `collection:Title` and confirm if ambiguous.
 
-3. **Pick the shape + template.** Discover the shapes from the CLI — `diffwiki templates list` prints each shape, its purpose, and budget (read from the template frontmatter; see `references/templates.md`). Choose the shape whose purpose fits; resolve its file at `~/.diffwiki/templates/<shape>-template.md`. If the list is empty, run `diffwiki templates init` (or `/dw-init`).
+3. **Preserve inputs and pick the template.** Read `references/source-capture.md` and retain the raw input packet before summarizing. On UPDATE, read the existing article and its metadata. Discover article shapes with `diffwiki templates list --json`; use the effective template `path` (see `references/templates.md`). If the list is empty, run `diffwiki templates init`.
 
 4. **Research (if asked).** Dispatch the `dw-researcher` agent with the topic and shape; collect its verified reference list + facts.
 
@@ -34,12 +34,12 @@ Turn one piece of knowledge into one tight, template-conformant diffwiki draft. 
    ```
    Tags: the shape tag + topic tags from the agent's frontmatter; NEVER `diffwiki-template`.
 
-7. **Lint + tighten.** Run `diffwiki lint -c <collection>`. If the new entry has any ✖, dispatch `dw-reviewer` with the file and findings, take its tightened body, and re-run the `article update` from step 6. Repeat until lint is clean (max 2 passes).
+7. **Capture sources, then tighten.** Use the exact saved article filename to allocate/fill history and any external-extract records through `references/source-capture.md`. Keep collection-wide captures linked rather than duplicated. Run `diffwiki lint -c <collection>`. If the entry has any ✖, dispatch `dw-reviewer`, update the article, and re-run lint (max 2 passes). Tighten only article prose, never raw source records. Reindex and report the source paths with the draft. If capture fails, keep the packet and saved article path for retry.
 
 8. **Show it (direct invocation only).** If a human invoked this skill directly (not another agent), print the drafted entry so they can review: `diffwiki article edit "<collection>:<slug>" --editor cat` OR read and print the file. State that it is a **draft** and how to promote it (`diffwiki article update "<collection>:<slug>" --status published`).
 
 ## Rules
 - Every entry ships `--status draft`. Promotion to `published` is a separate, human/reviewer act.
-- Frontmatter is never hand-written — only `-b`, `-t`, `--status`, `--audience`.
+- Do not edit article frontmatter directly. Use CLI flags for the saved article. The author's returned frontmatter supplies suggested values; source-record Markdown follows `references/source-capture.md`.
 - One entry per invocation. If the knowledge spans shapes, create multiple entries and link them.
 - Keep it tight: the author/reviewer agents enforce the budget; do not pad.

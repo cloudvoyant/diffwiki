@@ -13,7 +13,7 @@ Turn a source into tight, template-conformant knowledge drafts. Pick a **mode** 
 | `history` | past on-disk sessions for this project | `references/history.md` |
 | `repo` | a local or external code repository | `references/repo.md` |
 
-Mutate only through the `diffwiki` CLI (and `dw-remember`). If `diffwiki` is missing, run `/dw-install`.
+Write articles through the `diffwiki` CLI (and `dw-remember`). Preserve raw inputs with `references/source-capture.md`; fill CLI-allocated metadata records directly. If `diffwiki` is missing, run `/dw-install`.
 
 ## Dispatch
 
@@ -25,4 +25,5 @@ Mutate only through the `diffwiki` CLI (and `dw-remember`). If `diffwiki` is mis
 - Capture only THIS project's material — except `repo` mode, which may target an external repository the user names explicitly.
 - Prefer UPDATE over duplicate CREATE when mining (dedupe via `dw-recall`). Keep every entry in its template budget — brevity over completeness.
 - Never fabricate references; use `dw-remember --research` for candidates needing verified sources.
+- Mine original user requests, role-labeled outputs, and source snippets. A summary or prior assistant claim cannot replace those inputs. Do not infer preferences, causes, or generalized lessons. If old transcript templates contain summary sections, still retain and pass the original evidence packet.
 - Never write secrets/tokens seen in a session or repo — redact.

@@ -150,8 +150,8 @@ function Node({ node, inherit, depth }: { node: TreeNode; inherit: Inherit; dept
 }
 
 function BranchNode({ node, inherit, depth }: { node: TreeNode; inherit: Inherit; depth: number }) {
-  // Top-level collection nodes start expanded; nested folders start collapsed.
-  const [open, setOpen] = useState(depth === 0);
+  // Collections and nested folders all start collapsed.
+  const [open, setOpen] = useState(false);
   const label = node.title ?? node.name;
   const { showLock, showDraft } = markers(node, inherit);
   return (

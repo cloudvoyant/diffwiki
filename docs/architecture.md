@@ -198,6 +198,8 @@ See also:
 
 ## Agent skills layer
 
-The agent skills layer sits on top of the diffwiki CLI: a `skills/` tree (repo root) of agent skills (`dw-*`) and specialist agents that let an agentic environment author, recall, lint, and maintain the wiki. The CLI is the only seam between agents and content — skills never touch the store directly; every mutation goes through a CLI command.
+The agent skills layer sits on top of the diffwiki CLI: a `skills/` tree of skills and specialist agents for authoring, recall, learning, and maintenance. Article writes go through the CLI. Source records are allocated through the CLI, then filled directly as Markdown.
+
+The source store preserves original evidence outside article collections. See [Source metadata and provenance](architecture/source-metadata.md) for its components, storage layout, capture flows, and recovery contracts.
 
 The layer leans on four CLI capabilities. `diffwiki lint` enforces template conformance. A `system` audience (revealed with the `showSystem` toggle) keeps internal collections such as `transcripts` hidden from recall, search, lint, and the site. Multi-collection search scopes recall to a named set — `diffwiki.yaml` `context.collections`, or a comma-separated `-c`. Nested article paths address entries like `transcripts/<project>/<slug>`. `dw-learn` learns from three sources — the current session, a project's past sessions, or a code repository. Session and history capture is done by each agent introspecting its own session (the CLI does no per-tool parsing) and written into the hidden `transcripts` collection; the repo source reads a codebase directly. All three converge on one mine → route → dedupe → draft pipeline. See [Agent skills](./agent-skills.md).
