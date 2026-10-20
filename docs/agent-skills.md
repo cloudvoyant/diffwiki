@@ -37,13 +37,7 @@ context:
 
 ## Raw sources
 
-`dw-remember` retains original inputs before drafting and stores relevant evidence beside the article's metadata manifest. `dw-learn` passes exact user requests, role-labeled outputs, and source snippets through mining. A summary alone cannot replace those inputs. `dw-dream` reads original evidence before maintenance and writes a small `dream-learning` record for each actual change. Its dry runs write proposals only.
-
-Use `diffwiki meta init` once for existing articles, then `meta new <collection[:exact-file.md]> --template <kind> --json` to allocate records. The kinds are `history`, `external-source-extract`, and `dream-learning`. Fill the returned file and run `meta reindex`. Metadata lives in `${DIFFWIKI_HOME:-~/.diffwiki}/meta`; each article has a manifest at its exact relative path, while raw records live under `<collection>/.meta/records`. Back up this tree separately from repository wiki files.
-
-Users can edit or delete metadata records directly and reindex. Skills preserve existing captures; they do not implement pruning or review states. Captures keep source times/locations, unknown fields, redaction markers, and code whitespace. Generated assistant claims cannot establish facts or user preferences. An old custom transcript template can remain, but the skill must still retain the original evidence packet.
-
-`templates list --category meta --json` returns the effective source-template paths. User templates override bundled defaults. Article shapes remain in the default list.
+Skills retain original requests, role-labeled outputs, and source snippets alongside articles. See [Source metadata and provenance](architecture/source-metadata.md) for storage, templates, capture flows, and the boundary between CLI article writes and direct metadata edits.
 
 ## Agents
 

@@ -6,7 +6,8 @@ import { metaDir } from './paths';
 import { DiffwikiError, InvalidTargetError } from './errors';
 import type { CollectionEntry } from './types';
 
-export const META_KINDS = ['history', 'external-source-extract', 'dream-learning'] as const;
+// types -----------------------------------------------------------------------
+
 export type MetaKind = (typeof META_KINDS)[number];
 type Collection = Pick<CollectionEntry, 'name' | 'path'>;
 export interface MetaResult {
@@ -24,17 +25,9 @@ export interface MetaRecordResult {
   index_paths: string[];
 }
 
-const START = '<!-- diffwiki:meta:start -->';
-const END = '<!-- diffwiki:meta:end -->';
-const within = (root: string, file: string) => file === root || file.startsWith(root + path.sep);
-const missing = (err: unknown) => (err as NodeJS.ErrnoException).code === 'ENOENT';
+// api -------------------------------------------------------------------------
 
-function collectionRoot(name: string): string {
-  if (!name || name.startsWith('.') || /[/\\\0]/.test(name) || name.toLowerCase() === 'meta.md') {
-    throw new InvalidTargetError(name, 'expected a collection name without path segments or reserved names');
-  }
-  return path.resolve(metaDir(), name);
-}
+export const META_KINDS = ['history', 'external-source-extract', 'dream-learning'] as const;
 
 /** Exact file identity; unlike article titles, this must never be slugified. */
 export function validateMetaArticlePath(file: string): string {
@@ -47,97 +40,6 @@ export function validateMetaArticlePath(file: string): string {
     throw new InvalidTargetError(file, 'expected an exact relative .md/.mdx file path without traversal');
   }
   return file;
-}
-
-/** Reject symlinks inside the metadata store before reading or replacing files. */
-async function checked(file: string): Promise<string> {
-  const root = path.resolve(metaDir());
-  const absolute = path.resolve(file);
-  if (!within(root, absolute)) throw new InvalidTargetError(file, 'path escapes the metadata root');
-  const parts = path.relative(root, absolute).split(path.sep).filter(Boolean);
-  let current = root;
-  for (const part of ['', ...parts]) {
-    current = part ? path.join(current, part) : current;
-    try {
-      if ((await fs.lstat(current)).isSymbolicLink()) throw new DiffwikiError(`metadata path is a symlink: ${current}`);
-    } catch (err) {
-      if (missing(err)) break;
-      throw err;
-    }
-  }
-  return absolute;
-}
-
-async function seed(file: string, title: string): Promise<boolean> {
-  await checked(file);
-  await fs.mkdir(path.dirname(file), { recursive: true });
-  try {
-    await fs.writeFile(file, `# ${title}\n\n${START}\nNo source history captured.\n${END}\n`, { flag: 'wx' });
-    return true;
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === 'EEXIST') return false;
-    throw err;
-  }
-}
-
-async function listing(file: string, title: string, lines: string[]): Promise<void> {
-  await seed(file, title);
-  const raw = await fs.readFile(await checked(file), 'utf8');
-  const block = `${START}\n${lines.length ? lines.join('\n') : 'No source history captured.'}\n${END}`;
-  const start = raw.indexOf(START);
-  const end = raw.indexOf(END, start);
-  if (start >= 0 !== end >= 0) throw new DiffwikiError(`incomplete generated section in ${file}`);
-  const next = start >= 0 ? raw.slice(0, start) + block + raw.slice(end + END.length) : `${raw}\n${block}\n`;
-  if (next === raw) return;
-  const temporary = `${file}.${randomUUID()}.tmp`;
-  try {
-    await fs.writeFile(await checked(temporary), next, { flag: 'wx' });
-    await checked(file);
-    await fs.rename(temporary, file);
-  } finally {
-    await fs.rm(temporary, { force: true });
-  }
-}
-
-function link(from: string, to: string, label: string): string {
-  const href = path.relative(path.dirname(from), to).split(path.sep).map(encodeURIComponent).join('/');
-  return `[${label
-    .replaceAll('[', '')
-    .replaceAll(']', '')
-    .replace(/[\r\n]/g, '')}](${href})`;
-}
-
-async function markdownFiles(root: string, rel = ''): Promise<string[]> {
-  const out: string[] = [];
-  for (const item of (await fs.readdir(path.join(root, rel), { withFileTypes: true })).sort((a, b) =>
-    a.name.localeCompare(b.name),
-  )) {
-    if (item.name.startsWith('.')) continue;
-    const file = rel ? `${rel}/${item.name}` : item.name;
-    if (item.isDirectory()) out.push(...(await markdownFiles(root, file)));
-    else if (item.isFile() && /\.mdx?$/i.test(file)) out.push(file);
-  }
-  return out;
-}
-
-async function globalIndex(): Promise<string> {
-  await fs.mkdir(await checked(metaDir()), { recursive: true });
-  const index = path.join(metaDir(), 'META.md');
-  const lines: string[] = [];
-  for (const item of (await fs.readdir(metaDir(), { withFileTypes: true })).sort((a, b) =>
-    a.name.localeCompare(b.name),
-  )) {
-    if (!item.isDirectory() || item.name.startsWith('.')) continue;
-    const collectionIndex = path.join(collectionRoot(item.name), '.meta', 'META.md');
-    try {
-      await fs.access(await checked(collectionIndex));
-      lines.push(`- ${link(index, collectionIndex, item.name)}`);
-    } catch (err) {
-      if (!missing(err)) throw err;
-    }
-  }
-  await listing(index, 'Source collections', lines);
-  return index;
 }
 
 export async function ensureCollectionMeta(entry: Collection): Promise<string> {
@@ -322,4 +224,109 @@ export async function createMetaRecord(
     ...(mirror ? { mirror_path: mirror } : {}),
     index_paths: indexed.index_paths,
   };
+}
+
+// helpers ---------------------------------------------------------------------
+
+const START = '<!-- diffwiki:meta:start -->';
+const END = '<!-- diffwiki:meta:end -->';
+const within = (root: string, file: string) => file === root || file.startsWith(root + path.sep);
+const missing = (err: unknown) => (err as NodeJS.ErrnoException).code === 'ENOENT';
+
+function collectionRoot(name: string): string {
+  if (!name || name.startsWith('.') || /[/\\\0]/.test(name) || name.toLowerCase() === 'meta.md') {
+    throw new InvalidTargetError(name, 'expected a collection name without path segments or reserved names');
+  }
+  return path.resolve(metaDir(), name);
+}
+
+/** Reject symlinks inside the metadata store before reading or replacing files. */
+async function checked(file: string): Promise<string> {
+  const root = path.resolve(metaDir());
+  const absolute = path.resolve(file);
+  if (!within(root, absolute)) throw new InvalidTargetError(file, 'path escapes the metadata root');
+  const parts = path.relative(root, absolute).split(path.sep).filter(Boolean);
+  let current = root;
+  for (const part of ['', ...parts]) {
+    current = part ? path.join(current, part) : current;
+    try {
+      if ((await fs.lstat(current)).isSymbolicLink()) throw new DiffwikiError(`metadata path is a symlink: ${current}`);
+    } catch (err) {
+      if (missing(err)) break;
+      throw err;
+    }
+  }
+  return absolute;
+}
+
+async function seed(file: string, title: string): Promise<boolean> {
+  await checked(file);
+  await fs.mkdir(path.dirname(file), { recursive: true });
+  try {
+    await fs.writeFile(file, `# ${title}\n\n${START}\nNo source history captured.\n${END}\n`, { flag: 'wx' });
+    return true;
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'EEXIST') return false;
+    throw err;
+  }
+}
+
+async function listing(file: string, title: string, lines: string[]): Promise<void> {
+  await seed(file, title);
+  const raw = await fs.readFile(await checked(file), 'utf8');
+  const block = `${START}\n${lines.length ? lines.join('\n') : 'No source history captured.'}\n${END}`;
+  const start = raw.indexOf(START);
+  const end = raw.indexOf(END, start);
+  if (start >= 0 !== end >= 0) throw new DiffwikiError(`incomplete generated section in ${file}`);
+  const next = start >= 0 ? raw.slice(0, start) + block + raw.slice(end + END.length) : `${raw}\n${block}\n`;
+  if (next === raw) return;
+  const temporary = `${file}.${randomUUID()}.tmp`;
+  try {
+    await fs.writeFile(await checked(temporary), next, { flag: 'wx' });
+    await checked(file);
+    await fs.rename(temporary, file);
+  } finally {
+    await fs.rm(temporary, { force: true });
+  }
+}
+
+function link(from: string, to: string, label: string): string {
+  const href = path.relative(path.dirname(from), to).split(path.sep).map(encodeURIComponent).join('/');
+  return `[${label
+    .replaceAll('[', '')
+    .replaceAll(']', '')
+    .replace(/[\r\n]/g, '')}](${href})`;
+}
+
+async function markdownFiles(root: string, rel = ''): Promise<string[]> {
+  const out: string[] = [];
+  for (const item of (await fs.readdir(path.join(root, rel), { withFileTypes: true })).sort((a, b) =>
+    a.name.localeCompare(b.name),
+  )) {
+    if (item.name.startsWith('.')) continue;
+    const file = rel ? `${rel}/${item.name}` : item.name;
+    if (item.isDirectory()) out.push(...(await markdownFiles(root, file)));
+    else if (item.isFile() && /\.mdx?$/i.test(file)) out.push(file);
+  }
+  return out;
+}
+
+async function globalIndex(): Promise<string> {
+  await fs.mkdir(await checked(metaDir()), { recursive: true });
+  const index = path.join(metaDir(), 'META.md');
+  const lines: string[] = [];
+  for (const item of (await fs.readdir(metaDir(), { withFileTypes: true })).sort((a, b) =>
+    a.name.localeCompare(b.name),
+  )) {
+    if (!item.isDirectory() || item.name.startsWith('.')) continue;
+    const collectionIndex = path.join(collectionRoot(item.name), '.meta', 'META.md');
+    try {
+      await fs.access(await checked(collectionIndex));
+      lines.push(`- ${link(index, collectionIndex, item.name)}`);
+    } catch (err) {
+      if (!missing(err)) throw err;
+    }
+  }
+  await listing(index, 'Source collections', lines);
+  return index;
 }

@@ -18,7 +18,7 @@ afterEach(async () => {
   await fs.rm(home, { recursive: true, force: true });
 });
 
-describe('deprecated/system/nested/hidden', () => {
+describe('article lifecycle, audience, paths, and title updates', () => {
   it('updates a title in place and retains custom metadata through combined updates', async () => {
     await run(['collection', 'create', 'kb']);
     const created = await run(['article', 'create', 'kb:Index', '--status', 'draft', '-b', 'original body']);
