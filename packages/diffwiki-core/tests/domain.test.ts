@@ -130,6 +130,64 @@ describe('collections & articles', () => {
   it('errors without a default collection', async () => {
     await expect(createArticle({ target: 'Orphan', tags: [] })).rejects.toBeInstanceOf(NoDefaultCollectionError);
   });
+
+  it('removes an article from the default collection when no collection prefix is given', async () => {
+    // Arrange
+    await createCollection('notes');
+    await setConfigValue('defaultCollection', 'notes');
+    const article = await createArticle({ target: 'Temporary Note', tags: ['a'] });
+
+    // Act
+    const removed = await removeArticle('temporary-note');
+
+    // Assert
+    expect(removed).toBe(article.path);
+    await expect(removeArticle('temporary-note')).rejects.toBeInstanceOf(ArticleNotFoundError);
+  });
+
+  it('rejects removing without a collection prefix when defaultCollection is unset', async () => {
+    // Arrange
+    await createCollection('notes');
+    await createArticle({ target: 'notes:Orphan Note', tags: [] });
+
+    // Act & Assert
+    await expect(removeArticle('orphan-note')).rejects.toBeInstanceOf(NoDefaultCollectionError);
+  });
+
+  it('resolves nested collection paths and writes the leaf title to frontmatter', async () => {
+    // Arrange
+    await createCollection('react');
+
+    // Act
+    const a = await createArticle({ target: 'react/tanstack:Query Keys', tags: ['react'], body: '# Query Keys\n' });
+    const b = await createArticle({ target: 'react:nextjs/App Router', tags: ['react'], body: '# App Router\n' });
+
+    // Assert
+    expect(a.collection).toBe('react');
+    expect(a.title).toBe('Query Keys');
+    expect(a.path.replace(/\\/g, '/')).toContain('/react/tanstack/query-keys.md');
+    expect(parseArticle(await fs.readFile(a.path, 'utf8')).title).toBe('Query Keys');
+    expect(b.collection).toBe('react');
+    expect(b.title).toBe('App Router');
+    expect(b.path.replace(/\\/g, '/')).toContain('/react/nextjs/app-router.md');
+  });
+
+  it('updates, tags, and removes nested collection targets via coll/sub:slug', async () => {
+    // Arrange
+    await createCollection('react');
+    const created = await createArticle({ target: 'react/tanstack:Query Keys', tags: ['react'] });
+
+    // Act
+    await updateArticleBody('react/tanstack:query-keys', '# Updated\n');
+    await addTags('react/tanstack:query-keys', ['tanstack']);
+    const updated = parseArticle(await fs.readFile(created.path, 'utf8'));
+    const removed = await removeArticle('react/tanstack:query-keys');
+
+    // Assert
+    expect(updated.body).toContain('Updated');
+    expect(updated.tags).toEqual(['react', 'tanstack']);
+    expect(removed).toBe(created.path);
+  });
 });
 
 describe('query (dummy)', () => {

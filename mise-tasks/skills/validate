@@ -52,8 +52,8 @@ if grep -rEn '\]\(\s*\.\./' skills --include='*.md' | grep -v "/shared/"; then
   fail=1
 fi
 
-# 4. Optional external validator.
-if command -v skills-ref >/dev/null 2>&1; then
+# 4. Optional external validator (verify the binary actually runs, not an unconfigured shim).
+if skills-ref --version >/dev/null 2>&1; then
   while IFS= read -r d; do
     skills-ref validate "$d" || fail=1
   done < <(find skills -mindepth 2 -maxdepth 2 -name SKILL.md -not -path "*/shared/*" -exec dirname {} \;)

@@ -121,7 +121,7 @@ diffwiki collection edit --editor "code -w"   # override the configured editor
 
 ## Articles
 
-Article commands mutate markdown files inside a collection. The identifier is a **positional** `collection:slug`. For `article create` the collection is optional (`[collection:]title`) and falls back to `defaultCollection`. See [contributing](/user-guide/continuous-learning).
+Article commands mutate markdown files inside a collection. The identifier is a **positional** `collection:slug` (or nested `collection/subpath:slug`). For `article create` and `article remove` the collection is optional (`[collection:]title` / `[collection:]slug`) and falls back to `defaultCollection`. See [contributing](/user-guide/continuous-learning).
 
 ### `article create "<[collection:]title>"`
 
@@ -131,7 +131,7 @@ Add an article to a collection. Prints the created file path.
 diffwiki article create "<[collection:]title>" [-b <markdown>] [-t <tag>...] [--audience <public|private|system>] [--status <draft|published|deprecated>]
 ```
 
-- `<target>` (required) — positional `"[collection:]title"`. May be a nested path (`collection:guide/setup`) — each segment is slugified into a subdirectory.
+- `<target>` (required) — positional `"[collection:]title"`. Supports nested collection paths (`react/tanstack:Query Keys` or `react:tanstack/Query Keys`) — each path segment is slugified into a subdirectory and the frontmatter `title` is set to the clean leaf title (`Query Keys`).
 - `-b, --body <markdown>` — article body. Defaults to a `# <title>` heading when omitted.
 - `-t, --tag <tag>` — tag; repeatable and comma-separated. Default: `[]`.
 - `--audience <public|private|system>` — visibility. Default: `public`. `system` marks diffwiki-internal content, hidden by default.
@@ -139,6 +139,7 @@ diffwiki article create "<[collection:]title>" [-b <markdown>] [-t <tag>...] [--
 
 ```
 diffwiki article create "handbook:Onboarding" -b "# Onboarding" -t hr,process --status draft
+diffwiki article create "react/tanstack:Query Keys" -b "# Query Keys" -t react,tanstack --status draft
 ```
 
 ### `article update "<collection:slug>"`
@@ -149,7 +150,7 @@ Update an article's display title, body, tags, audience, and/or status. Omitted 
 diffwiki article update "<collection:slug>" [--title <title>] [-b <markdown>] [-t <tag>...] [--audience <public|private|system>] [--status <draft|published|deprecated>]
 ```
 
-- `<target>` (required) — positional `"collection:slug"` (nested paths supported, e.g. `collection:guide/setup`).
+- `<target>` (required) — positional `"collection:slug"` (nested paths supported, e.g. `react/tanstack:query-keys` or `collection:guide/setup`).
 - `--title <title>` — set a nonempty display title without changing the filename.
 - `-b, --body <markdown>` — replace the article body.
 - `-t, --tag <tag>` — replace all tags; repeatable and comma-separated.
@@ -161,18 +162,19 @@ diffwiki article update "handbook:onboarding" -b "# Onboarding\nUpdated." --stat
 diffwiki article update "handbook:onboarding" -t hr,onboarding   # overwrite tags only
 ```
 
-### `article remove "<collection:slug>"`
+### `article remove "<[collection:]slug>"`
 
-Delete an article file.
+Delete an article file from a named collection (or nested subpath) or from `defaultCollection` when the collection prefix is omitted.
 
 ```
-diffwiki article remove "<collection:slug>"
+diffwiki article remove "<[collection:]slug>"
 ```
 
-- `<target>` (required) — positional `"collection:slug"`.
+- `<target>` (required) — positional `"[collection:]slug"` (e.g. `handbook:onboarding`, `react/tanstack:query-keys`, or `onboarding` when `defaultCollection` is set).
 
 ```
 diffwiki article remove "handbook:onboarding"
+diffwiki article remove "onboarding"
 ```
 
 ### `article edit "<collection:slug>"`

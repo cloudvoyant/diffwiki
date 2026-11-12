@@ -3,21 +3,22 @@ title: Agent Skills
 tags: [user-guide, agent-skills, claude-code]
 ---
 
-diffwiki ships agent skills that let you and your agents author, recall, lint, learn, and maintain the wiki. Install them via the agentskills CLI; if you install them before diffwiki, `/dw-install` bootstraps the CLI and seeds your templates.
+diffwiki ships agent skills that let you and your agents author, forget, recall, lint, learn, and maintain the wiki. Install them via the agentskills CLI; if you install them before diffwiki, `/dw-install` bootstraps the CLI and seeds your templates.
 
 ## The skills
 
 - **/dw-init** — guided setup: an in-repo or global collection plus the `context.collections` set recall searches.
-- **/dw-remember** — capture one piece of knowledge as a tight, correctly-templated **draft**, routed to the best-fit collection by subject, with optional researched references.
+- **/dw-remember** — capture one piece of knowledge as a tight, templated **draft**, routed to the best-fit collection by subject (encouraging nested subpaths like `react/tanstack` or `python/pydantic`) and showing the target collection path.
+- **/dw-forget** — remove one or more articles from the default collection or a specific collection after confirming matches.
 - **/dw-recall** — pull the most relevant entries into context as compact snippets; agents call it to ground their work.
 - **/dw-lint** — check entries against the template rules and offer to tighten failures.
-- **/dw-learn** — learn knowledge from a source and mine it into drafts. Pick a mode: `session` (this conversation, the default), `history` (your past sessions in this project), or `repo` (a local or external codebase). Session and history capture into a hidden transcripts store first; repo reads the codebase directly.
+- **/dw-learn** — capture verbatim harness sessions, session artifacts, and `.difflab` review/plan feedback into `transcripts` metadata, propose learning candidates upfront (showing title, nested target collection, shape, and `CREATE`/`UPDATE` action), and draft approved candidates (`--yes` / `--auto` to auto-draft). Modes: `session` (default, focused on general reusable learnings), `history` (past project sessions), or `repo` (a local or external codebase).
 - **/dw-dream** — a periodic pass that improves, dedupes, and prunes the wiki safely, leaving drafts and deprecations for review.
-- **/dw-help** — explain the diffwiki CLI commands and all available dw-* skills; useful for new users or when you've forgotten what's available.
+- **/dw-help** — explain the diffwiki CLI commands and all available `dw-*` skills.
 
 ## System content
 
-diffwiki keeps its own working data — like captured session transcripts — in `system`-audience collections that are hidden by default from search, recall, and the sidebar. Flip `diffwiki config set showSystem true` to reveal them in the UI.
+diffwiki keeps its own working data — such as captured session summaries in `transcripts` — in `system`-audience collections that are hidden by default from search, recall, and the sidebar. Verbatim harness logs and `.difflab` review/plan records live alongside in `~/.diffwiki/meta/transcripts/`. Run `diffwiki config set showSystem true` to reveal system collections in the UI.
 
 ## Template shapes
 
@@ -33,6 +34,6 @@ Each entry conforms to one of five shapes, discovered via `diffwiki templates li
 
 Shapes carry their own authoring rules in the template file. Add your own by dropping a `*-template.md` with `shape:`/`purpose:`/`budget:` frontmatter into `~/.diffwiki/templates/`.
 
-## Why brevity
+## Writing standards
 
-diffwiki entries exist to drop cleanly into an LLM's context window. The skills and agents write tight, well-referenced snippets — verbosity works against the whole point.
+Every skill vendors `references/technical-writing-guide.md`: use `/simple-english`, keep artifacts terse, avoid walls of text and inline file/class inventories, prefer Mermaid/draw.io diagrams, and always take a second pass to shorten and simplify further.

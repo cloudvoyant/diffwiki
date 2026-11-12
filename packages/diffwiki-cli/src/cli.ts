@@ -624,7 +624,7 @@ export function createProgram(): Command {
   article
     .command('remove')
     .description('Delete an article')
-    .argument('<target>', '"collection:slug"')
+    .argument('<target>', '"[collection:]slug"')
     .action(withErrors((target: string) => removeArticleAction(target)));
 
   article

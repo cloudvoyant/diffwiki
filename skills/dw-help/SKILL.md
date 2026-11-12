@@ -21,11 +21,12 @@ Orient the user to what diffwiki can do. Cover both the CLI and the installed ag
    | Command group | Purpose |
    |---|---|
    | `diffwiki collection` | Create, list, and manage collections |
-   | `diffwiki article` | Create and update wiki entries |
+   | `diffwiki article` | Create, update, and remove wiki entries (`[collection[/subpath]:]slug`) |
    | `diffwiki search query` | Search across collections |
    | `diffwiki search index` | Re-index for a search plugin |
-   | `diffwiki templates list` | List available authoring shapes |
+   | `diffwiki templates list` | List available authoring and metadata shapes |
    | `diffwiki templates init` | Seed templates to `~/.diffwiki/templates/` |
+   | `diffwiki meta` | Capture and reindex raw source records beside collections |
    | `diffwiki context` | Manage recall context (`context.collections`) |
    | `diffwiki lint` | Check entries against template rules |
    | `diffwiki config` | Read and write global config |
@@ -41,10 +42,11 @@ Orient the user to what diffwiki can do. Cover both the CLI and the installed ag
    |---|---|---|
    | `/dw-install` | Install the diffwiki CLI | "install diffwiki", "set up diffwiki" |
    | `/dw-init` | Guided wiki setup + recall context | "set up a wiki", "initialize diffwiki" |
-   | `/dw-remember` | Capture one piece of knowledge as a draft | "remember this", "add to the wiki" |
+   | `/dw-remember` | Capture one piece of knowledge as a draft (encourages nested collections) | "remember this", "add to the wiki" |
+   | `/dw-forget` | Remove articles from the default or a named collection | "dw forget", "forget this", "remove from the wiki" |
    | `/dw-recall` | Pull relevant entries into context | "recall from the wiki", "search the wiki" |
    | `/dw-lint` | Lint entries; offer to tighten failures | "lint the wiki", "check the wiki" |
-   | `/dw-learn` | Learn from a session, history, or codebase | "dw learn", "capture what we did" |
+   | `/dw-learn` | Propose learning candidates from a session, history, or codebase (`--yes`/`--auto` to auto-draft) | "dw learn", "capture what we did" |
    | `/dw-dream` | Periodic improve, dedupe, and prune pass | "tidy the wiki", "improve the wiki" |
    | `/dw-help` | This skill — CLI + skill reference | "dw help", "what can diffwiki do" |
 
@@ -52,10 +54,11 @@ Orient the user to what diffwiki can do. Cover both the CLI and the installed ag
    ```
    /dw-install      → install the CLI
    /dw-init         → create a collection, set recall context
-   /dw-remember     → capture your first entry
+   /dw-remember     → capture your first entry (e.g. react/tanstack:Query Keys)
    /dw-recall       → search the wiki
    /dw-lint         → check entry quality
-   /dw-learn        → mine a session into entries
+   /dw-learn        → propose and draft learnings from a session
+   /dw-forget       → remove obsolete articles
    /dw-dream        → periodic tidy pass
    ```
 
