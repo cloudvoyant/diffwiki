@@ -16,9 +16,9 @@ Not captured. Include exact quotations, speaker, original time, and session/mess
 
 Not captured. Quote the user's explanation. Do not infer a reason.
 
-## Human review and plan feedback (.difflab)
+## Human review and plan feedback (.difflab & forge PR/MR comments)
 
-Not captured. Include verbatim human reviewer comments, `.difflab/plans/*/revisions/*.md` (`## Feedback`), and `.difflab/reviews/*/REVIEW.md` findings with file/revision locators.
+Not captured. Include verbatim human reviewer comments from `.difflab/plans/*/revisions/*.md` (`## Feedback`), `.difflab/reviews/*/REVIEW.md`, and directly on the forge (`gh`/`glab` PR/MR review comments when not in local `.difflab` files) with file/revision/thread locators. Exclude AI-generated review comments.
 
 ## Raw session/tool outputs
 

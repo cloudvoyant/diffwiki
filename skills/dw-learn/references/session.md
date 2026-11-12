@@ -25,16 +25,14 @@ diffwiki collection create transcripts --hidden
 
 If the user is running a different or unknown harness, **research where that harness stores its raw session transcripts** (inspect environment variables, dot-directories, or run a web/file search for `<harness> session transcript storage location`) so the literal raw session can be captured verbatim.
 
-## 3. Mine `.difflab` plans, revisions, and human review feedback
-Check whether the project has a `.difflab/` directory (frequently a symlink created by `difflab-init` pointing to `~/.difflab/projects/<ORG>/<repo-slug>`). Follow the symlink and inspect:
-- **`.difflab/plans/<plan-id>/`**:
-  - `INTENT.md` and `PLAN.md`
-  - `revisions/*.md` — specifically every `## Feedback` section recording what the user asked to change or refine across plan iterations.
-- **`.difflab/reviews/<review-id>/`**:
-  - `REVIEW.md` and `rubric.yaml`
-  - Any PR review comments or inline human reviewer feedback captured during `difflab-review`.
+## 3. Mine `.difflab` plans/reviews and direct forge human review comments
+1. **Local `.difflab/` store:** Check whether the project has a `.difflab/` directory (frequently a symlink created by `difflab-init` pointing to `~/.difflab/projects/<ORG>/<repo-slug>`). Follow the symlink and inspect:
+   - **`.difflab/plans/<plan-id>/`**: `INTENT.md`, `PLAN.md`, and `revisions/*.md` (specifically every `## Feedback` section recording what the user asked to change or refine across plan iterations).
+   - **`.difflab/reviews/<review-id>/`**: `REVIEW.md` and `rubric.yaml`.
+2. **Direct forge PR/MR review comments:** Query the forge directly (e.g. via `gh pr view` / `gh api repos/<owner>/<repo>/pulls/<pr>/comments` or `glab`) for review comments on the current branch's PR/MR that are not already recorded in local `.difflab` files.
+3. **Exclude AI review comments:** Keep only **human** reviewer comments and feedback; filter out AI-generated review comments (e.g. bot accounts, Copilot reviews, or comments carrying `> Generated via` model footers).
 
-**Why this matters:** Comments and corrections made by human reviewers (in `.difflab/reviews/`, `.difflab/plans/*/revisions/*.md`, or live in the session) are the highest-signal evidence of what the user values and what they are correcting in the agent's behavior.
+**Why this matters:** Comments and corrections made by human reviewers (in `.difflab/reviews/`, `.difflab/plans/*/revisions/*.md`, directly on the forge PR/MR, or live in the session) are the highest-signal evidence of what the user values and what they are correcting in the agent's behavior.
 
 ## 4. Write the session transcript summary article
 Use the `session-transcript` template (`diffwiki templates list --json`) to write the structured session summary article in `transcripts`, including a dedicated summary of `.difflab` plan/review feedback and human reviewer corrections:

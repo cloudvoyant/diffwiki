@@ -182,7 +182,7 @@ describe('metadata CLI', () => {
     expect(allocated.ok).toBe(true);
     expect(reindexed.ok).toBe(true);
     expect(body).toContain('## Raw harness session and artifacts');
-    expect(body).toContain('## Human review and plan feedback (.difflab)');
+    expect(body).toContain('## Human review and plan feedback (.difflab & forge PR/MR comments)');
     expect(await fs.readFile(path.join(metaDir(), 'transcripts/diffwiki/2026-11-12-session.md'), 'utf8')).toContain(
       record.id,
     );

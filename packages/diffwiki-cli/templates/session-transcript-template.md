@@ -19,7 +19,7 @@ Title (passed to the CLI) is "<project>/<date>-<short-id>"; tags are
 - <exact quotation, original time, session/message location>
 
 ## Reviews and plan feedback (.difflab & human reviewer comments)
-- <summary and exact quotes from .difflab/plans/*/revisions/*.md (## Feedback), .difflab/reviews/*/REVIEW.md, and human PR/session review comments showing what the user values or corrected; or "None in this session.">
+- <summary and exact quotes of HUMAN feedback from .difflab/plans/*/revisions/*.md (## Feedback), .difflab/reviews/*/REVIEW.md, and human review comments made directly on the forge (GitHub/GitLab PR/MR review threads via `gh`/`glab`) when not already in local .difflab files; exclude AI-generated review comments; or "None in this session.">
 
 ## Raw session outputs
 - <speaker/role, exact output, source message location; label assistant text generated/unverified>

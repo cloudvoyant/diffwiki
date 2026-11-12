@@ -8,7 +8,7 @@ Select distinct, high-value nuggets supported by actual quotations, code, comman
 - **In `session` (default) mode — GENERAL learning only:**
   - Keep **general, reusable learnings**: language/framework patterns, library usage, CLI/tooling recipes, debugging techniques, portable architectural trade-offs, and general agent/writing rules surfaced by human review comments or `.difflab` plan/review feedback.
   - **Exclude repo-specific implementation details:** do NOT propose articles that merely repeat this repository's internal file paths, class names, module wiring, or one-off feature plumbing.
-- **Human review & plan feedback priority:** Treat human reviewer comments (in PR reviews, `.difflab/reviews/*/REVIEW.md`, or `.difflab/plans/*/revisions/*.md` `## Feedback`) and explicit user corrections in the session as highest-priority signal for what the user values and wants corrected in future work.
+- **Human review & plan feedback priority:** Treat human reviewer comments (made directly on forge PRs/MRs, in `.difflab/reviews/*/REVIEW.md`, or in `.difflab/plans/*/revisions/*.md` `## Feedback`) and explicit user corrections in the session as highest-priority signal for what the user values and wants corrected in future work. Exclude AI-generated review comments.
 - Do not infer unstated root causes or fabricate claims. If support is missing, skip the candidate or flag it for `dw-remember --research`.
 
 ## 2. Route to nested collections

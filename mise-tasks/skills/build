@@ -35,7 +35,6 @@ while IFS= read -r skillmd; do
 
   if [ -d "$SHARED/references" ]; then
     mkdir -p "$dir/references"
-    rm -f "$dir/references/checklist.md" "$dir/references/use-cases.md"
     cp -R "$SHARED/references/." "$dir/references/"
   fi
 

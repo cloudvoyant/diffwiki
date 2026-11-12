@@ -26,10 +26,12 @@ Repo name (`git rev-parse --show-toplevel` basename) or `pwd` basename → `<pro
 
 If the active harness isn't listed or uses a custom path, **research where that harness stores its raw session transcripts** (inspect local dot-directories, environment variables, or web-search `"<harness> session transcript file location"`) before mining.
 
-## 4. Mine `.difflab` plans and reviews in the project
-If `.difflab/` exists in the project root (often a symlink to `~/.difflab/projects/<ORG>/<repo-slug>`), follow it and read:
-- **`.difflab/plans/<plan-id>/`**: `INTENT.md`, `PLAN.md`, and `revisions/*.md` (especially every `## Feedback` section recording user corrections across plan iterations).
-- **`.difflab/reviews/<review-id>/`**: `REVIEW.md`, `rubric.yaml`, and human reviewer comments.
+## 4. Mine `.difflab` plans/reviews and direct forge human review comments
+1. **Local `.difflab/` store:** If `.difflab/` exists in the project root (often a symlink to `~/.difflab/projects/<ORG>/<repo-slug>`), follow it and read:
+   - **`.difflab/plans/<plan-id>/`**: `INTENT.md`, `PLAN.md`, and `revisions/*.md` (especially every `## Feedback` section recording user corrections across plan iterations).
+   - **`.difflab/reviews/<review-id>/`**: `REVIEW.md`, `rubric.yaml`, and human reviewer comments.
+2. **Direct forge PR/MR review comments:** Also check the repository's forge PRs/MRs (via `gh` or `glab`) for human review comments made directly on the forge when they are not included in local `.difflab` resources.
+3. **Exclude AI review comments:** Keep only **human** reviewer comments; exclude AI-generated review comments (bot accounts, Copilot reviews, or comments with `> Generated via` footers).
 
 Treat human reviewer comments and plan revision feedback as primary signal for what the user values and corrects in agent behavior.
 
