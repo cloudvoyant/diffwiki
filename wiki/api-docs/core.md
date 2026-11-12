@@ -93,12 +93,12 @@ Create a throwaway `DIFFWIKI_HOME` seeded with a registry built from the project
 
 ## Articles
 
-Create and mutate markdown articles. Targets are parsed with the exported helpers `parseAddTarget` (`"[collection:]title"`) and `parsePathTarget` (`"collection:path"`). Every mutation fires a best-effort plugin lifecycle event.
+Create and mutate markdown articles. Targets are parsed with the exported helpers `parseAddTarget` (`"[collection[/subpath]:]title"`) and `parsePathTarget` (`"collection[/subpath]:path"`). Every mutation fires a best-effort plugin lifecycle event.
 
 ```ts
 function createArticle(opts: { target: string; tags: string[]; body?: string }): Promise<Article>
 ```
-Create an article; the filename is `slugify(title)`. Body defaults to a `# <title>` heading.
+Create an article; the filename is `slugifyPath(title)` and nested targets (`react/tanstack:Query Keys` or `react:tanstack/Query Keys`) set frontmatter `title` to the clean leaf title (`Query Keys`). Body defaults to a `# <title>` heading.
 
 ```ts
 function updateArticleBody(target: string, body: string): Promise<Article>
@@ -115,7 +115,7 @@ Union, subtract, or replace an article's tag set.
 ```ts
 function removeArticle(target: string): Promise<string>
 ```
-Delete an article file; returns the removed absolute path.
+Delete an article file (`"[collection[/subpath]:]slug"`, falling back to `defaultCollection` when the collection prefix is omitted); returns the removed absolute path.
 
 ## Site builders
 

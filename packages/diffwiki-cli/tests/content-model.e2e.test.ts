@@ -95,6 +95,24 @@ describe('article lifecycle, audience, paths, and title updates', () => {
     expect(await fs.readFile(created.out.trim(), 'utf8')).toContain('second');
   });
 
+  it('creates and removes nested collection articles with clean leaf titles', async () => {
+    // Arrange
+    await run(['collection', 'create', 'react']);
+
+    // Act
+    const created = await run(['article', 'create', 'react/tanstack:Query Keys', '-b', '# Query Keys', '-t', 'react']);
+    const file = created.out.trim();
+    const raw = await fs.readFile(file, 'utf8');
+    const removed = await run(['article', 'remove', 'react/tanstack:query-keys']);
+
+    // Assert
+    expect(created.ok).toBe(true);
+    expect(file.replace(/\\/g, '/')).toContain('/react/tanstack/query-keys.md');
+    expect(raw).toContain('title: Query Keys');
+    expect(removed.ok).toBe(true);
+    await expect(fs.access(file)).rejects.toBeTruthy();
+  });
+
   it('hides a hidden collection from search by default, reveals via -c and showSystem', async () => {
     await run(['collection', 'create', 'kb']);
     await run(['collection', 'create', 'transcripts', '--hidden']);

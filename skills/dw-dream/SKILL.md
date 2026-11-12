@@ -5,7 +5,7 @@ description: Periodically improve, dedupe, and prune the diffwiki. Triggers on "
 
 # dw-dream
 
-Maintain the whole wiki in a bounded pass. Read `references/cycle.md` and `references/source-capture.md`. Article writes use the CLI and remain drafts/deprecations. Source records are allocated through the CLI and filled as Markdown. Never delete articles or metadata, and never publish automatically.
+Maintain the whole wiki in a bounded pass. Read `references/cycle.md`, `references/source-capture.md`, and `references/technical-writing-guide.md`. Article writes use the CLI and remain drafts/deprecations. Source records are allocated through the CLI and filled as Markdown. Never delete articles or metadata, and never publish automatically.
 
 ## Steps
 
@@ -18,7 +18,7 @@ Maintain the whole wiki in a bounded pass. Read `references/cycle.md` and `refer
    ```
    Plus browse the entries in scope.
 
-3. **Improve.** Read `references/cycle.md`. Use original source snippets, user requests, and observed validation output. Do not turn assistant summaries into evidence or infer preferences and causes. Retain the raw packet before rewriting.
+3. **Improve.** Read `references/cycle.md` and `references/technical-writing-guide.md`. Use original source snippets, user requests, and observed validation output. Apply `/simple-english`, keep rewrites terse, avoid walls of text and inline file/class inventories, prefer Mermaid/draw.io diagrams, and take a second pass to shorten further. Do not turn assistant summaries into evidence or infer preferences and causes. Retain the raw packet before rewriting.
 
 4. **Dedupe.** Find near-duplicates with `dw-recall`/`diffwiki search query`. Merge the best content into one canonical entry (update, draft), and mark the superseded one:
    ```bash
@@ -32,6 +32,7 @@ Maintain the whole wiki in a bounded pass. Read `references/cycle.md` and `refer
 
 ## Rules
 - Reversible only: drafts + deprecations. No deletes, no publishes, no destructive edits without a pointer.
+- Every rewritten or merged entry must follow `references/technical-writing-guide.md` and undergo a second pass to shorten and simplify further.
 - Bounded: honor the pass budget; log what was left for next time.
 - Preserve links: when deprecating/merging, keep an inline pointer so nothing dangles.
 - Prefer fewer, tighter entries — dedupe aggressively, but never lose a real reference.

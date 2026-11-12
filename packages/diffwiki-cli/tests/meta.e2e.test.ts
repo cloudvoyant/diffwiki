@@ -144,4 +144,47 @@ describe('metadata CLI', () => {
     // Assert
     expect(initialized.errors).toEqual([]);
   });
+
+  it('captures verbatim raw harness session and .difflab feedback into transcripts metadata', async () => {
+    // Arrange
+    await run(['collection', 'create', 'transcripts', '--hidden']);
+    const transcript = await run([
+      'article',
+      'create',
+      'transcripts:diffwiki/2026-11-12-session',
+      '-b',
+      '## Session summary\n\n- Refined dw-learn.\n\n## Reviews and plan feedback (.difflab & human reviewer comments)\n\n- Prefer diagrams over prose.\n',
+      '-t',
+      'transcript,antigravity,diffwiki',
+      '--audience',
+      'system',
+    ]);
+
+    // Act
+    const allocated = await run([
+      'meta',
+      'new',
+      'transcripts:diffwiki/2026-11-12-session.md',
+      '--template',
+      'history',
+      '--json',
+    ]);
+    const record = JSON.parse(allocated.out);
+    const body = await fs.readFile(record.path, 'utf8');
+    await fs.appendFile(
+      record.path,
+      '\n### Attached Feedback\n\n- `.difflab/plans/261112-finesse/revisions/1.md`: Keep writing guide terse.\n',
+    );
+    const reindexed = await run(['meta', 'reindex', 'transcripts', '--json']);
+
+    // Assert
+    expect(transcript.ok).toBe(true);
+    expect(allocated.ok).toBe(true);
+    expect(reindexed.ok).toBe(true);
+    expect(body).toContain('## Raw harness session and artifacts');
+    expect(body).toContain('## Human review and plan feedback (.difflab)');
+    expect(await fs.readFile(path.join(metaDir(), 'transcripts/diffwiki/2026-11-12-session.md'), 'utf8')).toContain(
+      record.id,
+    );
+  });
 });

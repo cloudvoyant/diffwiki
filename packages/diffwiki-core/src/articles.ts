@@ -8,65 +8,41 @@ import { mirrorSavedArticle, validateMetaArticlePath } from './meta';
 import { ArticleNotFoundError, CollectionNotFoundError, InvalidTargetError, NoDefaultCollectionError } from './errors';
 import type { Article, Audience, PluginEvent, PublishStatus } from './types';
 
-/**
- * Fire a lifecycle hook without adding a static import edge into the plugin
- * loader graph (which would create a `collections <-> events` cycle). The dynamic
- * import resolves lazily and the whole call is swallowed -- hooks are best-effort.
- * Callers invoke this fire-and-forget: `void fireHook(...)`.
- */
-async function fireHook(event: PluginEvent, collection: string, relPath?: string): Promise<void> {
-  try {
-    const { emitPluginEvent } = await import('./plugins/events');
-    await emitPluginEvent(event, collection, relPath);
-  } catch {
-    /* never let a hook failure surface into a mutation */
-  }
+// types -----------------------------------------------------------------------
+
+export interface ArticleUpdates {
+  title?: string;
+  body?: string;
+  tags?: string[];
+  audience?: Audience;
+  status?: PublishStatus;
 }
 
-/** Parse "[collection:]title" (collection optional) for `add`. */
+// api -------------------------------------------------------------------------
+
+/** Parse "[collection:]title" (collection optional) for `add` and `remove`. */
 export function parseAddTarget(target: string): { collection?: string; title: string } {
   const idx = target.indexOf(':');
   if (idx === -1) {
     const title = target.trim();
     if (!title) throw new InvalidTargetError(target, 'expected "[collection:]title"');
-    return { title };
+    return splitNestedTarget(undefined, title);
   }
   const collection = target.slice(0, idx).trim();
   const title = target.slice(idx + 1).trim();
   if (!title) throw new InvalidTargetError(target, 'expected "[collection:]title"');
-  return collection ? { collection, title } : { title };
+  return splitNestedTarget(collection || undefined, title);
 }
 
-/** Parse "collection:path" (both required) for update/remove/tags. */
+/** Parse "collection:path" (both required) for update/tags. */
 export function parsePathTarget(target: string): { collection: string; file: string } {
   const idx = target.indexOf(':');
   if (idx === -1) throw new InvalidTargetError(target, 'expected "collection:path"');
   const collection = target.slice(0, idx).trim();
   const file = target.slice(idx + 1).trim();
   if (!collection || !file) throw new InvalidTargetError(target, 'expected "collection:path"');
-  return { collection, file };
-}
-
-async function resolveCollectionDir(name: string | undefined): Promise<{ name: string; dir: string }> {
-  let coll = name;
-  if (!coll) {
-    coll = (await readConfig()).defaultCollection;
-    if (!coll) throw new NoDefaultCollectionError();
-  }
-  const entry = await findCollection(coll);
-  if (!entry) throw new CollectionNotFoundError(coll);
-  return { name: coll, dir: entry.path };
-}
-
-/**
- * Resolve the `-p "coll:path"` segment to a filename. `create` writes files by
- * `slugifyPath(title)`, so a lookup passed the original title (e.g. "My Project/My Title")
- * must slugify EVERY segment to match (`my-project/my-title.md`) — not just the
- * basename. An explicit `.md`/`.mdx` path is already resolved and preserved as-is.
- */
-function ensureMdPath(file: string): string {
-  if (/\.mdx?$/.test(file)) return file;
-  return `${slugifyPath(file)}.md`;
+  const split = splitNestedTarget(collection, file);
+  return { collection: split.collection!, file: split.title };
 }
 
 export async function createArticle(opts: {
@@ -76,9 +52,10 @@ export async function createArticle(opts: {
   audience?: Audience;
   status?: PublishStatus;
 }): Promise<Article> {
-  const { collection, title } = parseAddTarget(opts.target);
+  const { collection, title: rawTitle } = parseAddTarget(opts.target);
   const { name, dir } = await resolveCollectionDir(collection);
-  const filePath = path.join(dir, `${slugifyPath(title)}.md`);
+  const title = name === 'transcripts' ? rawTitle : leafTitle(rawTitle);
+  const filePath = path.join(dir, validateMetaArticlePath(`${slugifyPath(rawTitle)}.md`));
   const body = opts.body ?? `# ${title}\n`;
   await fs.mkdir(path.dirname(filePath), { recursive: true });
   await fs.writeFile(
@@ -89,28 +66,6 @@ export async function createArticle(opts: {
   void fireHook('article-created', name, path.relative(dir, filePath));
   await mirrorSavedArticle({ name, path: dir }, filePath);
   return { title, tags: opts.tags, path: filePath, collection: name };
-}
-
-async function loadArticle(
-  target: string,
-): Promise<{ filePath: string; dir: string; raw: string; collection: string }> {
-  const { collection, file } = parsePathTarget(target);
-  const { dir } = await resolveCollectionDir(collection);
-  const filePath = path.join(dir, validateMetaArticlePath(ensureMdPath(file)));
-  try {
-    return { filePath, dir, raw: await fs.readFile(filePath, 'utf8'), collection };
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === 'ENOENT') throw new ArticleNotFoundError(target);
-    throw err;
-  }
-}
-
-export interface ArticleUpdates {
-  title?: string;
-  body?: string;
-  tags?: string[];
-  audience?: Audience;
-  status?: PublishStatus;
 }
 
 /** Compose requested edits once so title/body/meta combinations retain unrelated fields. */
@@ -133,12 +88,6 @@ export async function updateArticle(target: string, updates: ArticleUpdates): Pr
 
 export function updateArticleBody(target: string, body: string): Promise<Article> {
   return updateArticle(target, { body });
-}
-
-async function mutateTags(target: string, fn: (tags: string[]) => string[]): Promise<Article> {
-  const { raw } = await loadArticle(target);
-  const parsed = parseArticle(raw);
-  return updateArticle(target, { tags: fn(parsed.tags) });
 }
 
 export function addTags(target: string, tags: string[]): Promise<Article> {
@@ -167,8 +116,92 @@ export async function setArticleMeta(
 }
 
 export async function removeArticle(target: string): Promise<string> {
-  const { filePath, dir, collection } = await loadArticle(target);
+  const { filePath, dir, collection } = await loadArticle(target, true);
   await fs.rm(filePath);
   void fireHook('article-removed', collection, path.relative(dir, filePath));
   return filePath;
+}
+
+// helpers ---------------------------------------------------------------------
+
+function splitNestedTarget(collection: string | undefined, title: string): { collection?: string; title: string } {
+  if (!collection) return { title };
+  const slash = collection.indexOf('/');
+  if (slash === -1) return { collection, title };
+  const root = collection.slice(0, slash).trim();
+  const subpath = collection.slice(slash + 1).trim();
+  if (!root || !subpath)
+    throw new InvalidTargetError(`${collection}:${title}`, 'expected "[collection[/subpath]:]title"');
+  return { collection: root, title: `${subpath}/${title}` };
+}
+
+function leafTitle(rawTitle: string): string {
+  const parts = rawTitle
+    .split('/')
+    .map((p) => p.trim())
+    .filter(Boolean);
+  return parts[parts.length - 1] ?? rawTitle;
+}
+
+/**
+ * Fire a lifecycle hook without adding a static import edge into the plugin
+ * loader graph (which would create a `collections <-> events` cycle). The dynamic
+ * import resolves lazily and the whole call is swallowed -- hooks are best-effort.
+ * Callers invoke this fire-and-forget: `void fireHook(...)`.
+ */
+async function fireHook(event: PluginEvent, collection: string, relPath?: string): Promise<void> {
+  try {
+    const { emitPluginEvent } = await import('./plugins/events');
+    await emitPluginEvent(event, collection, relPath);
+  } catch {
+    /* never let a hook failure surface into a mutation */
+  }
+}
+
+async function resolveCollectionDir(name: string | undefined): Promise<{ name: string; dir: string }> {
+  let coll = name;
+  if (!coll) {
+    coll = (await readConfig()).defaultCollection;
+    if (!coll) throw new NoDefaultCollectionError();
+  }
+  const entry = await findCollection(coll);
+  if (!entry) throw new CollectionNotFoundError(coll);
+  return { name: coll, dir: entry.path };
+}
+
+/**
+ * Resolve the `-p "coll:path"` segment to a filename. `create` writes files by
+ * `slugifyPath(title)`, so a lookup passed the original title (e.g. "My Project/My Title")
+ * must slugify EVERY segment to match (`my-project/my-title.md`) — not just the
+ * basename. An explicit `.md`/`.mdx` path is already resolved and preserved as-is.
+ */
+function ensureMdPath(file: string): string {
+  if (/\.mdx?$/.test(file)) return file;
+  return `${slugifyPath(file)}.md`;
+}
+
+async function loadArticle(
+  target: string,
+  allowDefaultCollection = false,
+): Promise<{ filePath: string; dir: string; raw: string; collection: string }> {
+  const { collection, file } = allowDefaultCollection
+    ? (() => {
+        const parsed = parseAddTarget(target);
+        return { collection: parsed.collection, file: parsed.title };
+      })()
+    : parsePathTarget(target);
+  const { name, dir } = await resolveCollectionDir(collection);
+  const filePath = path.join(dir, validateMetaArticlePath(ensureMdPath(file)));
+  try {
+    return { filePath, dir, raw: await fs.readFile(filePath, 'utf8'), collection: name };
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') throw new ArticleNotFoundError(target);
+    throw err;
+  }
+}
+
+async function mutateTags(target: string, fn: (tags: string[]) => string[]): Promise<Article> {
+  const { raw } = await loadArticle(target);
+  const parsed = parseArticle(raw);
+  return updateArticle(target, { tags: fn(parsed.tags) });
 }

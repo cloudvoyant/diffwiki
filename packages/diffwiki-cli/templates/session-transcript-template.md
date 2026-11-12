@@ -2,16 +2,24 @@
 shape: session-transcript
 purpose: dw-learn capture into the hidden transcripts collection (not linted).
 ---
-<!-- SESSION TRANSCRIPT. Capture original inputs and outputs available in the session.
+<!-- SESSION TRANSCRIPT. Summarizes the session while verbatim raw harness logs,
+session artifacts, and .difflab review/plan files are stored in
+~/.diffwiki/meta/transcripts/ via `diffwiki meta new "transcripts:<project>/<file>.md" --template history`.
 Goes into the hidden `transcripts` collection with `--audience system`; NOT linted
 as a knowledge entry. Do not invent dialogue, causes, preferences, or lessons.
 Title (passed to the CLI) is "<project>/<date>-<short-id>"; tags are
 [transcript, <tool>, <project>]. Do not write frontmatter — the CLI owns it. -->
 
-**Tool:** <claude-code|codex|opencode|goose|pi> · **Project:** <repo-or-path> · **Date:** <YYYY-MM-DD> · **Session:** <id-if-known>
+**Tool:** <claude-code|antigravity|codex|cursor|opencode|goose|pi|aider> · **Project:** <repo-or-path> · **Date:** <YYYY-MM-DD> · **Session:** <id-if-known>
+
+## Session summary
+- <1-3 bullet summary of the goal, approach, and outcome>
 
 ## Raw user requests
 - <exact quotation, original time, session/message location>
+
+## Reviews and plan feedback (.difflab & human reviewer comments)
+- <summary and exact quotes from .difflab/plans/*/revisions/*.md (## Feedback), .difflab/reviews/*/REVIEW.md, and human PR/session review comments showing what the user values or corrected; or "None in this session.">
 
 ## Raw session outputs
 - <speaker/role, exact output, source message location; label assistant text generated/unverified>
@@ -23,4 +31,4 @@ Title (passed to the CLI) is "<project>/<date>-<short-id>"; tags are
 - <original code/document excerpt, repository, file/lines, commit/version, local changes>
 
 ## Source locations and gaps
-- <source record or attachment links; omitted/redacted/unavailable material>
+- <links to verbatim raw harness session log and session/.difflab artifacts in ~/.diffwiki/meta/transcripts/.meta/; omitted/redacted/unavailable material>

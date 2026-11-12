@@ -5,7 +5,7 @@ description: Create or update diffwiki knowledge. Triggers on "dw remember", "re
 
 # dw-remember
 
-Turn one piece of knowledge into one tight, template-conformant diffwiki draft. Write articles through the CLI. Fill source-record Markdown directly after CLI allocation; see `references/source-capture.md`.
+Turn one piece of knowledge into one tight, template-conformant diffwiki draft. Write articles through the CLI. Fill source-record Markdown directly after CLI allocation; see `references/source-capture.md`. Read and follow `references/technical-writing-guide.md` (and invoke `/simple-english`) for all article writing.
 
 ## Inputs
 - The knowledge to capture (from the user or a calling agent).
@@ -16,30 +16,31 @@ Turn one piece of knowledge into one tight, template-conformant diffwiki draft. 
 
 1. **Clarify the memory.** If the user was vague, ask one question: what exactly should be captured, and is it new or an update? If a calling agent invoked you, use the payload as-is.
 
-2. **Route** (see `references/routing.md`). List the collections that exist (`diffwiki collection list` + the repo `diffwiki.yaml`) and pick the **best-fit by subject** — the repo's own collection for project-specific knowledge, or the collection dedicated to the topic (language/framework/tool/subject) for reusable knowledge. Do NOT assume a fixed structure. If nothing fits well, propose creating a new collection. Show the chosen `collection:Title` and confirm if ambiguous.
+2. **Route** (see `references/routing.md`). List the collections that exist (`diffwiki collection list` + the repo `diffwiki.yaml`) and pick the **best-fit by subject** — the repo's own collection for project-specific knowledge, or the parent topic collection with a **nested subpath** for reusable ecosystem knowledge (e.g. `react/tanstack`, `python/pydantic`, `typescript/vitest`). Do NOT assume a fixed structure. If nothing fits well, propose creating a new collection. **Always show the proposed target collection path** (`<collection>[/<subpath>]:<Title>`) and confirm if ambiguous.
 
 3. **Preserve inputs and pick the template.** Read `references/source-capture.md` and retain the raw input packet before summarizing. On UPDATE, read the existing article and its metadata. Discover article shapes with `diffwiki templates list --json`; use the effective template `path` (see `references/templates.md`). If the list is empty, run `diffwiki templates init`.
 
 4. **Research (if asked).** Dispatch the `dw-researcher` agent with the topic and shape; collect its verified reference list + facts.
 
-5. **Author.** Dispatch the `dw-author` agent with: the target shape, the template path, the source knowledge, and any research. It returns a complete article (frontmatter + body). If it returns `BLOCKED:`, resolve the blocker (usually: split into two entries, or get references) and retry.
+5. **Author.** Read `references/technical-writing-guide.md` and dispatch the `dw-author` agent with: the target shape, the template path, `references/technical-writing-guide.md`, the source knowledge, and any research. The author applies `/simple-english`, keeps the artifact terse, avoids walls of text and inline file/class inventories, prefers Mermaid/draw.io diagrams, and takes a mandatory second pass to shorten and simplify further. It returns a complete article (frontmatter + body). If it returns `BLOCKED:`, resolve the blocker (usually: split into two entries, or get references) and retry.
 
-6. **Write as a draft.** Extract the body (content after the closing `---` of the frontmatter) from the agent's output. `<Title>` is a short human-readable phrase in Title Case (e.g. `Add a Subcommand`) — NEVER a path or slug; the CLI slugifies the filename for you. Read the suggested tags from the agent's frontmatter. NEW:
+6. **Write as a draft.** Extract the body (content after the closing `---` of the frontmatter) from the agent's output. `<Title>` is a short human-readable phrase in Title Case (e.g. `Query Invalidation`) — NEVER a path or slug; the CLI slugifies the filename and keeps the leaf title in frontmatter. Read the suggested tags from the agent's frontmatter. NEW:
    ```bash
-   diffwiki article create "<collection>:<Title>" -b "$(cat /tmp/dw-body.md)" -t "<tag1>,<tag2>" --status draft
+   diffwiki article create "<collection[/subpath]>:<Title>" -b "$(cat /tmp/dw-body.md)" -t "<tag1>,<tag2>" --status draft
    ```
-   UPDATE (target is `collection:slug`):
+   UPDATE (target is `collection[/subpath]:slug`):
    ```bash
-   diffwiki article update "<collection>:<slug>" -b "$(cat /tmp/dw-body.md)" -t "<tag1>,<tag2>" --status draft
+   diffwiki article update "<collection[/subpath]>:<slug>" -b "$(cat /tmp/dw-body.md)" -t "<tag1>,<tag2>" --status draft
    ```
    Tags: the shape tag + topic tags from the agent's frontmatter; NEVER `diffwiki-template`.
 
-7. **Capture sources, then tighten.** Use the exact saved article filename to allocate/fill history and any external-extract records through `references/source-capture.md`. Keep collection-wide captures linked rather than duplicated. Run `diffwiki lint -c <collection>`. If the entry has any ✖, dispatch `dw-reviewer`, update the article, and re-run lint (max 2 passes). Tighten only article prose, never raw source records. Reindex and report the source paths with the draft. If capture fails, keep the packet and saved article path for retry.
+7. **Capture sources, then tighten.** Use the exact saved article filename to allocate/fill history and any external-extract records through `references/source-capture.md`. Keep collection-wide captures linked rather than duplicated. Run `diffwiki lint -c <collection>`. If the entry has any ✖, dispatch `dw-reviewer` (which enforces `references/technical-writing-guide.md` and a second shortening pass), update the article, and re-run lint (max 2 passes). Tighten only article prose, never raw source records. Reindex and report the source paths with the draft. If capture fails, keep the packet and saved article path for retry.
 
-8. **Show it (direct invocation only).** If a human invoked this skill directly (not another agent), print the drafted entry so they can review: `diffwiki article edit "<collection>:<slug>" --editor cat` OR read and print the file. State that it is a **draft** and how to promote it (`diffwiki article update "<collection>:<slug>" --status published`).
+8. **Show it (direct invocation only).** If a human invoked this skill directly (not another agent), print the drafted entry and its target collection path (`<collection>[/<subpath>]`) so they can review: `diffwiki article edit "<collection[/subpath]>:<slug>" --editor cat` OR read and print the file. State that it is a **draft** and how to promote it (`diffwiki article update "<collection[/subpath]>:<slug>" --status published`).
 
 ## Rules
 - Every entry ships `--status draft`. Promotion to `published` is a separate, human/reviewer act.
+- Follow `references/technical-writing-guide.md` on every draft and update: invoke `/simple-english`, keep artifacts terse, avoid walls of text and inline file/class lists, prefer diagrams, and always take a second pass to shorten further.
 - Do not edit article frontmatter directly. Use CLI flags for the saved article. The author's returned frontmatter supplies suggested values; source-record Markdown follows `references/source-capture.md`.
 - One entry per invocation. If the knowledge spans shapes, create multiple entries and link them.
 - Keep it tight: the author/reviewer agents enforce the budget; do not pad.

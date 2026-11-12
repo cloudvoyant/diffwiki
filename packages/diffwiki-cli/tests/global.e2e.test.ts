@@ -92,4 +92,32 @@ describe('global lifecycle', () => {
     expect(res.ok).toBe(false);
     expect(res.err).toContain('no default collection');
   });
+
+  it('removes an article from the default collection without a collection prefix', async () => {
+    // Arrange
+    await run(['collection', 'create', 'notes']);
+    await run(['config', 'set', 'defaultCollection', 'notes']);
+    const created = await run(['article', 'create', 'Scratch Idea', '-t', 'note']);
+    const articlePath = created.out.trim();
+
+    // Act
+    const removed = await run(['article', 'remove', 'scratch-idea']);
+
+    // Assert
+    expect(removed.ok).toBe(true);
+    await expect(fs.access(articlePath)).rejects.toBeTruthy();
+  });
+
+  it('fails cleanly when removing without a collection prefix and no defaultCollection is set', async () => {
+    // Arrange
+    await run(['collection', 'create', 'notes']);
+    await run(['article', 'create', 'notes:Scratch Idea', '-t', 'note']);
+
+    // Act
+    const removed = await run(['article', 'remove', 'scratch-idea']);
+
+    // Assert
+    expect(removed.ok).toBe(false);
+    expect(removed.err).toContain('no default collection');
+  });
 });
