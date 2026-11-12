@@ -1,3 +1,10 @@
+# [0.19.0](https://github.com/cloudvoyant/diffwiki/compare/v0.18.0...v0.19.0) (2026-11-12)
+
+
+### Features
+
+* add dw-forget, refine dw-learn routing, and simplify writing guide ([665c3c5](https://github.com/cloudvoyant/diffwiki/commit/665c3c5508740c164785f06712cca16fd330750b))
+
 # [0.18.0](https://github.com/cloudvoyant/diffwiki/compare/v0.17.3...v0.18.0) (2026-10-20)
 
 
