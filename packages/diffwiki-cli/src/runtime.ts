@@ -1,4 +1,6 @@
-import { DiffwikiError } from 'diffwiki-core';
+import { DiffwikiError, SyncConflictError } from 'diffwiki-core';
+
+// api -------------------------------------------------------------------------
 
 /**
  * Wrap an async Commander action: expected DiffwikiErrors become a clean stderr
@@ -9,8 +11,14 @@ export function withErrors<A extends unknown[]>(fn: (...args: A) => Promise<void
     try {
       await fn(...args);
     } catch (error) {
+      if (error instanceof SyncConflictError) {
+        console.error(formatSyncConflictError(error));
+        process.exitCode = 1;
+        return;
+      }
       if (error instanceof DiffwikiError) {
-        console.error(`✖ ${error.message}`);
+        const prefix = error.name === 'DiffwikiError' ? '' : `${error.name}: `;
+        console.error(`✖ ${prefix}${error.message}`);
         process.exitCode = 1;
         return;
       }
@@ -28,3 +36,20 @@ export const splitTags = (raw: string[]): string[] =>
     .flatMap((t) => t.split(','))
     .map((t) => t.trim())
     .filter((t) => t.length > 0);
+
+// helpers ---------------------------------------------------------------------
+
+function formatSyncConflictError(error: SyncConflictError): string {
+  const lines = ['✖ SyncConflictError: rebase stopped with unresolved conflict(s):'];
+  if (error.conflicts.length > 0) {
+    for (const file of error.conflicts) {
+      lines.push(`  - ${file}`);
+    }
+  } else {
+    lines.push(`  ${error.message}`);
+  }
+  lines.push(
+    'Resolve conflicted files, run `git add`, then run `diffwiki pull --continue` or `diffwiki pull --abort`.',
+  );
+  return lines.join('\n');
+}

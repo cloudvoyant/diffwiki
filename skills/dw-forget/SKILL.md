@@ -1,49 +1,57 @@
 ---
 name: dw-forget
-description: Remove one or more diffwiki articles from the default collection or a specific collection. Triggers on "dw forget", "forget this", "remove from the wiki", "delete article", "remove wiki entry". Searches first when given a topic or title, confirms before deleting, and mutates only via the diffwiki CLI.
+description: "Remove diffwiki articles or collections through the diffwiki CLI. Triggers on \"dw forget\", \"forget this\", \"remove from the wiki\", \"delete article\", \"remove wiki entry\", \"remove collection\", and \"delete collection\". Searches before deleting articles, confirms before mutating, and asks before passing --force on non-empty global collections."
 ---
 
 # dw-forget
 
-Remove obsolete, duplicate, or unwanted articles from the default collection or a named collection via `diffwiki article remove`.
+Remove obsolete articles with `diffwiki article remove`, or remove a collection with `diffwiki collection remove` when the user asks to delete a collection.
 
 ## Inputs
-- Target article(s): a `<slug>`, `<collection>:<slug>`, `<collection>/<subpath>:<slug>`, or a natural-language topic/title query.
-- Optional `-c, --collection <name>`: scope removal to a specific collection (or nested collection path).
-- Optional `--yes`: skip confirmation when the target resolves to an exact single article.
 
-## Steps
+- Article target: `<slug>`, `<collection>:<slug>`, `<collection>/<subpath>:<slug>`, or a topic/title search query.
+- Collection target: an explicit request to remove collection `<name>`.
+- Optional `-c, --collection <name>`: scope article search and removal to a named collection.
+- Optional `--yes`: skip confirmation when an article request matches one exact slug, or when removing an empty collection.
 
-1. **Resolve the target collection.**
+## Article Removal Steps
+
+1. Resolve the target collection:
    - If the user passed `<collection>:<slug>`, `<collection>/<subpath>:<slug>`, or `-c <collection>`, use that collection.
-   - Otherwise check `diffwiki config get defaultCollection`. If unset and the current directory has a repo collection (`diffwiki.yaml`), use that collection; if still unset, ask which collection to remove from (or search across all collections in Step 2).
+   - Otherwise read `diffwiki config get defaultCollection`. If unset and the current directory has `diffwiki.yaml`, use that repo collection.
 
-2. **Locate matching article(s).**
-   - If the user gave a topic, title, or partial name, search first:
+2. Locate matching articles:
+   - If the user gave a topic or partial title, search first:
      ```bash
      diffwiki search query "<query>" -c <collection>
      ```
-     (Omit `-c` if no collection was specified and no default collection is configured.)
-   - Show the matching articles with their `collection:slug`, title, and path.
-   - If no article matches, report that nothing matched and stop.
+   - Show matching `collection:slug` entries, titles, and paths. If nothing matches, report that and stop.
 
-3. **Confirm before deleting.**
-   - Unless `--yes` was passed and there is an exact single match, show the exact `collection:slug` (or default-collection `slug`) to be removed and ask the user to confirm.
-   - If multiple articles matched, ask the user to pick which ones to remove.
+3. Confirm and remove:
+   - Unless `--yes` was passed for a single exact match, ask the user to confirm the target `collection:slug`.
+   - Run the CLI:
+     ```bash
+     diffwiki article remove "<collection>:<slug>"
+     diffwiki article remove "<slug>"
+     ```
+   - Report the removed path. Note that `~/.diffwiki/meta/<collection>/` stays intact.
 
-4. **Remove via the CLI.**
+## Collection Removal Steps
+
+1. Inspect the collection with `diffwiki collection list` and confirm with the user unless `--yes` was passed for an empty collection.
+2. Run collection removal without `--force` first:
    ```bash
-   # Specific collection or nested subpath:
-   diffwiki article remove "<collection>:<slug>"
-   diffwiki article remove "<collection>/<subpath>:<slug>"
-
-   # Configured defaultCollection:
-   diffwiki article remove "<slug>"
+   diffwiki collection remove "<name>" --json
    ```
-
-5. **Report.** Print the removed file path(s). Note that any raw source records under `~/.diffwiki/meta/<collection>/` remain intact unless deleted manually.
+3. If `CollectionNotEmptyError` reports remaining articles in a global collection, tell the user how many articles remain and ask for explicit confirmation before running:
+   ```bash
+   diffwiki collection remove "<name>" --force --json
+   ```
+4. Report the result. `global` collections delete `~/.diffwiki/collections/<name>` and clear matching `defaultCollection`. `repo` and `external` collections unregister from `~/.diffwiki/registry.json` and keep repository files intact. `~/.diffwiki/meta/<name>/` stays intact.
 
 ## Rules
-- Always mutate through `diffwiki article remove` — never `rm` collection markdown files directly.
-- Never delete an whole collection when asked to forget an article.
-- Never delete `system`-audience transcripts unless the user explicitly names `transcripts:<slug>`.
+
+- Mutate only through `diffwiki article remove` and `diffwiki collection remove`. Never run `rm` on collection files directly.
+- Never remove a collection when the user asked to forget an article.
+- Never pass `--force` to `diffwiki collection remove` without asking the user after `CollectionNotEmptyError`.
+- Never delete `system`-audience transcripts unless the user names `transcripts:<slug>` or collection `transcripts`.

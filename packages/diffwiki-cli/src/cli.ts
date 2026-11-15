@@ -16,19 +16,24 @@ import {
   parseFrontmatter,
   CollectionNotFoundError,
   DiffwikiError,
+  SyncConflictError,
   doctor,
   getConfigValue,
   initRepoWiki,
   installPlugin,
+  linkHome,
   lintCollections,
   listCollections,
   listAvailablePlugins,
   listPlugins,
   listSearchModes,
   loadSearchProvider,
+  pullHome,
+  pushHome,
   search,
   registerPlugin,
   removeArticle,
+  removeCollection,
   removePlugin,
   repairPlugins,
   removeTags,
@@ -48,6 +53,7 @@ import {
   type DiagnosticLevel,
   type PublishStatus,
   type QueryOptions,
+  type RebasePreference,
   type MetaKind,
   type MetaResult,
   type TemplateCategory,
@@ -57,6 +63,420 @@ import { collect, splitTags, withErrors } from './runtime';
 import { openBrowser, readState, isAlive, startUi, stopUi, waitForServer, childExited } from './ui-server';
 import { runExport } from './exporter';
 import { runPreview } from './preview';
+
+// types -----------------------------------------------------------------------
+
+interface ArticleMetaOpts {
+  title?: string;
+  body?: string;
+  tag: string[];
+  audience?: Audience;
+  status?: PublishStatus;
+}
+
+interface LinkCliOpts {
+  user?: string;
+  force?: boolean;
+  json?: boolean;
+}
+
+interface PullCliOpts {
+  prefer: RebasePreference;
+  autostash: boolean;
+  continue?: boolean;
+  abort?: boolean;
+  json?: boolean;
+}
+
+interface PushCliOpts {
+  includeDrafts?: boolean;
+  merge?: boolean;
+  prefer: RebasePreference;
+  message?: string;
+  title?: string;
+  body?: string;
+  json?: boolean;
+}
+
+// api -------------------------------------------------------------------------
+
+/** Build a fresh command tree. A new instance per call keeps e2e runs isolated. */
+export function createProgram(): Command {
+  const program = new Command();
+  program
+    .name('diffwiki')
+    .description('A git-based knowledge base')
+    .version(version)
+    .showHelpAfterError()
+    .option('-v, --verbose', 'verbose logging (sets the log level to debug)')
+    .option('--log <level>', 'log level: trace|debug|info|warning|error|fatal');
+
+  // NOTE: these flags are actually applied by configureCliLogging() (in bin.ts),
+  // which reads process.argv at startup so logs are configured before any action
+  // runs. They are declared here so --help lists them and Commander accepts them.
+
+  // No subcommand: show help and exit 0 (a bare invocation is not an error).
+  program.action(() => {
+    program.outputHelp();
+  });
+
+  // ── collection ────────────────────────────────────────────────────────────
+  const collection = program.command('collection').description('Manage collections (containers)');
+
+  collection.command('list').description('List all collections').action(withErrors(listCollectionsAction));
+
+  collection
+    .command('create')
+    .description('Create a new global collection')
+    .argument('<name>', 'collection name')
+    .option('--hidden', 'create as a hidden system collection (audience: system)')
+    .action(withErrors((name: string, opts: { hidden?: boolean }) => createCollectionAction(name, opts)));
+
+  collection
+    .command('remove')
+    .description(
+      'Remove an empty global collection (or --force if articles remain), or unregister a repo/external collection',
+    )
+    .argument('<name>', 'collection name')
+    .option('-f, --force', 'delete a non-empty global collection and its articles')
+    .option('--json', 'output removed collection entry as JSON')
+    .action(
+      withErrors((name: string, opts: { force?: boolean; json?: boolean }) => removeCollectionAction(name, opts)),
+    );
+
+  collection
+    .command('add')
+    .description('Add the current git repo as an external collection (docs dir, no diffwiki.yaml)')
+    .option('-d, --docs <dir>', 'content dir relative to repo root', 'docs')
+    .action(withErrors((opts: { docs: string }) => addExternalAction(opts)));
+
+  collection
+    .command('init')
+    .description('Initialize an in-repo wiki and register it globally')
+    .option('-c, --collection <name>', 'collection name (default: repo name)')
+    .option('-p, --path <path>', 'wiki path within the repo (default: wiki)')
+    .action(withErrors((opts: { collection?: string; path?: string }) => initAction(opts)));
+
+  collection
+    .command('edit')
+    .description('Open a collection in your editor — GUI not required')
+    .argument('[name]', 'collection (default: the current repo collection)')
+    .option('--editor <cmd>', 'editor command (overrides config `editor`, $VISUAL, $EDITOR)')
+    .action(withErrors((name: string | undefined, opts: { editor?: string }) => editAction(name, opts.editor)));
+
+  // ── sync (top-level link / pull / push) ───────────────────────────────────
+  program
+    .command('link')
+    .description('Link the global wiki home (~/.diffwiki) to a remote GitHub repository')
+    .argument('<repo>', 'GitHub repository URL or <owner>/<repo> shorthand')
+    .option('--user <username>', 'branch username for user/<username>')
+    .option('-f, --force', 'replace an existing origin remote URL')
+    .option('--json', 'output link summary as JSON')
+    .action(withErrors((repo: string, opts: LinkCliOpts) => linkAction(repo, opts)));
+
+  program
+    .command('pull')
+    .description('Fetch origin/main and rebase local user/<username> onto it')
+    .addOption(
+      new Option('--prefer <side>', 'conflict preference during rebase')
+        .choices(['remote', 'local', 'manual'])
+        .default('remote'),
+    )
+    .option('--autostash', 'stash dirty files before rebasing (default)')
+    .option('--no-autostash', 'skip auto-stashing dirty files before rebasing')
+    .option('--continue', 'continue an in-progress rebase after resolving conflicts')
+    .option('--abort', 'abort an in-progress rebase and restore pre-pull state')
+    .option('--json', 'output pull summary as JSON')
+    .action(withErrors((opts: PullCliOpts) => pullAction(opts)));
+
+  program
+    .command('push')
+    .description('Commit non-draft updates, push origin/user/<username>, and create or join an open pull request')
+    .option('--include-drafts', 'stage and push status: draft articles too')
+    .option('--merge', 'squash-merge the pull request into main when conflict-free')
+    .addOption(
+      new Option('--prefer <side>', 'conflict preference when rebasing onto origin/main')
+        .choices(['remote', 'local', 'manual'])
+        .default('remote'),
+    )
+    .option('-m, --message <msg>', 'commit message for staged local changes')
+    .option('--title <title>', 'pull request title (creates or updates the open PR)')
+    .option('--body <body>', 'pull request description body (creates or updates the open PR)')
+    .option('--json', 'output push summary as JSON')
+    .action(withErrors((opts: PushCliOpts) => pushAction(opts)));
+
+  // ── article ───────────────────────────────────────────────────────────────
+  const article = program.command('article').description('Manage articles (documents)');
+
+  article
+    .command('create')
+    .description('Add an article to a collection')
+    .argument('<target>', '"[collection:]title"')
+    .option('-b, --body <markdown>', 'article body (default: a "# <title>" heading)')
+    .option('-t, --tag <tag>', 'tag (repeatable, comma-separated)', collect, [])
+    .addOption(
+      new Option('--audience <audience>', 'visibility (default: public)').choices(['public', 'private', 'system']),
+    )
+    .addOption(
+      new Option('--status <status>', 'publish status (default: published)').choices([
+        'draft',
+        'published',
+        'deprecated',
+      ]),
+    )
+    .action(withErrors((target: string, opts: ArticleMetaOpts) => createArticleAction(target, opts)));
+
+  article
+    .command('update')
+    .description("Update an article's display title, body, tags, audience, and/or status")
+    .argument('<target>', '"collection:slug"')
+    .option('--title <title>', 'set the display title without renaming the file')
+    .option('-b, --body <markdown>', 'replace the article body')
+    .option('-t, --tag <tag>', 'replace all tags (repeatable, comma-separated)', collect, [])
+    .addOption(new Option('--audience <audience>', 'set visibility').choices(['public', 'private', 'system']))
+    .addOption(new Option('--status <status>', 'set publish status').choices(['draft', 'published', 'deprecated']))
+    .action(withErrors((target: string, opts: ArticleMetaOpts) => updateArticleAction(target, opts)));
+
+  article
+    .command('remove')
+    .description('Delete an article')
+    .argument('<target>', '"[collection:]slug"')
+    .action(withErrors((target: string) => removeArticleAction(target)));
+
+  article
+    .command('edit')
+    .description('Open an article in your editor — GUI not required')
+    .argument('<target>', '"collection:slug"')
+    .option('--editor <cmd>', 'editor command (overrides config `editor`, $VISUAL, $EDITOR)')
+    .action(withErrors((target: string, opts: { editor?: string }) => editAction(target, opts.editor)));
+
+  // ── tags ──────────────────────────────────────────────────────────────────
+  const tags = program.command('tags').description("Manage an article's tags");
+
+  const registerTagsSub = (
+    name: string,
+    description: string,
+    fn: (target: string, tags: string[]) => Promise<Article>,
+  ): void => {
+    tags
+      .command(name)
+      .description(description)
+      .argument('<target>', '"collection:slug"')
+      .argument('<tags>', 'comma-separated tags')
+      .action(withErrors((target: string, tagList: string) => tagsAction(fn, target, tagList)));
+  };
+  registerTagsSub('add', "Add to an article's tags", addTags);
+  registerTagsSub('remove', "Remove from an article's tags", removeTags);
+  registerTagsSub('set', "Replace an article's tags", setTags);
+
+  // ── search ────────────────────────────────────────────────────────────────
+  const searchCmd = program.command('search').description('Search articles and manage the index');
+
+  searchCmd
+    .command('query')
+    .alias('q')
+    .description('Search articles via the resolved search engine (native fallback if none)')
+    .option('--engine <name>', 'search engine/plugin (default: config defaultSearch, else native)')
+    .option('-c, --collection <names>', 'limit to a collection (comma-separated for a set)')
+    .option('-t, --type <type>', 'search type (engine-defined, e.g. keyword|semantic|hybrid)')
+    // Pre-expanded query variants (repeatable). Lets an upstream LLM/agent do the
+    // query expansion and hand the engine typed sub-queries directly, e.g.
+    //   diffwiki search q "add a cli subcommand" \
+    //     --lex "commander subcommand" --vec "how to add a CLI verb" --hyde "..."
+    .option('--lex <query>', 'BM25 keyword variant (repeatable)', collect, [])
+    .option('--vec <query>', 'semantic variant — a natural-language question (repeatable)', collect, [])
+    .option('--hyde <query>', 'hypothetical-answer passage variant (repeatable)', collect, [])
+    .argument('[term]', 'search term (used as ranking intent when variants are given)', '')
+    .action(
+      withErrors(
+        (
+          term: string,
+          opts: { engine?: string; collection?: string; type?: string; lex: string[]; vec: string[]; hyde: string[] },
+        ) => queryAction(term, opts),
+      ),
+    );
+
+  searchCmd
+    .command('index')
+    .description('Rebuild the search index via the active plugin')
+    .option('--embed', 'also build vector embeddings (may download models on first run)')
+    .action(withErrors((opts: { embed?: boolean }) => indexAction(opts)));
+
+  // ── plugin (unchanged) ──────────────────────────────────────────────────────
+  const plugin = program.command('plugin').description('Manage search plugins');
+
+  plugin
+    .command('install')
+    .description('Install a search plugin from an npm spec and provision it (setup)')
+    .argument('<spec>', 'npm package spec (name, name@version, or path)')
+    .option('--no-setup', 'skip the end-to-end setup after install')
+    .option('--no-default', 'do not make this the default search engine')
+    .option('--prefetch-models', 'pre-download models during setup (heavy)')
+    .action(
+      withErrors((spec: string, opts: { setup: boolean; default: boolean; prefetchModels?: boolean }) =>
+        pluginInstallAction(spec, opts),
+      ),
+    );
+
+  plugin
+    .command('register')
+    .description('Register an existing executable as a search plugin')
+    .argument('<name>', 'plugin name')
+    .requiredOption('--command <cmd...>', 'command argv to spawn the plugin (e.g. node /abs/adapter.js)')
+    .action(withErrors((name: string, opts: { command: string[] }) => pluginRegisterAction(name, opts)));
+
+  plugin
+    .command('list')
+    .description('List installed and available search plugins')
+    .action(withErrors(pluginListAction));
+
+  plugin
+    .command('remove')
+    .description('Remove a search plugin')
+    .argument('<name>', 'plugin name')
+    .action(withErrors((name: string) => pluginRemoveAction(name)));
+
+  // ── site ──────────────────────────────────────────────────────────────────
+  const site = program.command('site').description('Build and preview the published site');
+
+  site
+    .command('export')
+    .description('Generate a static site (deployable to GitHub Pages)')
+    .requiredOption('-o, --out <dir>', 'output directory')
+    .option('-b, --base <path>', 'base URL path (e.g. /my-repo/ for GitHub Pages)', '/')
+    .option('-f, --filter <globs>', 'only export collections matching these globs (comma-separated)')
+    .option('-e, --exclude <globs>', 'exclude collections matching these globs (comma-separated)')
+    .option('--project [dir]', 'build only the repo project from its diffwiki.yaml (default: cwd)')
+    .action(
+      withErrors((opts: { out: string; base: string; filter?: string; exclude?: string; project?: string | boolean }) =>
+        exportAction(opts),
+      ),
+    );
+
+  site
+    .command('preview')
+    .description('Preview the site from the repo diffwiki.yaml (ignores global collections)')
+    .option('-p, --port <port>', 'port to serve on', '4321')
+    .action(withErrors((opts: { port: string }) => previewAction(opts)));
+
+  // ── ui ────────────────────────────────────────────────────────────────────
+  const ui = program.command('ui').description('Run the local diffwiki app server');
+
+  ui.command('up')
+    .description('Start the diffwiki UI (runs the matching published diffwiki-app)')
+    .option('-p, --port <port>', 'port to serve on', '4321')
+    .action(withErrors((opts: { port: string }) => upAction(opts)));
+
+  ui.command('down').description('Stop the running diffwiki UI').action(withErrors(downAction));
+
+  ui.command('status').description('Show whether the diffwiki UI is running').action(withErrors(statusAction));
+
+  ui.command('open')
+    .description('Open the diffwiki UI in the browser (starting it if needed)')
+    .option('-p, --port <port>', 'port to serve on', '4321')
+    .action(withErrors((opts: { port: string }) => openAction(opts)));
+
+  // ── context ───────────────────────────────────────────────────────────────
+  const context = program
+    .command('context')
+    .description('Manage recall/search context (diffwiki.yaml → context.collections)');
+  context
+    .command('show')
+    .description('Print the current recall-context collections')
+    .action(withErrors(contextShowAction));
+  context
+    .command('set')
+    .description('Replace the recall-context collections')
+    .argument('<names>', 'comma-separated collection names')
+    .action(withErrors((names: string) => contextSetAction(names)));
+  context
+    .command('add')
+    .description('Add collections to the recall context')
+    .argument('<names>', 'comma-separated collection names')
+    .action(withErrors((names: string) => contextAddAction(names)));
+  context
+    .command('remove')
+    .description('Remove collections from the recall context')
+    .argument('<names>', 'comma-separated collection names')
+    .action(withErrors((names: string) => contextRemoveAction(names)));
+
+  // ── meta & templates ──────────────────────────────────────────────────────
+  const meta = program.command('meta').description('Capture raw sources beside collection and article paths');
+  meta
+    .command('init')
+    .description('Create missing source manifests for existing articles')
+    .argument('[collection]', 'limit to one registered collection')
+    .option('--json', 'output paths and diagnostics as JSON')
+    .action(withErrors(metaInitAction));
+  meta
+    .command('new')
+    .description('Create a source-record template for a collection or exact article filename')
+    .argument('<target>', 'collection or collection:relative-file.md')
+    .addOption(
+      new Option('--template <kind>', 'source template')
+        .choices(['history', 'external-source-extract', 'dream-learning'])
+        .makeOptionMandatory(),
+    )
+    .option('--json', 'output the record and index paths as JSON')
+    .action(withErrors(metaNewAction));
+  meta
+    .command('reindex')
+    .description('Refresh generated source listings from current metadata files')
+    .argument('[collection]', 'limit to one metadata collection')
+    .option('--json', 'output paths and diagnostics as JSON')
+    .action(
+      withErrors(async (name: string | undefined, opts: { json?: boolean }) =>
+        reportMeta(await reindexMeta(name), opts),
+      ),
+    );
+
+  const templates = program.command('templates').description('Manage authoring templates (~/.diffwiki/templates)');
+  templates
+    .command('init')
+    .description('Seed ~/.diffwiki/templates from the bundled templates (never overwrites your own)')
+    .action(withErrors(templatesInitAction));
+  templates
+    .command('list')
+    .description('List templates with their shape + purpose (read from each template’s frontmatter)')
+    .addOption(
+      new Option('--category <category>', 'template category').choices(['article', 'meta', 'all']).default('article'),
+    )
+    .option('--json', 'output as JSON')
+    .action(withErrors((opts: { json?: boolean; category?: TemplateCategory | 'all' }) => templatesListAction(opts)));
+
+  const config = program.command('config').description('Read and write diffwiki config');
+
+  config
+    .command('set')
+    .description('Set a config value (e.g. defaultCollection, or defaultSearch <engine[:type]>)')
+    .argument('<key>', 'config key')
+    .argument('<value>', 'config value')
+    .action(withErrors((key: string, value: string) => configSetAction(key, value)));
+
+  config
+    .command('get')
+    .description('Read a config value')
+    .argument('<key>', 'config key')
+    .action(withErrors((key: string) => configGetAction(key)));
+
+  // ── doctor (unchanged, top-level) ───────────────────────────────────────────
+  program
+    .command('doctor')
+    .description('Diagnose configuration issues')
+    .option('--fix', 'attempt to repair issues (re-provision plugins, auto-installing missing tools)')
+    .action(withErrors((opts: { fix?: boolean }) => doctorAction(opts)));
+
+  // ── lint ──────────────────────────────────────────────────────────────────
+  program
+    .command('lint')
+    .description('Lint articles against the template shapes (frontmatter, budgets, references)')
+    .option('-c, --collections <scope>', 'current | all | comma-separated names', 'current')
+    .action(withErrors((opts: { collections: string }) => lintAction(opts)));
+
+  return program;
+}
+
+// helpers ---------------------------------------------------------------------
 
 const icon = (level: DiagnosticLevel): string => (level === 'ok' ? '✓' : level === 'warn' ? '!' : '✖');
 
@@ -86,12 +506,120 @@ async function createCollectionAction(name: string, opts: { hidden?: boolean }):
   console.log(`Created ${entry.audience === 'system' ? 'hidden ' : ''}collection "${entry.name}" at ${entry.path}`);
 }
 
-interface ArticleMetaOpts {
-  title?: string;
-  body?: string;
-  tag: string[];
-  audience?: Audience;
-  status?: PublishStatus;
+async function removeCollectionAction(name: string, opts: { force?: boolean; json?: boolean }): Promise<void> {
+  const entry = await removeCollection(name, { requireEmpty: !opts.force });
+  if (opts.json) {
+    console.log(JSON.stringify(entry, null, 2));
+    return;
+  }
+  if (entry.type === 'global') {
+    console.log(`Removed global collection "${entry.name}" (${entry.path})`);
+  } else {
+    console.log(`Unregistered ${entry.type} collection "${entry.name}" (files kept at ${entry.path})`);
+  }
+}
+
+async function linkAction(repo: string, opts: LinkCliOpts): Promise<void> {
+  const result = await linkHome({
+    repo,
+    user: opts.user,
+    force: opts.force,
+  });
+  if (opts.json) {
+    console.log(JSON.stringify(result, null, 2));
+    return;
+  }
+  console.log(`Linked ${result.home} → ${result.remoteUrl} on branch ${result.branch}`);
+  if (result.movedLocalWork) {
+    console.log(`Preserved existing local work on ${result.branch}.`);
+  }
+}
+
+async function pullAction(opts: PullCliOpts): Promise<void> {
+  if (opts.continue && opts.abort) {
+    throw new DiffwikiError('pass either --continue or --abort, not both');
+  }
+  try {
+    const result = await pullHome({
+      prefer: opts.prefer,
+      autostash: opts.autostash,
+      continueRebase: opts.continue,
+      abortRebase: opts.abort,
+    });
+    if (opts.json) {
+      console.log(JSON.stringify(result, null, 2));
+      return;
+    }
+    if (opts.abort) {
+      console.log(`Aborted rebase on ${result.branch}.`);
+    } else if (result.rebased) {
+      console.log(`Pulled ${result.baseRef} and rebased ${result.branch}.`);
+    } else {
+      console.log(`${result.branch} is up to date with ${result.baseRef}.`);
+    }
+  } catch (error) {
+    if (error instanceof SyncConflictError && opts.json) {
+      console.log(
+        JSON.stringify(
+          {
+            rebased: false,
+            conflicts: error.conflicts,
+            error: error.name,
+            recovery: ['diffwiki pull --continue', 'diffwiki pull --abort'],
+          },
+          null,
+          2,
+        ),
+      );
+    }
+    throw error;
+  }
+}
+
+async function pushAction(opts: PushCliOpts): Promise<void> {
+  try {
+    const result = await pushHome({
+      includeDrafts: opts.includeDrafts,
+      merge: opts.merge,
+      prefer: opts.prefer,
+      message: opts.message,
+      title: opts.title,
+      body: opts.body,
+    });
+    if (opts.json) {
+      console.log(JSON.stringify(result, null, 2));
+      return;
+    }
+    if (result.prUrl) {
+      const action = result.prCreated ? 'Created PR' : 'Joined open PR';
+      console.log(`${action} #${result.prNumber}: ${result.prUrl}`);
+      if (result.merged) {
+        console.log(`Merged PR #${result.prNumber} into main and synced ${result.branch}.`);
+      }
+    } else {
+      console.log(`Nothing new to push on ${result.branch} (in sync with origin/main).`);
+    }
+    if (result.excludedDrafts.length > 0) {
+      console.log(`Excluded ${result.excludedDrafts.length} draft article(s): ${result.excludedDrafts.join(', ')}`);
+    }
+  } catch (error) {
+    if (error instanceof SyncConflictError && opts.json) {
+      console.log(
+        JSON.stringify(
+          {
+            pushed: false,
+            merged: false,
+            conflicts: error.conflicts,
+            error: error.name,
+            recovery: ['diffwiki pull --continue', 'diffwiki pull --abort'],
+          },
+          null,
+          2,
+        ),
+      );
+    }
+    throw error;
+  }
 }
 
 async function createArticleAction(target: string, opts: ArticleMetaOpts): Promise<void> {
@@ -374,7 +902,6 @@ async function metaNewAction(target: string, opts: { template: MetaKind; json?: 
   }
 }
 
-// ── recall context (diffwiki.yaml → context.collections) ─────────────────────
 const parseNames = (csv: string): string[] =>
   csv
     .split(',')
@@ -535,328 +1062,4 @@ async function editAction(target: string | undefined, editorFlag?: string): Prom
 
 async function previewAction(opts: { port: string }): Promise<void> {
   await runPreview({ cwd: process.cwd(), port: Number(opts.port) });
-}
-
-/** Build a fresh command tree. A new instance per call keeps e2e runs isolated. */
-export function createProgram(): Command {
-  const program = new Command();
-  program
-    .name('diffwiki')
-    .description('A git-based knowledge base')
-    .version(version)
-    .showHelpAfterError()
-    .option('-v, --verbose', 'verbose logging (sets the log level to debug)')
-    .option('--log <level>', 'log level: trace|debug|info|warning|error|fatal');
-
-  // NOTE: these flags are actually applied by configureCliLogging() (in bin.ts),
-  // which reads process.argv at startup so logs are configured before any action
-  // runs. They are declared here so --help lists them and Commander accepts them.
-
-  // No subcommand: show help and exit 0 (a bare invocation is not an error).
-  program.action(() => {
-    program.outputHelp();
-  });
-
-  // ── collection ────────────────────────────────────────────────────────────
-  const collection = program.command('collection').description('Manage collections (containers)');
-
-  collection.command('list').description('List all collections').action(withErrors(listCollectionsAction));
-
-  collection
-    .command('create')
-    .description('Create a new global collection')
-    .argument('<name>', 'collection name')
-    .option('--hidden', 'create as a hidden system collection (audience: system)')
-    .action(withErrors((name: string, opts: { hidden?: boolean }) => createCollectionAction(name, opts)));
-
-  collection
-    .command('add')
-    .description('Add the current git repo as an external collection (docs dir, no diffwiki.yaml)')
-    .option('-d, --docs <dir>', 'content dir relative to repo root', 'docs')
-    .action(withErrors((opts: { docs: string }) => addExternalAction(opts)));
-
-  collection
-    .command('init')
-    .description('Initialize an in-repo wiki and register it globally')
-    .option('-c, --collection <name>', 'collection name (default: repo name)')
-    .option('-p, --path <path>', 'wiki path within the repo (default: wiki)')
-    .action(withErrors((opts: { collection?: string; path?: string }) => initAction(opts)));
-
-  collection
-    .command('edit')
-    .description('Open a collection in your editor — GUI not required')
-    .argument('[name]', 'collection (default: the current repo collection)')
-    .option('--editor <cmd>', 'editor command (overrides config `editor`, $VISUAL, $EDITOR)')
-    .action(withErrors((name: string | undefined, opts: { editor?: string }) => editAction(name, opts.editor)));
-
-  // ── article ───────────────────────────────────────────────────────────────
-  const article = program.command('article').description('Manage articles (documents)');
-
-  article
-    .command('create')
-    .description('Add an article to a collection')
-    .argument('<target>', '"[collection:]title"')
-    .option('-b, --body <markdown>', 'article body (default: a "# <title>" heading)')
-    .option('-t, --tag <tag>', 'tag (repeatable, comma-separated)', collect, [])
-    .addOption(
-      new Option('--audience <audience>', 'visibility (default: public)').choices(['public', 'private', 'system']),
-    )
-    .addOption(
-      new Option('--status <status>', 'publish status (default: published)').choices([
-        'draft',
-        'published',
-        'deprecated',
-      ]),
-    )
-    .action(withErrors((target: string, opts: ArticleMetaOpts) => createArticleAction(target, opts)));
-
-  article
-    .command('update')
-    .description("Update an article's display title, body, tags, audience, and/or status")
-    .argument('<target>', '"collection:slug"')
-    .option('--title <title>', 'set the display title without renaming the file')
-    .option('-b, --body <markdown>', 'replace the article body')
-    .option('-t, --tag <tag>', 'replace all tags (repeatable, comma-separated)', collect, [])
-    .addOption(new Option('--audience <audience>', 'set visibility').choices(['public', 'private', 'system']))
-    .addOption(new Option('--status <status>', 'set publish status').choices(['draft', 'published', 'deprecated']))
-    .action(withErrors((target: string, opts: ArticleMetaOpts) => updateArticleAction(target, opts)));
-
-  article
-    .command('remove')
-    .description('Delete an article')
-    .argument('<target>', '"[collection:]slug"')
-    .action(withErrors((target: string) => removeArticleAction(target)));
-
-  article
-    .command('edit')
-    .description('Open an article in your editor — GUI not required')
-    .argument('<target>', '"collection:slug"')
-    .option('--editor <cmd>', 'editor command (overrides config `editor`, $VISUAL, $EDITOR)')
-    .action(withErrors((target: string, opts: { editor?: string }) => editAction(target, opts.editor)));
-
-  // ── tags ──────────────────────────────────────────────────────────────────
-  const tags = program.command('tags').description("Manage an article's tags");
-
-  const registerTagsSub = (
-    name: string,
-    description: string,
-    fn: (target: string, tags: string[]) => Promise<Article>,
-  ): void => {
-    tags
-      .command(name)
-      .description(description)
-      .argument('<target>', '"collection:slug"')
-      .argument('<tags>', 'comma-separated tags')
-      .action(withErrors((target: string, tagList: string) => tagsAction(fn, target, tagList)));
-  };
-  registerTagsSub('add', "Add to an article's tags", addTags);
-  registerTagsSub('remove', "Remove from an article's tags", removeTags);
-  registerTagsSub('set', "Replace an article's tags", setTags);
-
-  // ── search ────────────────────────────────────────────────────────────────
-  const searchCmd = program.command('search').description('Search articles and manage the index');
-
-  searchCmd
-    .command('query')
-    .alias('q')
-    .description('Search articles via the resolved search engine (native fallback if none)')
-    .option('--engine <name>', 'search engine/plugin (default: config defaultSearch, else native)')
-    .option('-c, --collection <names>', 'limit to a collection (comma-separated for a set)')
-    .option('-t, --type <type>', 'search type (engine-defined, e.g. keyword|semantic|hybrid)')
-    // Pre-expanded query variants (repeatable). Lets an upstream LLM/agent do the
-    // query expansion and hand the engine typed sub-queries directly, e.g.
-    //   diffwiki search q "add a cli subcommand" \
-    //     --lex "commander subcommand" --vec "how to add a CLI verb" --hyde "..."
-    .option('--lex <query>', 'BM25 keyword variant (repeatable)', collect, [])
-    .option('--vec <query>', 'semantic variant — a natural-language question (repeatable)', collect, [])
-    .option('--hyde <query>', 'hypothetical-answer passage variant (repeatable)', collect, [])
-    .argument('[term]', 'search term (used as ranking intent when variants are given)', '')
-    .action(
-      withErrors(
-        (
-          term: string,
-          opts: { engine?: string; collection?: string; type?: string; lex: string[]; vec: string[]; hyde: string[] },
-        ) => queryAction(term, opts),
-      ),
-    );
-
-  searchCmd
-    .command('index')
-    .description('Rebuild the search index via the active plugin')
-    .option('--embed', 'also build vector embeddings (may download models on first run)')
-    .action(withErrors((opts: { embed?: boolean }) => indexAction(opts)));
-
-  // ── plugin (unchanged) ──────────────────────────────────────────────────────
-  const plugin = program.command('plugin').description('Manage search plugins');
-
-  plugin
-    .command('install')
-    .description('Install a search plugin from an npm spec and provision it (setup)')
-    .argument('<spec>', 'npm package spec (name, name@version, or path)')
-    .option('--no-setup', 'skip the end-to-end setup after install')
-    .option('--no-default', 'do not make this the default search engine')
-    .option('--prefetch-models', 'pre-download models during setup (heavy)')
-    .action(
-      withErrors((spec: string, opts: { setup: boolean; default: boolean; prefetchModels?: boolean }) =>
-        pluginInstallAction(spec, opts),
-      ),
-    );
-
-  plugin
-    .command('register')
-    .description('Register an existing executable as a search plugin')
-    .argument('<name>', 'plugin name')
-    .requiredOption('--command <cmd...>', 'command argv to spawn the plugin (e.g. node /abs/adapter.js)')
-    .action(withErrors((name: string, opts: { command: string[] }) => pluginRegisterAction(name, opts)));
-
-  plugin
-    .command('list')
-    .description('List installed and available search plugins')
-    .action(withErrors(pluginListAction));
-
-  plugin
-    .command('remove')
-    .description('Remove a search plugin')
-    .argument('<name>', 'plugin name')
-    .action(withErrors((name: string) => pluginRemoveAction(name)));
-
-  // ── site ──────────────────────────────────────────────────────────────────
-  const site = program.command('site').description('Build and preview the published site');
-
-  site
-    .command('export')
-    .description('Generate a static site (deployable to GitHub Pages)')
-    .requiredOption('-o, --out <dir>', 'output directory')
-    .option('-b, --base <path>', 'base URL path (e.g. /my-repo/ for GitHub Pages)', '/')
-    .option('-f, --filter <globs>', 'only export collections matching these globs (comma-separated)')
-    .option('-e, --exclude <globs>', 'exclude collections matching these globs (comma-separated)')
-    .option('--project [dir]', 'build only the repo project from its diffwiki.yaml (default: cwd)')
-    .action(
-      withErrors((opts: { out: string; base: string; filter?: string; exclude?: string; project?: string | boolean }) =>
-        exportAction(opts),
-      ),
-    );
-
-  site
-    .command('preview')
-    .description('Preview the site from the repo diffwiki.yaml (ignores global collections)')
-    .option('-p, --port <port>', 'port to serve on', '4321')
-    .action(withErrors((opts: { port: string }) => previewAction(opts)));
-
-  // ── ui ────────────────────────────────────────────────────────────────────
-  const ui = program.command('ui').description('Run the local diffwiki app server');
-
-  ui.command('up')
-    .description('Start the diffwiki UI (runs the matching published diffwiki-app)')
-    .option('-p, --port <port>', 'port to serve on', '4321')
-    .action(withErrors((opts: { port: string }) => upAction(opts)));
-
-  ui.command('down').description('Stop the running diffwiki UI').action(withErrors(downAction));
-
-  ui.command('status').description('Show whether the diffwiki UI is running').action(withErrors(statusAction));
-
-  ui.command('open')
-    .description('Open the diffwiki UI in the browser (starting it if needed)')
-    .option('-p, --port <port>', 'port to serve on', '4321')
-    .action(withErrors((opts: { port: string }) => openAction(opts)));
-
-  // ── config ────────────────────────────────────────────────────────────────
-  // ── context ───────────────────────────────────────────────────────────────
-  const context = program
-    .command('context')
-    .description('Manage recall/search context (diffwiki.yaml → context.collections)');
-  context
-    .command('show')
-    .description('Print the current recall-context collections')
-    .action(withErrors(contextShowAction));
-  context
-    .command('set')
-    .description('Replace the recall-context collections')
-    .argument('<names>', 'comma-separated collection names')
-    .action(withErrors((names: string) => contextSetAction(names)));
-  context
-    .command('add')
-    .description('Add collections to the recall context')
-    .argument('<names>', 'comma-separated collection names')
-    .action(withErrors((names: string) => contextAddAction(names)));
-  context
-    .command('remove')
-    .description('Remove collections from the recall context')
-    .argument('<names>', 'comma-separated collection names')
-    .action(withErrors((names: string) => contextRemoveAction(names)));
-
-  // ── templates ───────────────────────────────────────────────────────────────
-  const meta = program.command('meta').description('Capture raw sources beside collection and article paths');
-  meta
-    .command('init')
-    .description('Create missing source manifests for existing articles')
-    .argument('[collection]', 'limit to one registered collection')
-    .option('--json', 'output paths and diagnostics as JSON')
-    .action(withErrors(metaInitAction));
-  meta
-    .command('new')
-    .description('Create a source-record template for a collection or exact article filename')
-    .argument('<target>', 'collection or collection:relative-file.md')
-    .addOption(
-      new Option('--template <kind>', 'source template')
-        .choices(['history', 'external-source-extract', 'dream-learning'])
-        .makeOptionMandatory(),
-    )
-    .option('--json', 'output the record and index paths as JSON')
-    .action(withErrors(metaNewAction));
-  meta
-    .command('reindex')
-    .description('Refresh generated source listings from current metadata files')
-    .argument('[collection]', 'limit to one metadata collection')
-    .option('--json', 'output paths and diagnostics as JSON')
-    .action(
-      withErrors(async (name: string | undefined, opts: { json?: boolean }) =>
-        reportMeta(await reindexMeta(name), opts),
-      ),
-    );
-
-  const templates = program.command('templates').description('Manage authoring templates (~/.diffwiki/templates)');
-  templates
-    .command('init')
-    .description('Seed ~/.diffwiki/templates from the bundled templates (never overwrites your own)')
-    .action(withErrors(templatesInitAction));
-  templates
-    .command('list')
-    .description('List templates with their shape + purpose (read from each template’s frontmatter)')
-    .addOption(
-      new Option('--category <category>', 'template category').choices(['article', 'meta', 'all']).default('article'),
-    )
-    .option('--json', 'output as JSON')
-    .action(withErrors((opts: { json?: boolean; category?: TemplateCategory | 'all' }) => templatesListAction(opts)));
-
-  const config = program.command('config').description('Read and write diffwiki config');
-
-  config
-    .command('set')
-    .description('Set a config value (e.g. defaultCollection, or defaultSearch <engine[:type]>)')
-    .argument('<key>', 'config key')
-    .argument('<value>', 'config value')
-    .action(withErrors((key: string, value: string) => configSetAction(key, value)));
-
-  config
-    .command('get')
-    .description('Read a config value')
-    .argument('<key>', 'config key')
-    .action(withErrors((key: string) => configGetAction(key)));
-
-  // ── doctor (unchanged, top-level) ───────────────────────────────────────────
-  program
-    .command('doctor')
-    .description('Diagnose configuration issues')
-    .option('--fix', 'attempt to repair issues (re-provision plugins, auto-installing missing tools)')
-    .action(withErrors((opts: { fix?: boolean }) => doctorAction(opts)));
-
-  // ── lint ──────────────────────────────────────────────────────────────────
-  program
-    .command('lint')
-    .description('Lint articles against the template shapes (frontmatter, budgets, references)')
-    .option('-c, --collections <scope>', 'current | all | comma-separated names', 'current')
-    .action(withErrors((opts: { collections: string }) => lintAction(opts)));
-
-  return program;
 }

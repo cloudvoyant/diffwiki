@@ -41,9 +41,9 @@ function createCollection(name: string): Promise<CollectionEntry>
 Create a `global` collection and register it. Throws `CollectionExistsError` if the name is taken.
 
 ```ts
-function removeCollection(name: string): Promise<CollectionEntry>
+function removeCollection(name: string, opts?: RemoveCollectionOptions): Promise<CollectionEntry>
 ```
-Deregister a collection; for `global` collections the content directory is also deleted (repo/external wikis are left untouched).
+Deregister a collection and clear `config.defaultCollection` when it matches `name`. For `global` collections, deletes `~/.diffwiki/collections/<name>` (passing `{ requireEmpty: true }` throws `CollectionNotEmptyError` when leaf markdown articles remain). For `repo` and `external` collections, repository files stay untouched.
 
 ```ts
 function initRepoWiki(opts: InitOptions): Promise<CollectionEntry>
@@ -250,6 +250,37 @@ Clear the memoised whole-wiki graph.
 function doctor(): Promise<Diagnostic[]>
 ```
 Inspect the home directory, registry, collection paths, config, and every registered plugin, returning human-readable `Diagnostic[]` at `ok`/`warn`/`error` levels. Backs the [`diffwiki doctor`](/api-docs/cli) command.
+
+## Global sync & ForgeAdapter
+
+Synchronize `resolveHome()` with a remote repository through a pluggable `ForgeAdapter` seam (`GitHubForge` via `gh` CLI ships now so `GitLabForge` can plug in downstream without changing `sync.ts`).
+
+```ts
+interface ForgeAdapter {
+  readonly kind: 'github' | 'gitlab';
+  readonly repoSlug: string;
+  readonly remoteUrl: string;
+  ensureAvailable(): Promise<void>;
+  resolveDefaultUser(): Promise<string | undefined>;
+  findOpenChangeRequest(opts: { headBranch: string; baseBranch: string }): Promise<ForgeChangeRequest | null>;
+  createChangeRequest(opts: { headBranch: string; baseBranch: string; title: string; body: string }): Promise<ForgeChangeRequest>;
+  updateChangeRequest(opts: { number: number; title?: string; body?: string }): Promise<void>;
+  squashMergeChangeRequest(opts: { number: number }): Promise<void>;
+}
+
+function resolveForge(remoteUrl: string, runner?: CommandRunner): ForgeAdapter
+function linkHome(opts: LinkOptions): Promise<LinkResult>
+function pullHome(opts?: PullOptions): Promise<PullResult>
+function pushHome(opts?: PushOptions): Promise<PushResult>
+function reconcileGlobalRegistry(home?: string, priorRegistry?: Registry): Promise<string[]>
+const SYNC_GITIGNORE_ENTRIES: readonly string[]
+```
+
+- `resolveForge(remoteUrl)` normalizes GitHub `<owner>/<repo>`, HTTPS, and SSH URLs into a `GitHubForge` instance and throws `UnsupportedForgeError` for unsupported hosts.
+- `linkHome` links `resolveHome()` to `origin/main`, moves prior local commits and uncommitted files onto `user/<username>`, writes `SYNC_GITIGNORE_ENTRIES`, untracks cached runtime/index/UI artifacts, and reconciles `registry.json`.
+- `pullHome` fetches `origin/main`, rebases `user/<username>` (`prefer: 'remote' | 'local' | 'manual'`, `autostash: true` by default), supports `continueRebase` and `abortRebase`, and throws `SyncConflictError` on unresolved conflicts.
+- `pushHome` excludes `status: draft` articles unless `includeDrafts: true`, rebases onto `origin/main` when behind, pushes `origin/user/<username>`, joins an existing open pull request (`prCreated: false`) or opens one (`prCreated: true`), and squash-merges when `merge: true`.
+- Exported error subclasses include `CollectionNotEmptyError`, `SyncNotLinkedError`, `SyncRemoteExistsError`, `SyncConflictError`, `UnsupportedForgeError`, and `ForgeUnavailableError`.
 
 ## Source metadata
 

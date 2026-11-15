@@ -1,3 +1,9 @@
+import type { SearchExpansion } from './plugins/types';
+
+// types -----------------------------------------------------------------------
+
+export type { SearchExpansion };
+
 /** Audience axis — who an article is for. Private is never published; system is diffwiki-internal (hidden unless `showSystem`). Missing/invalid → 'public'. */
 export type Audience = 'public' | 'private' | 'system';
 /** Lifecycle axis — readiness. Draft is unpublished; deprecated is superseded. Missing/invalid → 'published'. */
@@ -33,6 +39,10 @@ export interface Config {
   editor?: string;
   /** Reveal system-audience content in search, nav, and the UI (default: false). Stored as boolean or "true". */
   showSystem?: boolean;
+  /** Linked remote URL for global wiki sync. */
+  syncRepo?: string;
+  /** Resolved user branch slug (<username> in user/<username>) for global wiki sync. */
+  syncUser?: string;
 }
 
 export interface Article {
@@ -157,12 +167,6 @@ export interface ArticleContent {
 }
 
 export type PluginKind = 'search';
-export const NATIVE_ENGINE = 'native';
-
-// Canonical definition lives in the plugin SDK (`plugins/types.ts`), re-exported
-// here so host-side code that imports from `diffwiki-core` gets the same type.
-import type { SearchExpansion } from './plugins/types';
-export type { SearchExpansion };
 
 export interface QueryOptions {
   engine?: string;
@@ -386,3 +390,7 @@ export interface LocalGraph {
   nodes: GraphNode[];
   edges: GraphEdge[];
 }
+
+// api -------------------------------------------------------------------------
+
+export const NATIVE_ENGINE = 'native';

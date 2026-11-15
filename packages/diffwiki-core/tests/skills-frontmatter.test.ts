@@ -62,4 +62,27 @@ describe('skills frontmatter is installer-parseable', () => {
       expect(() => parseYaml(fm)).not.toThrow();
     },
   );
+
+  it('validates skills/dw-sync/SKILL.md and skills/dw-forget/SKILL.md strict YAML frontmatter', () => {
+    // Arrange
+    const targets = [
+      { expectedName: 'dw-sync', file: path.join(SKILLS_DIR, 'dw-sync', 'SKILL.md') },
+      { expectedName: 'dw-forget', file: path.join(SKILLS_DIR, 'dw-forget', 'SKILL.md') },
+    ];
+
+    // Act
+    const parsed = targets.map(({ expectedName, file }) => {
+      const fm = extractFrontmatter(fs.readFileSync(file, 'utf8'));
+      const data = fm ? (parseYaml(fm) as Record<string, unknown>) : null;
+      return { expectedName, data };
+    });
+
+    // Assert
+    for (const item of parsed) {
+      expect(item.data).not.toBeNull();
+      expect(item.data?.name).toBe(item.expectedName);
+      expect(typeof item.data?.description).toBe('string');
+      expect((item.data?.description as string).trim().length).toBeGreaterThan(0);
+    }
+  });
 });

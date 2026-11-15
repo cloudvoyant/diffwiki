@@ -78,6 +78,21 @@ Point GitHub Pages at the resulting directory and the wiki is live, with client-
 
 Publishing a static site is one way to share; the other is sharing the repository. Because a repo collection's wiki [travels with the code](/user-guide/collections), anyone who clones the repo gets the wiki too — they run `diffwiki collection list` and it appears alongside their own collections, ready to browse and search locally. The `diffwiki.yaml` you committed means they can also `diffwiki site preview` or build the same site you do. The wiki is part of the project, not a separate artifact to distribute.
 
+## Syncing your global wiki across machines
+
+Link `~/.diffwiki` to any private or shared GitHub repository (`<owner>/<repo>` or a Git URL) to share global collections across machines and teammates:
+
+```bash
+diffwiki link <owner>/<repo>
+diffwiki pull
+diffwiki push
+```
+
+- `diffwiki link <repo>` connects `~/.diffwiki` to `origin/main` and places your local collections and edits onto `user/<username>`. Search indexes (`qmd/`, `stripped/`, `plugins/`), logs (`logs/`), UI state (`ui.json`), and UI build outputs (`dist/`, `dist-site/`, `build/`, `.output/`, `.tanstack/`, `.vite/`) stay ignored on disk.
+- `diffwiki pull` fetches `origin/main`, rebases `user/<username>` onto it (`--prefer remote` by default), and reconciles global collection paths in `registry.json`.
+- `diffwiki push` commits non-draft updates (`status: draft` stays local unless you pass `--include-drafts`), pushes `origin/user/<username>`, and joins your existing open pull request into `main` (opening one only when none is open). Pass `--merge` to squash-merge a conflict-free pull request and update local `main`.
+- In an agent session, run `/dw-sync` to pull first and push second. `/dw-sync` never merges unless you ask in prose or pass `--merge`.
+
 ## Where to go next
 
 - [Collections](/user-guide/collections) — the collection types a project config publishes.
