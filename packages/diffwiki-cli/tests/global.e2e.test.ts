@@ -121,3 +121,92 @@ describe('global lifecycle', () => {
     expect(removed.err).toContain('no default collection');
   });
 });
+
+describe('given global and repo collections', () => {
+  it('deletes the folder, unregisters it, and clears matching defaultCollection when removing an empty or index-only global collection', async () => {
+    // Arrange
+    await run(['collection', 'create', 'scratch']);
+    await run(['config', 'set', 'defaultCollection', 'scratch']);
+    const collPath = path.join(home, 'collections', 'scratch');
+    await fs.writeFile(path.join(collPath, 'index.md'), '---\ntitle: Scratch\n---\n\n# Scratch\n', 'utf8');
+
+    // Act
+    const removed = await run(['collection', 'remove', 'scratch', '--json']);
+
+    // Assert
+    expect(removed.ok, removed.err).toBe(true);
+    const parsed = JSON.parse(removed.out) as { name: string; type: string };
+    expect(parsed.name).toBe('scratch');
+    expect(parsed.type).toBe('global');
+    await expect(fs.access(collPath)).rejects.toBeTruthy();
+    const list = await run(['collection', 'list']);
+    expect(list.out).not.toContain('scratch');
+    const defaultColl = await run(['config', 'get', 'defaultCollection']);
+    expect(defaultColl.out.trim()).toBe('(unset)');
+  });
+
+  it('exits non-zero with CollectionNotEmptyError and keeps articles intact when removing a non-empty global collection without --force', async () => {
+    // Arrange
+    await run(['collection', 'create', 'guides']);
+    const created = await run(['article', 'create', 'guides:Setup Guide', '-b', '# Setup', '-t', 'ops']);
+    const articlePath = created.out.trim();
+
+    // Act
+    const removed = await run(['collection', 'remove', 'guides']);
+
+    // Assert
+    expect(removed.ok).toBe(false);
+    expect(removed.err).toContain('CollectionNotEmptyError');
+    expect(removed.err).toContain('--force');
+    await fs.access(articlePath);
+    const list = await run(['collection', 'list']);
+    expect(list.out).toContain('guides');
+  });
+
+  it('deletes the folder and preserves meta/<name> when removing a non-empty global collection with --force', async () => {
+    // Arrange
+    await run(['collection', 'create', 'guides']);
+    await run(['article', 'create', 'guides:Setup Guide', '-b', '# Setup', '-t', 'ops']);
+    await run(['meta', 'init', 'guides']);
+    const collPath = path.join(home, 'collections', 'guides');
+    const metaIndexPath = path.join(home, 'meta', 'guides', '.meta', 'META.md');
+    const metaMirrorPath = path.join(home, 'meta', 'guides', 'setup-guide.md');
+    await fs.access(metaIndexPath);
+    await fs.access(metaMirrorPath);
+
+    // Act
+    const removed = await run(['collection', 'remove', 'guides', '--force']);
+
+    // Assert
+    expect(removed.ok, removed.err).toBe(true);
+    await expect(fs.access(collPath)).rejects.toBeTruthy();
+    await fs.access(metaIndexPath);
+    await fs.access(metaMirrorPath);
+    const list = await run(['collection', 'list']);
+    expect(list.out).not.toContain('guides');
+  });
+
+  it('unregisters a repo collection without deleting repository files when diffwiki collection remove runs', async () => {
+    // Arrange
+    const repoDir = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'diffwiki-repo-rm-')));
+    const prevCwd = process.cwd();
+    try {
+      process.chdir(repoDir);
+      await run(['collection', 'init', '-c', 'product-docs', '-p', 'wiki']);
+      const created = await run(['article', 'create', 'product-docs:Overview', '-b', '# Overview', '-t', 'doc']);
+      const articlePath = created.out.trim();
+
+      // Act
+      const removed = await run(['collection', 'remove', 'product-docs']);
+
+      // Assert
+      expect(removed.ok, removed.err).toBe(true);
+      await fs.access(articlePath);
+      const list = await run(['collection', 'list']);
+      expect(list.out).not.toContain('product-docs');
+    } finally {
+      process.chdir(prevCwd);
+      await fs.rm(repoDir, { recursive: true, force: true });
+    }
+  });
+});

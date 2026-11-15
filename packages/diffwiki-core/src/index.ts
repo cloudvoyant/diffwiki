@@ -37,6 +37,8 @@ export * from './project';
 // Git identity + external collections helpers, and site builders (used by the
 // wiki app's server functions AND the static exporter)
 export * from './git';
+export * from './forge';
+export * from './sync';
 export * from './site';
 export * from './select';
 

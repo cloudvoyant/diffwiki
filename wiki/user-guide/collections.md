@@ -62,6 +62,19 @@ diffwiki collection list
 
 Each row shows the collection name, its type (`global`, `repo`, or `external`), its absolute path, and — when the directory is a git working tree — the current branch. This single list is the unified view of your knowledge base plus every project wiki you have checked out. If you have no collections yet, the CLI prompts you to create one.
 
+## Removing collections
+
+Use `diffwiki collection remove <name>` to clean up an empty global collection or unregister a project collection:
+
+```bash
+diffwiki collection remove scratch
+diffwiki collection remove old-guides --force
+```
+
+- For `global` collections, diffwiki deletes `~/.diffwiki/collections/<name>` when no leaf articles remain (an empty folder or a root `index.md` / `README.md` counts as empty). Pass `-f, --force` to delete a global collection that still contains articles.
+- For `repo` and `external` collections, diffwiki removes the entry from `~/.diffwiki/registry.json` and leaves repository files untouched.
+- If `config.defaultCollection` points at the removed collection, diffwiki clears `defaultCollection` automatically. Raw source records under `~/.diffwiki/meta/<name>/` stay intact.
+
 ## Display titles and ordering
 
 diffwiki separates the URL of a collection from its human-facing label, and lets you control the order things appear in navigation.

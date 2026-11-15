@@ -43,6 +43,28 @@ state logic synchronously testable.
   version. semantic-release computes the version at the root and `@semantic-release/exec`
   stamps and builds both packages before publish.
 
+## Global Home Sync & ForgeAdapter
+
+`diffwiki link`, `diffwiki pull`, `diffwiki push`, and `/dw-sync` synchronize `~/.diffwiki` (or `$DIFFWIKI_HOME`) with any user-supplied GitHub repository without hardcoding repository names.
+
+```mermaid
+flowchart LR
+  Skill["/dw-sync"] --> CLI["diffwiki link / pull / push"]
+  CLI --> Sync["sync.ts"]
+  Sync --> Git["git CLI in ~/.diffwiki<br/>branch: user/<username>"]
+  Sync --> Forge["ForgeAdapter (forge.ts)"]
+  Forge --> GH["GitHubForge (gh CLI)"]
+  Forge -.-> GL["GitLabForge (downstream)"]
+  Git <--> Remote["Origin repository<br/>main + origin/user/<username>"]
+  GH --> Remote
+```
+
+- Branch-per-user workflow: `linkHome` connects `~/.diffwiki` to `origin/main` and places local commits and uncommitted edits onto `user/<username>`.
+- Single open pull request: `pushHome` queries `forge.findOpenChangeRequest` before creating a pull request. Subsequent pushes update `origin/user/<username>` and join the open pull request instead of opening one pull request per push. Passing `--merge` squash-merges through `ForgeAdapter` and updates local `main`.
+- Pluggable forge seam: `sync.ts` owns all Git plumbing and delegates change-request lookup, creation, updates, and squash-merges to `ForgeAdapter` (`forge.ts`). `GitHubForge` (`gh` CLI) ships today, and `GitLabForge` can plug into the same contract downstream.
+- Draft and runtime isolation: `pushHome` keeps `status: draft` articles on disk and out of pushed commits unless `--include-drafts` is passed. `.gitignore` and index cleanup exclude search indexes (`qmd/`, `stripped/`, `plugins/`), runtime state (`logs/`, `ui.json`), and UI build directories (`dist/`, `dist-site/`, `build/`, `.output/`, `.tanstack/`, `.vite/`).
+- Registry reconciliation: `linkHome` and `pullHome` prune deleted global entries, rewrite surviving `global` collection paths in `registry.json` to the local `resolveHome()`, and keep `repo` and `external` entries intact.
+
 ## Search & Plugins
 
 > **See also:** [docs/plugins.md](plugins.md) — plugin protocol, lifecycle, dependency resolution, and authoring guide. [docs/search.md](search.md) — engine routing, native BM25, qmd keyword/semantic/hybrid, ripgrep, and the web search route.

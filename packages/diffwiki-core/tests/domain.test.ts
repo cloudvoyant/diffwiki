@@ -8,6 +8,7 @@ import {
   createCollection,
   doctor,
   findCollection,
+  getConfigValue,
   initRepoWiki,
   listCollections,
   parseAddTarget,
@@ -22,6 +23,7 @@ import {
   slugify,
   updateArticleBody,
   CollectionExistsError,
+  CollectionNotEmptyError,
   CollectionNotFoundError,
   NoDefaultCollectionError,
   ArticleNotFoundError,
@@ -296,5 +298,35 @@ describe('removeCollection', () => {
 
   it('throws when the collection does not exist', async () => {
     await expect(removeCollection('missing')).rejects.toBeInstanceOf(CollectionNotFoundError);
+  });
+
+  it('rejects removing a global collection with leaf articles when requireEmpty is true', async () => {
+    // Arrange
+    const entry = await createCollection('notes');
+    await createArticle({ target: 'notes:Hello', tags: [], body: '# Hi' });
+
+    // Act
+    const action = removeCollection('notes', { requireEmpty: true });
+
+    // Assert
+    await expect(action).rejects.toBeInstanceOf(CollectionNotEmptyError);
+    expect(await findCollection('notes')).toBeDefined();
+    await fs.access(entry.path);
+  });
+
+  it('removes an index-only global collection and clears matching defaultCollection when requireEmpty is true', async () => {
+    // Arrange
+    const entry = await createCollection('empty-coll');
+    await fs.writeFile(path.join(entry.path, 'index.md'), '---\ntitle: Empty\n---\n', 'utf8');
+    await setConfigValue('defaultCollection', 'empty-coll');
+
+    // Act
+    const removed = await removeCollection('empty-coll', { requireEmpty: true });
+
+    // Assert
+    expect(removed.name).toBe('empty-coll');
+    await expect(fs.access(entry.path)).rejects.toBeTruthy();
+    expect(await findCollection('empty-coll')).toBeUndefined();
+    expect(await getConfigValue('defaultCollection')).toBeUndefined();
   });
 });

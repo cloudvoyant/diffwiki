@@ -65,13 +65,31 @@ diffwiki collection list
 Create a new global collection (stored under `~/.diffwiki/collections/<name>`).
 
 ```
-diffwiki collection create <name>
+diffwiki collection create <name> [--hidden]
 ```
 
 - `<name>` (required) — collection name.
+- `--hidden` — create as a hidden system collection (`audience: system`).
 
 ```
 diffwiki collection create handbook
+```
+
+### `collection remove <name>`
+
+Remove an empty global collection (or delete a non-empty global collection with `--force`), or unregister a `repo` or `external` collection without deleting repository files. Clears `defaultCollection` when it matches `<name>` and preserves `~/.diffwiki/meta/<name>/`.
+
+```
+diffwiki collection remove <name> [-f | --force] [--json]
+```
+
+- `<name>` (required) — collection name.
+- `-f, --force` — delete a global collection even when leaf markdown articles remain.
+- `--json` — output the removed `CollectionEntry` as JSON.
+
+```
+diffwiki collection remove scratch
+diffwiki collection remove old-handbook --force
 ```
 
 ### `collection add`
@@ -117,6 +135,70 @@ diffwiki collection edit [name] [--editor <cmd>]
 ```
 diffwiki collection edit handbook             # open the collection directory
 diffwiki collection edit --editor "code -w"   # override the configured editor
+```
+
+## Global Sync
+
+Sync `~/.diffwiki` (or `$DIFFWIKI_HOME`) with a GitHub repository through a `user/<username>` branch and a single open pull request into `main`. Requires `git` and an authenticated `gh` CLI for pull request operations.
+
+### `link <repo>`
+
+Connect `~/.diffwiki` to `origin/main` of `<repo>` and check out `user/<username>`. Preserves prior local work on `user/<username>`, configures `.gitignore` to exclude search indexes, runtime logs, `ui.json`, and UI build outputs, and reconciles global paths in `registry.json`.
+
+```
+diffwiki link <repo> [--user <username>] [-f | --force] [--json]
+```
+
+- `<repo>` (required) — GitHub `<owner>/<repo>` shorthand or HTTPS/SSH Git URL.
+- `--user <username>` — override the `<username>` segment in `user/<username>`.
+- `-f, --force` — replace an existing `origin` remote URL.
+- `--json` — print `LinkResult` as JSON.
+
+```
+diffwiki link <owner>/<repo>
+diffwiki link git@github.com:<owner>/<repo>.git --force
+```
+
+### `pull`
+
+Fetch `origin/main`, rebase `user/<username>` onto it, and reconcile global collections in `registry.json`. Exits non-zero with conflicted paths on unresolved conflicts.
+
+```
+diffwiki pull [--prefer <remote|local|manual>] [--no-autostash] [--continue] [--abort] [--json]
+```
+
+- `--prefer <remote|local|manual>` — conflict resolution side during rebase. Default: `remote` (`git rebase -X ours origin/main`).
+- `--autostash` / `--no-autostash` — stash uncommitted local files (including drafts) before rebasing. Default: `--autostash`.
+- `--continue` — continue an in-progress rebase after staging resolved files.
+- `--abort` — abort an in-progress rebase and restore pre-pull state.
+- `--json` — print `PullResult` as JSON.
+
+```
+diffwiki pull
+diffwiki pull --prefer local
+diffwiki pull --abort
+```
+
+### `push`
+
+Commit eligible updates on `user/<username>`, rebase onto `origin/main` when behind, push `origin/user/<username>`, and join an existing open pull request (or open one when none exists). Skips `status: draft` articles by default while keeping draft files on disk.
+
+```
+diffwiki push [--include-drafts] [--merge] [--prefer <remote|local|manual>] [-m <msg>] [--title <title>] [--body <body>] [--json]
+```
+
+- `--include-drafts` — include `status: draft` articles in the pushed commit. Default: `false`.
+- `--merge` — squash-merge the pull request into `main` when conflict-free (including zero-new-edit merges of an open PR) and update local `main`. Default: `false`.
+- `--prefer <remote|local|manual>` — conflict preference if `push` rebases onto an advanced `origin/main`. Default: `remote`.
+- `-m, --message <msg>` — commit message for staged local changes.
+- `--title <title>` — pull request title when creating or updating the open pull request.
+- `--body <body>` — pull request body when creating or updating the open pull request.
+- `--json` — print `PushResult` as JSON (`prCreated: true` when opened, `false` when joined).
+
+```
+diffwiki push
+diffwiki push --include-drafts
+diffwiki push --merge
 ```
 
 ## Articles

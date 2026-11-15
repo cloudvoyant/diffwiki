@@ -6,9 +6,7 @@ import { listEnabledPlugins } from './plugins/registry';
 import { NATIVE_ENGINE } from './types';
 import type { Config } from './types';
 
-function isMissing(err: unknown): boolean {
-  return (err as NodeJS.ErrnoException)?.code === 'ENOENT';
-}
+// api -------------------------------------------------------------------------
 
 export async function readConfig(): Promise<Config> {
   try {
@@ -49,6 +47,13 @@ export async function setConfigValue(key: string, value: string): Promise<void> 
   await writeConfig(config as Config);
 }
 
+export async function clearConfigValue(key: string): Promise<void> {
+  const config = (await readConfig()) as Record<string, unknown>;
+  if (!(key in config)) return;
+  delete config[key];
+  await writeConfig(config as Config);
+}
+
 export async function getConfigValue(key: string): Promise<string | undefined> {
   const config = (await readConfig()) as Record<string, unknown>;
   const value = config[key];
@@ -59,4 +64,10 @@ export async function getConfigValue(key: string): Promise<string | undefined> {
 export async function showSystemEnabled(): Promise<boolean> {
   const config = (await readConfig()) as Record<string, unknown>;
   return config.showSystem === true || config.showSystem === 'true';
+}
+
+// helpers ---------------------------------------------------------------------
+
+function isMissing(err: unknown): boolean {
+  return (err as NodeJS.ErrnoException)?.code === 'ENOENT';
 }
